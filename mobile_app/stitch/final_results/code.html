@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NU:TONIC | MISSION COMPLETE</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary": "#ffb68b",
+                    "secondary-container": "#ff7f1c",
+                    "on-tertiary-container": "#00673c",
+                    "on-primary": "#00363d",
+                    "inverse-primary": "#006875",
+                    "on-primary-fixed-variant": "#004f58",
+                    "primary-container": "#00e5ff",
+                    "surface-container-high": "#262a36",
+                    "secondary-fixed": "#ffdbc8",
+                    "surface-variant": "#313441",
+                    "inverse-surface": "#dfe2f2",
+                    "surface-container-lowest": "#0a0e19",
+                    "surface-bright": "#353945",
+                    "tertiary-fixed-dim": "#00e38a",
+                    "on-error": "#690005",
+                    "primary": "#c3f5ff",
+                    "tertiary-fixed": "#56ffa7",
+                    "surface-container-low": "#171b27",
+                    "surface-tint": "#00daf3",
+                    "tertiary": "#aaffc7",
+                    "surface-container-highest": "#313441",
+                    "on-background": "#dfe2f2",
+                    "on-tertiary-fixed-variant": "#00522f",
+                    "on-tertiary": "#00391f",
+                    "on-error-container": "#ffdad6",
+                    "outline": "#849396",
+                    "on-surface": "#dfe2f2",
+                    "surface": "#0f131e",
+                    "on-secondary-fixed-variant": "#753400",
+                    "surface-container": "#1b1f2b",
+                    "on-primary-container": "#00626e",
+                    "inverse-on-surface": "#2c303c",
+                    "on-secondary-container": "#602a00",
+                    "on-surface-variant": "#bac9cc",
+                    "secondary-fixed-dim": "#ffb68b",
+                    "on-tertiary-fixed": "#002110",
+                    "on-secondary-fixed": "#321200",
+                    "surface-dim": "#0f131e",
+                    "background": "#0f131e",
+                    "tertiary-container": "#00ee91",
+                    "on-secondary": "#522300",
+                    "primary-fixed": "#9cf0ff",
+                    "primary-fixed-dim": "#00daf3",
+                    "outline-variant": "#3b494c",
+                    "on-primary-fixed": "#001f24",
+                    "error": "#ffb4ab",
+                    "error-container": "#93000a"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3, .headline { font-family: 'Space Grotesk', sans-serif; }
+        .glass-panel {
+            background: rgba(49, 52, 65, 0.4);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(195, 245, 255, 0.05);
+        }
+        .scanline {
+            background: linear-gradient(to bottom, transparent 50%, rgba(0, 229, 255, 0.02) 50%);
+            background-size: 100% 4px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-container-lowest text-on-surface min-h-screen selection:bg-primary-container selection:text-on-primary-container overflow-x-hidden">
+<!-- Top Navigation Anchor (Shared Component) -->
+<header class="fixed top-0 w-full z-50 bg-[#0F131E]/80 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.5)] flex justify-between items-center px-6 py-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#00E5FF]">sensors</span>
+<span class="text-[#C3F5FF] font-black tracking-widest drop-shadow-[0_0_8px_rgba(0,229,255,0.4)] font-headline uppercase text-sm">NU:TONIC</span>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex gap-8 font-headline tracking-[0.2em] uppercase text-xs">
+<a class="text-[#C3F5FF]/60 hover:text-[#00E5FF] transition-all" href="#">SCAN</a>
+<a class="text-[#C3F5FF]/60 hover:text-[#00E5FF] transition-all" href="#">INTEL</a>
+<a class="text-[#00E5FF]" href="#">RANK</a>
+<a class="text-[#C3F5FF]/60 hover:text-[#00E5FF] transition-all" href="#">SQUAD</a>
+</nav>
+<span class="material-symbols-outlined text-[#C3F5FF]/60 cursor-pointer">account_circle</span>
+</div>
+<div class="bg-gradient-to-r from-transparent via-[#00E5FF]/10 to-transparent h-[1px] w-full absolute bottom-0"></div>
+</header>
+<main class="pt-24 pb-32 px-4 md:px-8 max-w-7xl mx-auto scanline relative">
+<!-- Floating HUD Element Left -->
+<div class="hidden xl:block fixed left-8 top-1/2 -translate-y-1/2 opacity-20 pointer-events-none">
+<div class="flex flex-col gap-4 text-[10px] font-headline tracking-widest text-primary vertical-rl uppercase">
+<span>Sector_7_Analysis</span>
+<span class="h-16 w-[1px] bg-primary mx-auto"></span>
+<span>System_Status_Nominal</span>
+</div>
+</div>
+<!-- Hero Results Section -->
+<div class="mb-12 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-6">
+<div>
+<h1 class="text-5xl md:text-7xl font-black uppercase tracking-tighter text-primary drop-shadow-[0_0_20px_rgba(0,229,255,0.3)]">
+                    MISSION COMPLETE
+                </h1>
+<p class="text-on-surface-variant font-headline tracking-[0.3em] uppercase mt-2 text-sm">
+                    Sequence: <span class="text-primary-container">#XJ-992-ALPHA</span>
+</p>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl border-l-4 border-primary shadow-2xl flex flex-col items-center md:items-end min-w-[200px]">
+<span class="text-xs font-headline uppercase tracking-widest text-primary/60">Final Tactical Score</span>
+<span class="text-4xl font-black text-primary-container">42,890</span>
+</div>
+</div>
+<!-- Main Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-12">
+<!-- Map Visualization -->
+<div class="lg:col-span-8 glass-panel rounded-2xl overflow-hidden relative group min-h-[400px]">
+<div class="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 bg-surface-container-lowest/80 backdrop-blur-md rounded-full border border-primary/20">
+<span class="w-2 h-2 rounded-full bg-primary-container shadow-[0_0_8px_#00E5FF]"></span>
+<span class="text-[10px] font-headline font-bold uppercase tracking-widest text-primary">Live Intel Map</span>
+</div>
+<div class="w-full h-full relative">
+<div class="absolute inset-0 z-0 opacity-40 grayscale" data-alt="a dark futuristic wireframe map of a coastal city at night with neon blue and cyan grid lines glowing on dark navy background" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDc14TJtvlzvQemHJH7yWn0c-3yZGRpsJwxbpkLeWXPgoBKjgcS_7ScNQMbZjdfXjfmnDqaEY-b8CnZazXh7ivUntm5JI9khbVhZZYoH2P5t72isMVj3o_iR3ylNwtb6y0lwFFi_uT9XlDUd_VpPxDV1stD5CJtmj-UHygALm5oHNr4_oT7KNsjSwlKV-0LcrtdT95ZVgAqwNA-LC9cDXF-uaExCSRiMLwOipf0JXKX73RRGb7spNAotNWNU3OoEq_lNVFhCNsyOi4'); background-size: cover; background-position: center;"></div>
+<!-- SVG Overlay for Data Lines -->
+<svg class="absolute inset-0 w-full h-full z-10 pointer-events-none">
+<!-- Neon Cyan User Line (Accurate) -->
+<path class="opacity-80" d="M 200 150 L 320 280" stroke="#00E5FF" stroke-dasharray="4 2" stroke-width="2"></path>
+<circle class="animate-pulse shadow-[0_0_10px_#00E5FF]" cx="320" cy="280" fill="#00E5FF" r="4"></circle>
+<!-- Muted Red Misses -->
+<path class="opacity-40" d="M 500 100 L 320 280" stroke="#FF7F1C" stroke-dasharray="4 2" stroke-width="1.5"></path>
+<path class="opacity-40" d="M 100 350 L 320 280" stroke="#FF7F1C" stroke-dasharray="4 2" stroke-width="1.5"></path>
+</svg>
+<!-- Tactical Overlays -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+<div class="w-[300px] h-[300px] border border-primary/10 rounded-full flex items-center justify-center">
+<div class="w-[200px] h-[200px] border border-primary/20 rounded-full flex items-center justify-center">
+<div class="w-[100px] h-[100px] border border-primary/40 rounded-full animate-pulse"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Score Breakdown -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<div class="glass-panel p-6 rounded-2xl flex-1 flex flex-col gap-4 border-t-2 border-primary/30">
+<h3 class="font-headline font-black uppercase text-xl text-primary tracking-tight">Tactical Breakdown</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center p-3 bg-surface-container-low rounded-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-container text-sm">my_location</span>
+<span class="text-xs uppercase font-headline tracking-widest">Precision Bonus</span>
+</div>
+<span class="text-tertiary-fixed font-bold font-headline">+12,500</span>
+</div>
+<div class="flex justify-between items-center p-3 bg-surface-container-low rounded-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-container text-sm">speed</span>
+<span class="text-xs uppercase font-headline tracking-widest">Temporal Velocity</span>
+</div>
+<span class="text-tertiary-fixed font-bold font-headline">+8,240</span>
+</div>
+<div class="flex justify-between items-center p-3 bg-surface-container-low rounded-lg">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-container text-sm">stars</span>
+<span class="text-xs uppercase font-headline tracking-widest">Streak Multiplier</span>
+</div>
+<span class="text-tertiary-fixed font-bold font-headline">x1.5</span>
+</div>
+</div>
+<div class="mt-auto pt-4 border-t border-outline-variant/30">
+<div class="flex justify-between items-end">
+<div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Level Up Progression</div>
+<div class="text-sm font-bold text-primary uppercase">LVL 42 → 43</div>
+</div>
+<div class="text-xs font-bold text-on-surface-variant">88%</div>
+</div>
+<div class="w-full bg-surface-container-highest h-2 mt-2 rounded-full overflow-hidden">
+<div class="h-full bg-primary-container w-[88%] shadow-[0_0_10px_#00E5FF]"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Leaderboard Column -->
+<div class="lg:col-span-12">
+<div class="flex items-center justify-between mb-4 px-2">
+<h3 class="font-headline font-black uppercase text-2xl text-primary flex items-center gap-2">
+<span class="material-symbols-outlined">leaderboard</span>
+                        Global Ranks
+                    </h3>
+<div class="flex gap-2">
+<button class="px-3 py-1 text-[10px] font-headline border border-primary/30 rounded text-primary hover:bg-primary/10">HUMAN</button>
+<button class="px-3 py-1 text-[10px] font-headline border border-outline-variant/30 rounded text-on-surface-variant">ASTRONAUT</button>
+<button class="px-3 py-1 text-[10px] font-headline border border-outline-variant/30 rounded text-on-surface-variant">ALIEN</button>
+</div>
+</div>
+<div class="space-y-3">
+<!-- Rank 1: Cartographer -->
+<div class="glass-panel p-4 rounded-2xl flex items-center justify-between border-l-4 border-primary-container bg-gradient-to-r from-primary-container/10 to-transparent">
+<div class="flex items-center gap-6">
+<div class="w-12 h-12 rounded-full border-2 border-primary-container p-1 relative">
+<img alt="User 1" class="w-full h-full object-cover rounded-full" data-alt="close up futuristic portrait of a professional female gamer with neon light reflections on her skin and holographic tattoos" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD71TTdHN1GZqDxyRHrxC26LIQtvVXdf2mdHDEBO1iy8kIS1h6Y5bW7NRqYybljB6jdPmPGJskajJgJPA7pYOfD-qFAZTVUOSfoV3rmVyPZ2F6DVRfyfJyK3zH2-aqgIAYKgAyR1eylxzNTNNkV8tgHlwM957e0eXDw0A6WHku5mC5kQXdczT9hyOHqJVpQJ-lQiaIl5YkBaexz-Nt1TblPu-VLNP-p95Um5IL4sDN8CHZm_Rx4uPOtmSaFHlZ1S6-qDfdPY8dDu6o"/>
+<div class="absolute -top-1 -right-1 bg-primary-container text-on-primary-container rounded-full text-[8px] font-black w-5 h-5 flex items-center justify-center">1</div>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-black text-primary tracking-tight">VOIDWALKER_99</span>
+<span class="text-[10px] bg-primary/20 px-2 py-0.5 rounded text-primary border border-primary/30 font-bold uppercase tracking-tighter">Cartographer</span>
+</div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest mt-1">Accuracy: 99.4% • Latency: 14ms</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-xl font-black text-primary-container">48,201</div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Global Master</div>
+</div>
+</div>
+<!-- Rank 2 (User Focus) -->
+<div class="glass-panel p-4 rounded-2xl flex items-center justify-between border-l-4 border-secondary shadow-[0_0_30px_rgba(255,182,139,0.1)]">
+<div class="flex items-center gap-6">
+<div class="w-12 h-12 rounded-full border-2 border-secondary p-1 relative">
+<img alt="User 2" class="w-full h-full object-cover rounded-full" data-alt="stylized digital avatar of a pilot wearing glowing AR goggles with a deep blue and orange high contrast color scheme" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsHl7XxuWdlcn-rHxM8-wz_HZmYzVT6j9A2B5Dl-zmMfaUkcc915vukhWbgO68jm7gc2tFnTYUSOmMyRKA9PxPd_nHrddR0aBfkcBYFTbk4KFiR4nsKLVTU9vHqRRPX3Bu8T4emEtYUEsn0_ZAe9ik-fF2FVabKFTtQJEwHDycg1u_Y6UNT6xSkE79ffZsI4qSsovRFGtfbNkrDzjQsmMlte8lRsNGxnvZKVQpI9DyuqzGdEu_5r3YMab0eUlu2aSgN2tl6TKhQFQ"/>
+<div class="absolute -top-1 -right-1 bg-secondary text-on-secondary rounded-full text-[8px] font-black w-5 h-5 flex items-center justify-center">2</div>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-black text-secondary tracking-tight">YOU</span>
+<span class="text-[10px] bg-secondary/20 px-2 py-0.5 rounded text-secondary border border-secondary/30 font-bold uppercase tracking-tighter">Signal Ghost</span>
+</div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest mt-1">Accuracy: 92.1% • Latency: 42ms</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-xl font-black text-secondary">42,890</div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Division Elite</div>
+</div>
+</div>
+<!-- Rank 3 -->
+<div class="glass-panel p-4 rounded-2xl flex items-center justify-between border-l-4 border-tertiary-fixed opacity-80">
+<div class="flex items-center gap-6">
+<div class="w-12 h-12 rounded-full border-2 border-tertiary-fixed p-1 relative">
+<img alt="User 3" class="w-full h-full object-cover rounded-full" data-alt="eerie artistic portrait of a humanoid alien with intricate glowing green bio-patterns on dark grey skin" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA97LccvB3yRviVC_K8nYax2IOnnZkg67D2RrtNa2RC2FyrtKjt1daysW95DSWDwGOQxFfkdOsmr0LPIrLngNT8i0GDLCTghLPCOhS9CqwWhieCqsbg8a-sLkjLPrQo0C_SnhAeFDtcQ6uGhDdRJYPToG3puYQMnOXsqhakVhQ8-pEPym6bzPobuSwphuiS5i7vIGXCZ2FirEP0Q5427VnCCapTaJSs0vDBPNgo281qdQub3h76xbJX2vyFRXysJYY9klCALlUE7K0"/>
+<div class="absolute -top-1 -right-1 bg-tertiary-fixed text-on-tertiary-fixed rounded-full text-[8px] font-black w-5 h-5 flex items-center justify-center">3</div>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-black text-tertiary tracking-tight">XENON_PULSE</span>
+<span class="text-[10px] bg-tertiary/20 px-2 py-0.5 rounded text-tertiary border border-tertiary/30 font-bold uppercase tracking-tighter">Warp Tracker</span>
+</div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest mt-1">Accuracy: 88.5% • Latency: 102ms</div>
+</div>
+</div>
+<div class="text-right">
+<div class="text-xl font-black text-tertiary">39,112</div>
+<div class="text-[10px] text-on-surface-variant font-headline uppercase tracking-widest">Regional Alpha</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Primary CTA Area -->
+<div class="flex flex-col md:flex-row gap-4 justify-center items-center mt-12 pb-12">
+<button class="w-full md:w-auto min-w-[280px] bg-primary-container text-on-primary font-headline font-black py-4 px-8 rounded-lg shadow-[0_0_20px_rgba(0,229,255,0.4)] hover:scale-105 hover:shadow-[0_0_30px_rgba(0,229,255,0.6)] transition-all active:scale-95 uppercase tracking-widest text-lg flex items-center justify-center gap-3 group">
+                PLAY AGAIN
+                <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform">rebase_edit</span>
+</button>
+<button class="w-full md:w-auto min-w-[200px] border border-outline-variant/50 text-primary font-headline font-bold py-4 px-8 rounded-lg hover:bg-primary/10 transition-all uppercase tracking-widest text-sm">
+                SHARE DATA
+            </button>
+</div>
+</main>
+<!-- Bottom Navigation Shell (Shared Component) -->
+<nav class="fixed bottom-0 w-full z-50 bg-[#0F131E]/60 backdrop-blur-2xl border-t border-[#00E5FF]/10 shadow-[0_-10px_40px_rgba(0,229,255,0.05)] h-20 flex justify-around items-center px-4 pb-safe">
+<div class="flex flex-col items-center justify-center text-[#C3F5FF]/40 hover:bg-[#00E5FF]/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-2xl group-active:scale-90 transition-transform">location_searching</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-tighter uppercase mt-1">SCAN</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#C3F5FF]/40 hover:bg-[#00E5FF]/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-2xl group-active:scale-90 transition-transform">analytics</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-tighter uppercase mt-1">INTEL</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#00E5FF] relative after:content-[''] after:absolute after:top-[-4px] after:w-8 after:h-[2px] after:bg-[#00E5FF] after:shadow-[0_0_10px_#00E5FF] group">
+<span class="material-symbols-outlined text-2xl scale-110 brightness-125">leaderboard</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-tighter uppercase mt-1">RANK</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#C3F5FF]/40 hover:bg-[#00E5FF]/5 transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-2xl group-active:scale-90 transition-transform">group</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-tighter uppercase mt-1">SQUAD</span>
+</div>
+</nav>
+<!-- Visual Artifacts -->
+<div class="fixed top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-primary/20 to-transparent blur-sm z-50"></div>
+<div class="fixed bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-primary/10 to-transparent blur-sm z-50"></div>
+</body></html>

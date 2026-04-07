@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NU:TONIC | Role Selection</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=Orbitron:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-container": "#602a00",
+                    "secondary-fixed-dim": "#ffb68b",
+                    "on-secondary-fixed": "#321200",
+                    "on-tertiary-fixed": "#002110",
+                    "on-surface-variant": "#bac9cc",
+                    "surface-dim": "#0f131e",
+                    "tertiary-container": "#00ee91",
+                    "on-secondary": "#522300",
+                    "background": "#0f131e",
+                    "primary-fixed": "#9cf0ff",
+                    "outline-variant": "#3b494c",
+                    "primary-fixed-dim": "#00daf3",
+                    "error-container": "#93000a",
+                    "on-primary-fixed": "#001f24",
+                    "error": "#ffb4ab",
+                    "surface-container-highest": "#313441",
+                    "tertiary": "#aaffc7",
+                    "on-background": "#dfe2f2",
+                    "on-tertiary-fixed-variant": "#00522f",
+                    "on-error-container": "#ffdad6",
+                    "on-tertiary": "#00391f",
+                    "surface": "#0f131e",
+                    "on-surface": "#dfe2f2",
+                    "outline": "#849396",
+                    "on-secondary-fixed-variant": "#753400",
+                    "on-primary-container": "#00626e",
+                    "surface-container": "#1b1f2b",
+                    "inverse-on-surface": "#2c303c",
+                    "tertiary-fixed-dim": "#00e38a",
+                    "on-error": "#690005",
+                    "primary": "#c3f5ff",
+                    "surface-container-low": "#171b27",
+                    "tertiary-fixed": "#56ffa7",
+                    "surface-tint": "#00daf3",
+                    "secondary": "#ffb68b",
+                    "secondary-container": "#ff7f1c",
+                    "on-primary": "#00363d",
+                    "on-tertiary-container": "#00673c",
+                    "inverse-primary": "#006875",
+                    "on-primary-fixed-variant": "#004f58",
+                    "primary-container": "#00e5ff",
+                    "secondary-fixed": "#ffdbc8",
+                    "surface-container-high": "#262a36",
+                    "inverse-surface": "#dfe2f2",
+                    "surface-variant": "#313441",
+                    "surface-bright": "#353945",
+                    "surface-container-lowest": "#0a0e19"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Space Grotesk"],
+                    "body": ["Inter"],
+                    "label": ["Inter"],
+                    "orbitron": ["Orbitron"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(49, 52, 65, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .neon-glow-primary {
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+        }
+        .neon-border {
+            border: 1px solid rgba(0, 229, 255, 0.2);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface-dim text-on-surface font-body selection:bg-primary-container selection:text-on-primary-container min-h-screen flex flex-col">
+<!-- TopAppBar Shell -->
+<header class="fixed top-0 w-full z-50 bg-[#0F131E]/60 backdrop-blur-xl flex justify-between items-center px-6 h-16 w-full shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary text-sm">diamond</span>
+</div>
+<h1 class="text-2xl font-bold tracking-tighter text-[#C3F5FF] drop-shadow-[0_0_8px_rgba(0,229,255,0.4)] font-headline uppercase tracking-widest">NU:TONIC</h1>
+</div>
+<div class="text-[#00E5FF] font-headline uppercase tracking-widest text-sm font-bold">
+            1,250 XP
+        </div>
+<div class="bg-gradient-to-r from-[#00E5FF]/10 to-transparent h-[1px] w-full absolute bottom-0"></div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-24 pb-32 px-6 flex flex-col items-center max-w-lg mx-auto w-full">
+<!-- Animated Background Decor -->
+<div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+<div class="absolute top-1/4 -right-20 w-64 h-64 bg-primary-container/5 rounded-full blur-[100px]"></div>
+<div class="absolute bottom-1/4 -left-20 w-80 h-80 bg-secondary-container/5 rounded-full blur-[120px]"></div>
+</div>
+<!-- Section Header -->
+<div class="text-center mb-10">
+<h2 class="font-orbitron text-3xl font-bold tracking-[0.2em] text-primary uppercase mb-2">Select Your Identity</h2>
+<p class="text-on-surface-variant text-sm font-light tracking-wide italic">Choose your vessel for the void simulation</p>
+</div>
+<!-- Role Selection Grid -->
+<div class="w-full space-y-4">
+<!-- Role 1: Human -->
+<button class="w-full group focus:outline-none">
+<div class="glass-card neon-border p-5 rounded-xl flex items-center gap-5 transition-all duration-300 group-hover:scale-[1.02] group-hover:border-primary/50 group-active:scale-95 group-hover:neon-glow-primary text-left">
+<div class="w-14 h-14 rounded-lg bg-surface-container-highest flex items-center justify-center border border-primary/10 group-hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined text-3xl text-primary" data-icon="person">person</span>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-center mb-0.5">
+<span class="font-headline text-lg font-bold tracking-wider text-primary uppercase">Human</span>
+<span class="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">STABLE</span>
+</div>
+<p class="text-on-surface-variant text-xs leading-relaxed">accurate Earth knowledge</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+</button>
+<!-- Role 2: Astronaut -->
+<button class="w-full group focus:outline-none">
+<div class="glass-card neon-border p-5 rounded-xl flex items-center gap-5 transition-all duration-300 group-hover:scale-[1.02] group-hover:border-secondary/50 group-active:scale-95 group-hover:shadow-[0_0_15px_rgba(255,182,139,0.15)] text-left">
+<div class="w-14 h-14 rounded-lg bg-surface-container-highest flex items-center justify-center border border-secondary/10 group-hover:bg-secondary/10 transition-colors">
+<span class="material-symbols-outlined text-3xl text-secondary" data-icon="astronaut">rocket_launch</span>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-center mb-0.5">
+<span class="font-headline text-lg font-bold tracking-wider text-secondary uppercase">Astronaut</span>
+<span class="text-[10px] bg-secondary/10 text-secondary px-2 py-0.5 rounded-full border border-secondary/20">VOYAGER</span>
+</div>
+<p class="text-on-surface-variant text-xs leading-relaxed">distorted memory advantage</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-secondary transition-colors">chevron_right</span>
+</div>
+</button>
+<!-- Role 3: Alien -->
+<button class="w-full group focus:outline-none">
+<div class="glass-card neon-border p-5 rounded-xl flex items-center gap-5 transition-all duration-300 group-hover:scale-[1.02] group-hover:border-tertiary/50 group-active:scale-95 group-hover:shadow-[0_0_15px_rgba(0,238,145,0.15)] text-left">
+<div class="w-14 h-14 rounded-lg bg-surface-container-highest flex items-center justify-center border border-tertiary/10 group-hover:bg-tertiary/10 transition-colors">
+<span class="material-symbols-outlined text-3xl text-tertiary" data-icon="alien">cruelty_free</span>
+</div>
+<div class="flex-grow">
+<div class="flex justify-between items-center mb-0.5">
+<span class="font-headline text-lg font-bold tracking-wider text-tertiary uppercase">Alien</span>
+<span class="text-[10px] bg-tertiary/10 text-tertiary px-2 py-0.5 rounded-full border border-tertiary/20">XENO</span>
+</div>
+<p class="text-on-surface-variant text-xs leading-relaxed">unpredictable AI playstyle</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-tertiary transition-colors">chevron_right</span>
+</div>
+</button>
+</div>
+<!-- Initialize CTA -->
+<div class="mt-12 w-full">
+<button class="w-full bg-primary-container text-on-primary h-14 rounded-xl font-headline font-extrabold uppercase tracking-[0.3em] flex items-center justify-center gap-3 transition-all duration-300 hover:scale-[1.02] active:scale-95 shadow-[0_0_30px_rgba(0,229,255,0.2)] hover:shadow-[0_0_40px_rgba(0,229,255,0.4)]">
+                Initialize
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</button>
+<div class="text-center mt-6">
+<p class="text-[10px] text-on-surface-variant/40 uppercase tracking-[0.2em] font-headline">Protocol version: 0.9.4-BETA</p>
+</div>
+</div>
+</main>
+<!-- Visual Identity Decor -->
+<div class="fixed bottom-24 left-1/2 -translate-x-1/2 w-4/5 h-[1px] bg-gradient-to-r from-transparent via-primary/10 to-transparent opacity-50"></div>
+<!-- BottomNavBar Shell -->
+<nav class="fixed bottom-0 w-full z-50 h-20 bg-[#171B27]/80 backdrop-blur-2xl flex justify-around items-center px-4 pb-safe rounded-t-3xl border-t border-[#00E5FF]/10 shadow-[0_-10px_40px_rgba(0,229,255,0.05)]">
+<!-- HOME -->
+<a class="flex flex-col items-center justify-center text-[#3B494C] pt-2 hover:bg-[#00E5FF]/5 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-[0.1em] mt-1">HOME</span>
+</a>
+<!-- MAP -->
+<a class="flex flex-col items-center justify-center text-[#3B494C] pt-2 hover:bg-[#00E5FF]/5 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="explore">explore</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-[0.1em] mt-1">MAP</span>
+</a>
+<!-- PLAY (ACTIVE - Logical Mapping for identity setup) -->
+<a class="flex flex-col items-center justify-center text-[#00E5FF] border-t-2 border-[#00E5FF] -mt-[2px] pt-2 scale-105 transition-all drop-shadow-[0_0_10px_#00E5FF]" href="#">
+<span class="material-symbols-outlined" data-icon="rocket_launch" style="font-variation-settings: 'FILL' 1;">rocket_launch</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-[0.1em] mt-1">PLAY</span>
+</a>
+<!-- RANKS -->
+<a class="flex flex-col items-center justify-center text-[#3B494C] pt-2 hover:bg-[#00E5FF]/5 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="leaderboard">leaderboard</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-[0.1em] mt-1">RANKS</span>
+</a>
+<!-- SETUP -->
+<a class="flex flex-col items-center justify-center text-[#3B494C] pt-2 hover:bg-[#00E5FF]/5 transition-all" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-['Space_Grotesk'] text-[10px] font-bold tracking-[0.1em] mt-1">SETUP</span>
+</a>
+</nav>
+<!-- Background texture simulation -->
+<div class="fixed inset-0 -z-20 opacity-30 pointer-events-none mix-blend-overlay" data-alt="subtle digital grain and star dust pattern over deep navy background to simulate space void texture" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC1YF8qxVqLo7rc1qMbWfLb8EJ0N5461hXZ_mSJEgUTLs3B5BdX-LKJzkViV94a7cl5DhGTXR2NLYmfnRrUHjafmjvw8xAfqlcGNbNEoKdRj8vaz-6oiM3LjXeJ_L7-lc7bqjKbkEHTZ88th4r7gQbRTrnQrzdmeAWkrJtUk2QUslVkWekhR4z8PlnMQAgj7rcl51uSmczGSvgDNROWXaSdkeG5gevTdEpiQpPacz9PiI3i856VbURZhKi-tQw4nbo5cXP3vG8-6es')">
+</div>
+</body></html>

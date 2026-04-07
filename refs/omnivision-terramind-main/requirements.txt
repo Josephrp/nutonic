@@ -1,0 +1,17 @@
+# Omnivision - direct runtime requirements (recommended)
+
+streamlit>=1.30
+numpy>=1.23
+pandas>=2.0
+pillow>=10.0
+
+# GeoTIFF / raster stack
+rioxarray>=0.15
+rasterio>=1.3
+xarray>=2023.1
+
+# Torch (CPU/GPU). If this fails on a judge machine, install torch from pytorch.org first.
+torch>=2.1
+
+# TerraTorch (includes TerraMind registry/models)
+git+https://github.com/IBM/terratorch.git

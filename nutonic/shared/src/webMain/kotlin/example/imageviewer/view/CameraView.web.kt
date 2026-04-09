@@ -20,7 +20,7 @@ import imageviewer.shared.generated.resources.Res
 @Composable
 actual fun CameraView(
     modifier: Modifier,
-    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit
+    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit,
 ) {
     val randomPicture = remember { resourcePictures.random() }
     var imageBitmap by remember { mutableStateOf(ImageBitmap(1, 1)) }
@@ -31,20 +31,22 @@ actual fun CameraView(
         Image(
             bitmap = imageBitmap,
             contentDescription = "Camera stub",
-            Modifier.fillMaxSize()
+            Modifier.fillMaxSize(),
         )
         Text(
-            text = """
+            text =
+                """
                 Camera is not available on Web for now.
                 Instead, we will use a random picture.
-            """.trimIndent(),
+                """.trimIndent(),
             color = Color.White,
-            modifier = Modifier.align(Alignment.Center)
-                .background(
-                    color = Color.Black.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(10.dp)
-                )
-                .padding(20.dp)
+            modifier =
+                Modifier
+                    .align(Alignment.Center)
+                    .background(
+                        color = Color.Black.copy(alpha = 0.7f),
+                        shape = RoundedCornerShape(10.dp),
+                    ).padding(20.dp),
         )
         val nameAndDescription = createNewPhotoNameAndDescription()
         CircularButton(
@@ -55,9 +57,9 @@ actual fun CameraView(
                 createCameraPictureData(
                     name = nameAndDescription.name,
                     description = nameAndDescription.description,
-                    gps = randomPicture.gps
+                    gps = randomPicture.gps,
                 ),
-                WebStorableImage(imageBitmap)
+                WebStorableImage(imageBitmap),
             )
         }
     }

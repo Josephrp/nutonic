@@ -15,17 +15,20 @@ import org.jetbrains.skia.ImageFilter
 import org.jetbrains.skia.ImageInfo
 import org.jetbrains.skia.Paint
 
-actual fun grayScaleFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyGrayScaleFilter(bitmap.asSkiaBitmap()).asComposeImageBitmap()
-}
+actual fun grayScaleFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyGrayScaleFilter(bitmap.asSkiaBitmap()).asComposeImageBitmap()
 
-actual fun pixelFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyPixelFilter(bitmap.asSkiaBitmap()).asComposeImageBitmap()
-}
+actual fun pixelFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyPixelFilter(bitmap.asSkiaBitmap()).asComposeImageBitmap()
 
-actual fun blurFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyBlurFilter(bitmap.asSkiaBitmap()).asComposeImageBitmap()
-}
+actual fun blurFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyBlurFilter(bitmap.asSkiaBitmap()).asComposeImageBitmap()
 
 actual class PlatformContext
 
@@ -35,7 +38,7 @@ actual fun getPlatformContext(): PlatformContext = PlatformContext()
 private fun scaleBitmapAspectRatio(
     bitmap: Bitmap,
     width: Int,
-    height: Int
+    height: Int,
 ): Bitmap {
     val boundWidth = width.toFloat()
     val boundHeight = height.toFloat()
@@ -47,9 +50,10 @@ private fun scaleBitmapAspectRatio(
     val resultWidth = (bitmap.width * ratio).toInt()
     val resultHeight = (bitmap.height * ratio).toInt()
 
-    val result = Bitmap().apply {
-        allocN32Pixels(resultWidth, resultHeight)
-    }
+    val result =
+        Bitmap().apply {
+            allocN32Pixels(resultWidth, resultHeight)
+        }
     val canvas = Canvas(result)
     canvas.drawImageRect(Image.makeFromBitmap(bitmap), result.bounds.toRect())
     canvas.readPixels(result, 0, 0)
@@ -59,14 +63,16 @@ private fun scaleBitmapAspectRatio(
 }
 
 private fun applyGrayScaleFilter(bitmap: Bitmap): Bitmap {
-    val imageInfo = ImageInfo(
-        width = bitmap.width,
-        height = bitmap.height,
-        colorInfo = ColorInfo(ColorType.GRAY_8, ColorAlphaType.PREMUL, null)
-    )
-    val result = Bitmap().apply {
-        allocPixels(imageInfo)
-    }
+    val imageInfo =
+        ImageInfo(
+            width = bitmap.width,
+            height = bitmap.height,
+            colorInfo = ColorInfo(ColorType.GRAY_8, ColorAlphaType.PREMUL, null),
+        )
+    val result =
+        Bitmap().apply {
+            allocPixels(imageInfo)
+        }
 
     val canvas = Canvas(result)
     canvas.drawImageRect(Image.makeFromBitmap(bitmap), bitmap.bounds.toRect())
@@ -87,12 +93,14 @@ private fun applyPixelFilter(bitmap: Bitmap): Bitmap {
 }
 
 private fun applyBlurFilter(bitmap: Bitmap): Bitmap {
-    val result = Bitmap().apply {
-        allocN32Pixels(bitmap.width, bitmap.height)
-    }
-    val blur = Paint().apply {
-        imageFilter = ImageFilter.makeBlur(12f, 12f, FilterTileMode.CLAMP)
-    }
+    val result =
+        Bitmap().apply {
+            allocN32Pixels(bitmap.width, bitmap.height)
+        }
+    val blur =
+        Paint().apply {
+            imageFilter = ImageFilter.makeBlur(12f, 12f, FilterTileMode.CLAMP)
+        }
 
     val canvas = Canvas(result)
     canvas.saveLayer(null, blur)

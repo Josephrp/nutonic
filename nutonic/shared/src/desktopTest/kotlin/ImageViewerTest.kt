@@ -18,17 +18,23 @@ class ImageViewerTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private val dependencies = object : Dependencies() {
-        override val notification: Notification = object : PopupNotification(localization) {
-            override fun showPopUpMessage(text: String) {
-            }
+    private val dependencies =
+        object : Dependencies() {
+            override val notification: Notification =
+                object : PopupNotification(localization) {
+                    override fun showPopUpMessage(text: String) {
+                    }
+                }
+            override val imageStorage: DesktopImageStorage =
+                DesktopImageStorage(CoroutineScope(Dispatchers.Main))
+            override val sharePicture: SharePicture =
+                object : SharePicture {
+                    override fun share(
+                        context: PlatformContext,
+                        picture: PictureData,
+                    ) {}
+                }
         }
-        override val imageStorage: DesktopImageStorage =
-            DesktopImageStorage(CoroutineScope(Dispatchers.Main))
-        override val sharePicture: SharePicture = object : SharePicture {
-            override fun share(context: PlatformContext, picture: PictureData) {}
-        }
-    }
 
     @Test
     fun testToggleGalleryStyleButton() {

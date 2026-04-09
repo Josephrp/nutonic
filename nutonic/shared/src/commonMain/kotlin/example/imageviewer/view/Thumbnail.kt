@@ -30,42 +30,52 @@ fun Thumbnail(
     picture: PictureData,
     onClickSelect: () -> Unit,
     onClickFullScreen: () -> Unit,
-    onClickInfo: () -> Unit
+    onClickInfo: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.padding(start = 10.dp, end = 10.dp).height(70.dp)
-            .fillMaxWidth(),
+        modifier =
+            Modifier
+                .padding(start = 10.dp, end = 10.dp)
+                .height(70.dp)
+                .fillMaxWidth(),
         shape = RoundedCornerShape(200.dp),
         border = BorderStroke(1.dp, Color.White),
         backgroundColor = MaterialTheme.colors.background,
-        contentColor = MaterialTheme.colors.onBackground
+        contentColor = MaterialTheme.colors.onBackground,
     ) {
         Box(Modifier.clickable { onClickSelect() }) {
             Row(modifier = Modifier.padding(end = 30.dp)) {
                 Tooltip(picture.name) {
                     ThumbnailImage(
-                        modifier = Modifier.size(70.dp)
-                            .clip(CircleShape)
-                            .border(BorderStroke(1.dp, Color.White), CircleShape)
-                            .clickable { onClickFullScreen() },
+                        modifier =
+                            Modifier
+                                .size(70.dp)
+                                .clip(CircleShape)
+                                .border(BorderStroke(1.dp, Color.White), CircleShape)
+                                .clickable { onClickFullScreen() },
                         picture = picture,
                     )
                 }
                 Text(
                     text = picture.name,
-                    modifier = Modifier.weight(1f).align(Alignment.CenterVertically)
-                        .padding(start = 16.dp),
-                    style = MaterialTheme.typography.subtitle1
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .align(Alignment.CenterVertically)
+                            .padding(start = 16.dp),
+                    style = MaterialTheme.typography.subtitle1,
                 )
 
                 Icon(
                     imageVector = IconMoreVert,
                     contentDescription = "more info",
-                    modifier = Modifier.height(70.dp)
-                        .width(30.dp)
-                        .padding(start = 1.dp, top = 25.dp, end = 1.dp, bottom = 25.dp)
-                        .clickable { onClickInfo() },
-                    tint = Color.DarkGray
+                    modifier =
+                        Modifier
+                            .height(70.dp)
+                            .width(30.dp)
+                            .padding(start = 1.dp, top = 25.dp, end = 1.dp, bottom = 25.dp)
+                            .clickable { onClickInfo() },
+                    tint = Color.DarkGray,
                 )
             }
         }

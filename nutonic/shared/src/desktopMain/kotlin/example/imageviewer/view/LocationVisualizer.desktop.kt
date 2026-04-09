@@ -10,13 +10,13 @@ actual fun LocationVisualizer(
     modifier: Modifier,
     gps: GpsPosition,
     title: String,
-    parentScrollEnableState: MutableState<Boolean>
+    parentScrollEnableState: MutableState<Boolean>,
 ) {
     example.map.MapView(
         modifier,
         userAgent = "ComposeMapViewExample",
         latitude = gps.latitude,
         longitude = gps.longitude,
-        startScale = 12_000.0
+        startScale = 12_000.0,
     )
 }

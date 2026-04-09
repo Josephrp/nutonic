@@ -18,7 +18,6 @@ class NameAndDescription(
 fun createNewPhotoNameAndDescription(): NameAndDescription {
     val localization = LocalLocalization.current
     return remember {
-
         Clock.System.now().toLocalDateTime(TimeZone.UTC)
         val kotlinConfEndTime =
             LocalDateTime(2023, Month.APRIL, 14, hour = 23, minute = 59).toInstant(TimeZone.UTC)
@@ -26,12 +25,12 @@ fun createNewPhotoNameAndDescription(): NameAndDescription {
         if (Clock.System.now() < kotlinConfEndTime) {
             NameAndDescription(
                 localization.kotlinConfName,
-                localization.kotlinConfDescription
+                localization.kotlinConfDescription,
             )
         } else {
             NameAndDescription(
                 localization.newPhotoName,
-                localization.newPhotoDescription
+                localization.newPhotoDescription,
             )
         }
     }

@@ -3,8 +3,8 @@ import androidx.compose.material.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import example.imageviewer.*
-import example.imageviewer.style.ImageViewerTheme
 import example.imageviewer.ioDispatcher
+import example.imageviewer.style.ImageViewerTheme
 import example.imageviewer.view.Toast
 import example.imageviewer.view.ToastState
 import kotlinx.coroutines.CoroutineScope
@@ -17,18 +17,19 @@ internal fun ImageViewerWeb() {
 
     ImageViewerTheme {
         Surface(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
             ImageViewerCommon(
-                dependencies = dependencies
+                dependencies = dependencies,
             )
             Toast(toastState)
         }
     }
 }
 
-fun getDependencies(toastState: MutableState<ToastState>) = object : Dependencies() {
-    override val imageStorage: ImageStorage = WebImageStorage()
-    override val sharePicture = WebSharePicture()
-    override val notification = WebPopupNotification(toastState, localization)
-}
+fun getDependencies(toastState: MutableState<ToastState>) =
+    object : Dependencies() {
+        override val imageStorage: ImageStorage = WebImageStorage()
+        override val sharePicture = WebSharePicture()
+        override val notification = WebPopupNotification(toastState, localization)
+    }

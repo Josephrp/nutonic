@@ -11,13 +11,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import example.imageviewer.LocalImageProvider
-import example.imageviewer.Localization
 import example.imageviewer.LocalLocalization
+import example.imageviewer.Localization
 import example.imageviewer.filter.FilterType
 import example.imageviewer.filter.getFilter
 import example.imageviewer.filter.getPlatformContext
@@ -41,17 +38,18 @@ fun FullscreenImageScreen(
 
     val platformContext = getPlatformContext()
     val originalImage = originalImageState.value
-    val imageWithFilter = remember(originalImage, selectedFilters) {
-        if (originalImage != null) {
-            var result: ImageBitmap = originalImage
-            for (filter in selectedFilters.map { getFilter(it) }) {
-                result = filter.invoke(result, platformContext)
+    val imageWithFilter =
+        remember(originalImage, selectedFilters) {
+            if (originalImage != null) {
+                var result: ImageBitmap = originalImage
+                for (filter in selectedFilters.map { getFilter(it) }) {
+                    result = filter.invoke(result, platformContext)
+                }
+                result
+            } else {
+                null
             }
-            result
-        } else {
-            null
         }
-    }
     Box(Modifier.fillMaxSize().background(color = ImageviewerColors.fullScreenImageBackground)) {
         if (imageWithFilter != null) {
             val scalableState = remember { ScalableState() }
@@ -68,7 +66,7 @@ fun FullscreenImageScreen(
                     .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
                     .background(ImageviewerColors.filterButtonsBackground)
                     .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 FilterButtons(
                     picture = picture,
@@ -107,24 +105,24 @@ private fun FilterButtons(
     val platformContext = getPlatformContext()
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.padding(bottom = 16.dp)
+        modifier = Modifier.padding(bottom = 16.dp),
     ) {
         for (type in filters) {
             Tooltip(type.toString()) {
                 ThumbnailImage(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(CircleShape)
-                        .border(
-                            color = if (type in selectedFilters) Color.White else Color.Gray,
-                            width = 3.dp,
-                            shape = CircleShape
-                        )
-                        .clickable {
-                            onSelectFilter(type)
-                        },
+                    modifier =
+                        Modifier
+                            .size(60.dp)
+                            .clip(CircleShape)
+                            .border(
+                                color = if (type in selectedFilters) Color.White else Color.Gray,
+                                width = 3.dp,
+                                shape = CircleShape,
+                            ).clickable {
+                                onSelectFilter(type)
+                            },
                     picture = picture,
-                    filter = remember { { getFilter(type).invoke(it, platformContext) } }
+                    filter = remember { { getFilter(type).invoke(it, platformContext) } },
                 )
             }
         }

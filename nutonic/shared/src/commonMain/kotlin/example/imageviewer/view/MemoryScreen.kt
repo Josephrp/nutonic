@@ -59,25 +59,27 @@ fun MemoryScreen(
     Box {
         val scrollState = rememberScrollState()
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(scrollState, enabled = verticalScrollEnableState.value)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState, enabled = verticalScrollEnableState.value),
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(393.dp)
-                    .background(Color.White)
-                    .graphicsLayer {
-                        translationY = 0.5f * scrollState.value
-                    },
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(393.dp)
+                        .background(Color.White)
+                        .graphicsLayer {
+                            translationY = 0.5f * scrollState.value
+                        },
+                contentAlignment = Alignment.Center,
             ) {
                 headerImage?.let {
                     MemoryHeader(
                         it,
                         picture = picture,
-                        onClick = { onHeaderClick(memoryPage.pictureIndex) }
+                        onClick = { onHeaderClick(memoryPage.pictureIndex) },
                     )
                 }
             }
@@ -86,15 +88,17 @@ fun MemoryScreen(
                     Headliner("Note")
                     Collapsible(picture.description, onEdit = { edit = true })
                     Headliner("Related memories")
-                    val shuffledIndices = remember {
-                        (pictures.indices.toList() - memoryPage.pictureIndex).shuffled().take(8)
-                    }
+                    val shuffledIndices =
+                        remember {
+                            (pictures.indices.toList() - memoryPage.pictureIndex).shuffled().take(8)
+                        }
                     LazyRow(
-                        modifier = Modifier
-                            .padding(10.dp, 0.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier =
+                            Modifier
+                                .padding(10.dp, 0.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         items(items = shuffledIndices) { index ->
                             val relatedPicture = pictures.getOrNull(index)
@@ -103,7 +107,7 @@ fun MemoryScreen(
                                     SquareThumbnail(
                                         picture = relatedPicture,
                                         isHighlighted = false,
-                                        onClick = { onSelectRelatedMemory(index) }
+                                        onClick = { onSelectRelatedMemory(index) },
                                     )
                                 }
                             }
@@ -112,7 +116,8 @@ fun MemoryScreen(
                     Headliner("Place")
                     val locationShape = RoundedCornerShape(10.dp)
                     LocationVisualizer(
-                        Modifier.padding(horizontal = 12.dp)
+                        Modifier
+                            .padding(horizontal = 12.dp)
                             .clip(locationShape)
                             .border(1.dp, Color.Gray, locationShape)
                             .fillMaxWidth()
@@ -158,16 +163,22 @@ fun MemoryScreen(
 }
 
 @Composable
-private fun IconWithText(icon: ImageVector, text: String, onClick: () -> Unit) {
+private fun IconWithText(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+) {
     Row(
-        modifier = Modifier.clickable {
-            onClick()
-        },
-        horizontalArrangement = Arrangement.spacedBy(
-            8.dp,
-            Alignment.CenterHorizontally
-        ),
-        verticalAlignment = Alignment.Bottom
+        modifier =
+            Modifier.clickable {
+                onClick()
+            },
+        horizontalArrangement =
+            Arrangement.spacedBy(
+                8.dp,
+                Alignment.CenterHorizontally,
+            ),
+        verticalAlignment = Alignment.Bottom,
     ) {
         Icon(
             imageVector = icon,
@@ -178,13 +189,17 @@ private fun IconWithText(icon: ImageVector, text: String, onClick: () -> Unit) {
             textAlign = TextAlign.Left,
             color = ImageviewerColors.onBackground,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Normal
+            fontWeight = FontWeight.Normal,
         )
     }
 }
 
 @Composable
-private fun MemoryHeader(bitmap: ImageBitmap, picture: PictureData, onClick: () -> Unit) {
+private fun MemoryHeader(
+    bitmap: ImageBitmap,
+    picture: PictureData,
+    onClick: () -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
 
     Box(modifier = Modifier.clickable(interactionSource, null, onClick = { onClick() })) {
@@ -192,7 +207,7 @@ private fun MemoryHeader(bitmap: ImageBitmap, picture: PictureData, onClick: () 
             bitmap,
             "Memory",
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         )
         MagicButtonOverlay(onClick)
         MemoryTextOverlay(picture)
@@ -202,7 +217,7 @@ private fun MemoryHeader(bitmap: ImageBitmap, picture: PictureData, onClick: () 
 @Composable
 fun BoxScope.MagicButtonOverlay(onClick: () -> Unit) {
     Column(
-        modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+        modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
     ) {
         CircularButton(
             imageVector = IconAutoFixHigh,
@@ -213,15 +228,17 @@ fun BoxScope.MagicButtonOverlay(onClick: () -> Unit) {
 
 @Composable
 fun BoxScope.MemoryTextOverlay(picture: PictureData) {
-    val shadowTextStyle = LocalTextStyle.current.copy(
-        shadow = Shadow(
-            color = Color.Black.copy(0.75f),
-            offset = Offset(0f, 0f),
-            blurRadius = 4f
+    val shadowTextStyle =
+        LocalTextStyle.current.copy(
+            shadow =
+                Shadow(
+                    color = Color.Black.copy(0.75f),
+                    offset = Offset(0f, 0f),
+                    blurRadius = 4f,
+                ),
         )
-    )
     Column(
-        modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 16.dp)
+        modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 16.dp),
     ) {
         Text(
             text = picture.dateString,
@@ -231,7 +248,7 @@ fun BoxScope.MemoryTextOverlay(picture: PictureData) {
             lineHeight = 22.sp,
             modifier = Modifier.fillMaxWidth(),
             fontWeight = FontWeight.SemiBold,
-            style = shadowTextStyle
+            style = shadowTextStyle,
         )
         Spacer(Modifier.height(1.dp))
         Text(
@@ -241,40 +258,45 @@ fun BoxScope.MemoryTextOverlay(picture: PictureData) {
             fontSize = 14.sp,
             lineHeight = 16.sp,
             fontWeight = FontWeight.Normal,
-            style = shadowTextStyle
+            style = shadowTextStyle,
         )
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Collapsible(s: String, onEdit: () -> Unit) {
+fun Collapsible(
+    s: String,
+    onEdit: () -> Unit,
+) {
     val interactionSource = remember { MutableInteractionSource() }
     var isCollapsed by remember { mutableStateOf(true) }
     val text = if (isCollapsed) s.lines().first() + "... (see more)" else s
     Text(
         text,
         fontSize = 16.sp,
-        modifier = Modifier
-            .padding(10.dp, 0.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(ImageviewerColors.noteBlockBackground)
-            .padding(10.dp)
-            .animateContentSize(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            ).combinedClickable(
-                interactionSource = interactionSource, indication = null,
-                onClick = {
-                    isCollapsed = !isCollapsed
-                },
-                onLongClick = {
-                    onEdit()
-                }
-            )
-            .fillMaxWidth(),
+        modifier =
+            Modifier
+                .padding(10.dp, 0.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(ImageviewerColors.noteBlockBackground)
+                .padding(10.dp)
+                .animateContentSize(
+                    animationSpec =
+                        spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                ).combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = {
+                        isCollapsed = !isCollapsed
+                    },
+                    onLongClick = {
+                        onEdit()
+                    },
+                ).fillMaxWidth(),
     )
 }
 
@@ -285,6 +307,6 @@ fun Headliner(s: String) {
         fontWeight = FontWeight.SemiBold,
         fontSize = 20.sp,
         color = Color.Black,
-        modifier = Modifier.padding(start = 12.dp, top = 32.dp, end = 12.dp, bottom = 16.dp)
+        modifier = Modifier.padding(start = 12.dp, top = 32.dp, end = 12.dp, bottom = 16.dp),
     )
 }

@@ -1,5 +1,11 @@
-# Nutonic
 # 🛰️ NU:TONIC
+
+Nu:Tonic is a post-apocalyptic, geo-guessing multiplayer game where:
+*   Earth players (“Humans”) / (“Aliens”)
+*   Stranded orbital players (“Astronauts”)
+*   AI opponents - NüTonic 
+…compete to identify real-world locations from fragmented memory, satellite remnants, and distorted map data.
+
 
 In the aftermath of a fractured world, when sanctions severed supply lines and left orbital crews drifting beyond reach, memory became the last tether to Earth.
 
@@ -7,9 +13,7 @@ Cities fell silent. Networks splintered. Maps decayed into fragments of what onc
 
 Up above, the astronauts—cut off, rationing air and time—cling to fading recollections of coastlines, skylines, deserts, and streets they may never walk again. Down below, humans navigate a changed planet, where landmarks persist but meaning has shifted. And somewhere in between, a third presence has emerged—an artificial intelligence, piecing together the world not from memory, but from patterns, probabilities, and echoes of data.
 
-**NU:TONIC** is born from this tension.
-
-It is not just a game—it is a contest of remembrance.
+**NU:TONIC** is born.
 
 Three forces converge:
 

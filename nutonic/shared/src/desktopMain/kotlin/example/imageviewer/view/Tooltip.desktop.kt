@@ -16,21 +16,21 @@ import androidx.compose.ui.unit.dp
 @Composable
 actual fun Tooltip(
     text: String,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     TooltipArea(
         tooltip = {
             Surface(
                 color = Color(210, 210, 210),
-                shape = RoundedCornerShape(4.dp)
+                shape = RoundedCornerShape(4.dp),
             ) {
                 Text(
                     text = text,
                     modifier = Modifier.padding(10.dp),
-                    style = MaterialTheme.typography.caption
+                    style = MaterialTheme.typography.caption,
                 )
             }
-        }
+        },
     ) {
         content()
     }

@@ -31,11 +31,12 @@ import java.awt.Dimension
 import java.awt.Toolkit
 
 class ExternalNavigationEventBus {
-    private val _events = MutableSharedFlow<ExternalImageViewerEvent>(
-        replay = 0,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-        extraBufferCapacity = 1,
-    )
+    private val _events =
+        MutableSharedFlow<ExternalImageViewerEvent>(
+            replay = 0,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+            extraBufferCapacity = 1,
+        )
     val events = _events.asSharedFlow()
 
     fun produceEvent(event: ExternalImageViewerEvent) {
@@ -48,44 +49,49 @@ fun ApplicationScope.ImageViewerDesktop() {
     val ioScope = rememberCoroutineScope { ioDispatcher }
     val toastState = remember { mutableStateOf<ToastState>(ToastState.Hidden) }
     val externalNavigationEventBus = remember { ExternalNavigationEventBus() }
-    val dependencies = remember {
-        getDependencies(toastState, ioScope, externalNavigationEventBus.events)
-    }
+    val dependencies =
+        remember {
+            getDependencies(toastState, ioScope, externalNavigationEventBus.events)
+        }
 
     Window(
         onCloseRequest = ::exitApplication,
         title = "Image Viewer",
-        state = WindowState(
-            position = WindowPosition.Aligned(Alignment.Center),
-            size = getPreferredWindowSize(720, 857)
-        ),
+        state =
+            WindowState(
+                position = WindowPosition.Aligned(Alignment.Center),
+                size = getPreferredWindowSize(720, 857),
+            ),
         icon = painterResource(Res.drawable.ic_imageviewer_round),
         // https://youtrack.jetbrains.com/issue/CMP-2741
         onKeyEvent = {
             if (it.type == KeyEventType.KeyUp) {
                 when (it.key) {
-                    Key.DirectionLeft -> externalNavigationEventBus.produceEvent(
-                        ExternalImageViewerEvent.Previous
-                    )
+                    Key.DirectionLeft ->
+                        externalNavigationEventBus.produceEvent(
+                            ExternalImageViewerEvent.Previous,
+                        )
 
-                    Key.DirectionRight -> externalNavigationEventBus.produceEvent(
-                        ExternalImageViewerEvent.Next
-                    )
+                    Key.DirectionRight ->
+                        externalNavigationEventBus.produceEvent(
+                            ExternalImageViewerEvent.Next,
+                        )
 
-                    Key.Escape -> externalNavigationEventBus.produceEvent(
-                        ExternalImageViewerEvent.ReturnBack
-                    )
+                    Key.Escape ->
+                        externalNavigationEventBus.produceEvent(
+                            ExternalImageViewerEvent.ReturnBack,
+                        )
                 }
             }
             false
-        }
+        },
     ) {
         ImageViewerTheme {
             Surface(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) {
                 ImageViewerCommon(
-                    dependencies = dependencies
+                    dependencies = dependencies,
                 )
                 Toast(toastState)
             }
@@ -96,24 +102,31 @@ fun ApplicationScope.ImageViewerDesktop() {
 private fun getDependencies(
     toastState: MutableState<ToastState>,
     ioScope: CoroutineScope,
-    events: SharedFlow<ExternalImageViewerEvent>
-) =
-    object : Dependencies() {
-        override val notification: Notification = object : PopupNotification(localization) {
+    events: SharedFlow<ExternalImageViewerEvent>,
+) = object : Dependencies() {
+    override val notification: Notification =
+        object : PopupNotification(localization) {
             override fun showPopUpMessage(text: String) {
                 toastState.value = ToastState.Shown(text)
             }
         }
-        override val imageStorage: DesktopImageStorage = DesktopImageStorage(ioScope)
-        override val sharePicture: SharePicture = object : SharePicture {
-            override fun share(context: PlatformContext, picture: PictureData) {
+    override val imageStorage: DesktopImageStorage = DesktopImageStorage(ioScope)
+    override val sharePicture: SharePicture =
+        object : SharePicture {
+            override fun share(
+                context: PlatformContext,
+                picture: PictureData,
+            ) {
                 // On Desktop share feature not supported
             }
         }
-        override val externalEvents = events
-    }
+    override val externalEvents = events
+}
 
-private fun getPreferredWindowSize(desiredWidth: Int, desiredHeight: Int): DpSize {
+private fun getPreferredWindowSize(
+    desiredWidth: Int,
+    desiredHeight: Int,
+): DpSize {
     val screenSize: Dimension = Toolkit.getDefaultToolkit().screenSize
     val preferredWidth: Int = (screenSize.width * 0.8f).toInt()
     val preferredHeight: Int = (screenSize.height * 0.8f).toInt()

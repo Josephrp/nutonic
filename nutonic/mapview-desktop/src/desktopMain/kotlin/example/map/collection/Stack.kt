@@ -9,40 +9,39 @@ fun <T> createStack(maxSize: Int): ImmutableCollection<T> = Stack(maxSize)
 
 private data class Stack<T>(
     val maxSize: Int,
-    val list: List<T> = emptyList()
+    val list: List<T> = emptyList(),
 ) : ImmutableCollection<T> {
     init {
         check(maxSize > 0) { "specify maxSize > 0" }
     }
 
-    override fun add(element: T): RemoveResult<T> {
-        return if (list.size >= maxSize) {
+    override fun add(element: T): RemoveResult<T> =
+        if (list.size >= maxSize) {
             RemoveResult(
                 collection = copy(list = list.drop(1) + element),
-                removed = list.first()
+                removed = list.first(),
             )
         } else {
             RemoveResult(
                 collection = copy(list = list + element),
-                removed = null
+                removed = null,
             )
         }
-    }
 
-    override fun remove(): RemoveResult<T> {
-        return if (list.isNotEmpty()) {
+    override fun remove(): RemoveResult<T> =
+        if (list.isNotEmpty()) {
             RemoveResult(
                 collection = copy(list = list.dropLast(1)),
-                removed = list.last()
+                removed = list.last(),
             )
         } else {
             RemoveResult(
                 collection = this,
-                null
+                null,
             )
         }
-    }
 
     override val size: Int get() = list.size
+
     override fun isEmpty(): Boolean = list.isEmpty()
 }

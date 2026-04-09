@@ -1,0 +1,20 @@
+# Machine-only Gradle JVM (do not merge into committed nutonic/gradle.properties).
+#
+# Gradle reads org.gradle.java.home from (among others):
+#   1) Project gradle.properties  → keep shared; do not commit paths here.
+#   2) User gradle.properties     → recommended for a fixed JDK path.
+#   3) JAVA_HOME                  → recommended for teams (CI-friendly).
+#
+# If the daemon must use a specific JDK but PATH still picks an older java first, add ONE line
+# to your user file (create the file if needed):
+#   Windows:  %USERPROFILE%\.gradle\gradle.properties
+#   macOS/Linux: ~/.gradle/gradle.properties
+#
+# Use forward slashes on Windows. Example:
+# org.gradle.java.home=C:/Program Files/Eclipse Adoptium/jdk-21.0.9.10-hotspot
+#
+# This repo gitignores `gradle.properties.PERSONAL`. Gradle does not load that filename by
+# default. To apply the same settings, copy the `org.gradle.java.home` line (uncommented) into:
+#   %USERPROFILE%\.gradle\gradle.properties   (Windows)
+#   ~/.gradle/gradle.properties               (macOS / Linux)
+# Or set JAVA_HOME to a JDK 17+ and ensure `java`/`javac` on PATH come from that JDK.

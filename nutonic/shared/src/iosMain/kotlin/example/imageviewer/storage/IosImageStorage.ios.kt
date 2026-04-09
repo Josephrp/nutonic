@@ -30,15 +30,14 @@ import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 
-private const val maxStorableImageSizePx = 1200
-private const val storableThumbnailSizePx = 180
-private const val jpegCompressionQuality = 60
+private const val MAX_STORABLE_IMAGE_SIZE_PX = 1200
+private const val STORABLE_THUMBNAIL_SIZE_PX = 180
+private const val JPEG_COMPRESSION_QUALITY = 60
 
 class IosImageStorage(
     pictures: SnapshotStateList<PictureData>,
-    private val ioScope: CoroutineScope
+    private val ioScope: CoroutineScope,
 ) : ImageStorage {
-
     private val savePictureDir =
         File(NSFileManager.defaultManager.DocumentDirectory, "ImageViewer/takenPhotos/")
 
@@ -53,28 +52,33 @@ class IosImageStorage(
 
     init {
         if (savePictureDir.isDirectory) {
-            val files = savePictureDir.listFiles { _, name: String ->
-                name.endsWith(".json")
-            } ?: emptyArray()
+            val files =
+                savePictureDir.listFiles { _, name: String ->
+                    name.endsWith(".json")
+                } ?: emptyArray()
             pictures.addAll(
                 index = 0,
-                elements = files
-                    .map {
-                        it.readText().toCameraMetadata()
-                    }.sortedByDescending {
-                        it.timeStampSeconds
-                    }
+                elements =
+                    files
+                        .map {
+                            it.readText().toCameraMetadata()
+                        }.sortedByDescending {
+                            it.timeStampSeconds
+                        },
             )
         } else {
             savePictureDir.mkdirs()
         }
     }
 
-    override fun saveImage(picture: PictureData.Camera, image: PlatformStorableImage) {
+    override fun saveImage(
+        picture: PictureData.Camera,
+        image: PlatformStorableImage,
+    ) {
         ioScope.launch {
             with(image.rawValue) {
-                picture.jpgFile.writeJpeg(fitInto(maxStorableImageSizePx))
-                picture.thumbnailJpgFile.writeJpeg(fitInto(storableThumbnailSizePx))
+                picture.jpgFile.writeJpeg(fitInto(MAX_STORABLE_IMAGE_SIZE_PX))
+                picture.thumbnailJpgFile.writeJpeg(fitInto(STORABLE_THUMBNAIL_SIZE_PX))
             }
             picture.jsonFile.writeText(picture.toJson())
         }
@@ -105,43 +109,46 @@ class IosImageStorage(
             picture.jpgFile.readBytes().toImageBitmap()
         }
 
-    suspend fun getNSDataToShare(picture: PictureData): NSData = withContext(Dispatchers.IO) {
-        when (picture) {
-            is PictureData.Camera -> {
-                picture.jpgFile
-            }
+    suspend fun getNSDataToShare(picture: PictureData): NSData =
+        withContext(Dispatchers.IO) {
+            when (picture) {
+                is PictureData.Camera -> {
+                    picture.jpgFile
+                }
 
-            is PictureData.Resource -> {
-                NSURL(
-                    fileURLWithPath = NSBundle.mainBundle.resourcePath + "/" + picture.resource,
-                    isDirectory = false
-                )
-            }
-        }.readData()
-    }
+                is PictureData.Resource -> {
+                    NSURL(
+                        fileURLWithPath = NSBundle.mainBundle.resourcePath + "/" + picture.resource,
+                        isDirectory = false,
+                    )
+                }
+            }.readData()
+        }
 
-    suspend fun getNSURLToShare(picture: PictureData): NSURL = withContext(Dispatchers.IO) {
-        when (picture) {
-            is PictureData.Camera -> {
-                picture.jpgFile
-            }
+    suspend fun getNSURLToShare(picture: PictureData): NSURL =
+        withContext(Dispatchers.IO) {
+            when (picture) {
+                is PictureData.Camera -> {
+                    picture.jpgFile
+                }
 
-            is PictureData.Resource -> {
-                NSURL(
-                    fileURLWithPath = NSBundle.mainBundle.resourcePath + "/" + picture.resource,
-                    isDirectory = false
-                )
+                is PictureData.Resource -> {
+                    NSURL(
+                        fileURLWithPath = NSBundle.mainBundle.resourcePath + "/" + picture.resource,
+                        isDirectory = false,
+                    )
+                }
             }
         }
-    }
 }
 
 @OptIn(ExperimentalForeignApi::class)
 private fun UIImage.fitInto(px: Int): UIImage {
-    val targetScale = maxOf(
-        px.toFloat() / size.useContents { width },
-        px.toFloat() / size.useContents { height },
-    )
+    val targetScale =
+        maxOf(
+            px.toFloat() / size.useContents { width },
+            px.toFloat() / size.useContents { height },
+        )
     val newSize = size.useContents { CGSizeMake(width * targetScale, height * targetScale) }
     return resize(newSize)
 }
@@ -152,23 +159,25 @@ private fun UIImage.resize(targetSize: CValue<CGSize>): UIImage {
     val widthRatio = targetSize.useContents { width } / currentSize.useContents { width }
     val heightRatio = targetSize.useContents { height } / currentSize.useContents { height }
 
-    val newSize: CValue<CGSize> = if (widthRatio > heightRatio) {
-        CGSizeMake(
-            width = currentSize.useContents { width } * heightRatio,
-            height = currentSize.useContents { height } * heightRatio
+    val newSize: CValue<CGSize> =
+        if (widthRatio > heightRatio) {
+            CGSizeMake(
+                width = currentSize.useContents { width } * heightRatio,
+                height = currentSize.useContents { height } * heightRatio,
+            )
+        } else {
+            CGSizeMake(
+                width = currentSize.useContents { width } * widthRatio,
+                height = currentSize.useContents { height } * widthRatio,
+            )
+        }
+    val newRect =
+        CGRectMake(
+            x = 0.0,
+            y = 0.0,
+            width = newSize.useContents { width },
+            height = newSize.useContents { height },
         )
-    } else {
-        CGSizeMake(
-            width = currentSize.useContents { width } * widthRatio,
-            height = currentSize.useContents { height } * widthRatio
-        )
-    }
-    val newRect = CGRectMake(
-        x = 0.0,
-        y = 0.0,
-        width = newSize.useContents { width },
-        height = newSize.useContents { height }
-    )
     UIGraphicsBeginImageContextWithOptions(size = newSize, opaque = false, scale = 1.0)
     this.drawInRect(newRect)
     val newImage = UIGraphicsGetImageFromCurrentImageContext()
@@ -177,13 +186,14 @@ private fun UIImage.resize(targetSize: CValue<CGSize>): UIImage {
     return newImage!!
 }
 
-private fun PictureData.Camera.toJson(): String =
-    Json.Default.encodeToString(this)
+private fun PictureData.Camera.toJson(): String = Json.Default.encodeToString(this)
 
-private fun String.toCameraMetadata(): PictureData.Camera =
-    Json.Default.decodeFromString(this)
+private fun String.toCameraMetadata(): PictureData.Camera = Json.Default.decodeFromString(this)
 
-private fun NSURL.writeJpeg(image: UIImage, compressionQuality: Int = jpegCompressionQuality) {
+private fun NSURL.writeJpeg(
+    image: UIImage,
+    compressionQuality: Int = JPEG_COMPRESSION_QUALITY,
+) {
     UIImageJPEGRepresentation(image, compressionQuality / 100.0)
         ?.writeToURL(this, true)
 }

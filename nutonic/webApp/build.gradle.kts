@@ -1,6 +1,4 @@
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-import org.jetbrains.kotlin.gradle.targets.js.ir.DefaultIncrementalSyncTask
-import org.jetbrains.kotlin.gradle.targets.js.webpack.KotlinWebpackConfig
 
 plugins {
     kotlin("multiplatform")
@@ -26,7 +24,7 @@ kotlin {
     wasmJs {
         outputModuleName = "imageviewer"
         browser {
-             // TODO: uncomment when https://youtrack.jetbrains.com/issue/KT-68614 is fixed (it doesn't work with configuration cache)
+            // TODO: uncomment when https://youtrack.jetbrains.com/issue/KT-68614 is fixed (it doesn't work with configuration cache)
 //            commonWebpackConfig {
 //                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
 //                    static = (static ?: mutableListOf()).apply {

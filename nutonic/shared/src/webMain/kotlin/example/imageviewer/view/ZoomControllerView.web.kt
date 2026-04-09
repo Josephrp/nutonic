@@ -11,12 +11,15 @@ import androidx.compose.ui.unit.dp
 import example.imageviewer.model.ScalableState
 
 @Composable
-actual fun ZoomControllerView(modifier: Modifier, scalableState: ScalableState) {
+actual fun ZoomControllerView(
+    modifier: Modifier,
+    scalableState: ScalableState,
+) {
     Slider(
         modifier = modifier.fillMaxWidth(0.5f).padding(12.dp),
         value = scalableState.zoom,
         valueRange = scalableState.zoomLimits.start..scalableState.zoomLimits.endInclusive,
         onValueChange = { scalableState.setZoom(it) },
-        colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White)
+        colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White),
     )
 }

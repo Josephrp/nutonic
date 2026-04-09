@@ -20,10 +20,10 @@ actual fun GalleryLazyVerticalGrid(
     modifier: Modifier,
     verticalArrangement: Arrangement.Vertical,
     horizontalArrangement: Arrangement.Horizontal,
-    content: LazyGridScope.() -> Unit
+    content: LazyGridScope.() -> Unit,
 ) {
     Box(
-        modifier = modifier
+        modifier = modifier,
     ) {
         val scrollState = rememberLazyGridState()
         val adapter = rememberScrollbarAdapter(scrollState)
@@ -33,12 +33,12 @@ actual fun GalleryLazyVerticalGrid(
             state = scrollState,
             verticalArrangement = verticalArrangement,
             horizontalArrangement = horizontalArrangement,
-            content = content
+            content = content,
         )
 
         Box(
-            modifier = Modifier.matchParentSize()
-        ){
+            modifier = Modifier.matchParentSize(),
+        ) {
             VerticalScrollbar(
                 adapter = adapter,
                 modifier = Modifier.align(Alignment.CenterEnd),

@@ -16,22 +16,22 @@ data class DisplayTileWithImage<T>(
 data class DisplayTile(
     val size: Int,
     val x: Int,
-    val y: Int
+    val y: Int,
 )
 
 data class DisplayTileAndTile(
     val display: DisplayTile,
-    val tile: Tile
+    val tile: Tile,
 )
 
 val InternalMapState.centerGeo get(): GeoPoint = displayToGeo(DisplayPoint(width / 2, height / 2))
+
 fun InternalMapState.copyAndChangeCenter(targetCenter: GeoPoint): InternalMapState =
     copy(
-        topLeft = topLeft + targetCenter - centerGeo
+        topLeft = topLeft + targetCenter - centerGeo,
     ).correctGeoXY()
 
-fun InternalMapState.correctGeoXY(): InternalMapState =
-    correctGeoX().correctGeoY()
+fun InternalMapState.correctGeoXY(): InternalMapState = correctGeoX().correctGeoY()
 
 fun InternalMapState.correctGeoY(): InternalMapState {
     val minGeoY = 0.0
@@ -45,6 +45,4 @@ fun InternalMapState.correctGeoY(): InternalMapState {
     }
 }
 
-fun InternalMapState.correctGeoX(): InternalMapState =
-    copy(topLeft = topLeft.copy(x = topLeft.x.mod(1.0)))
-
+fun InternalMapState.correctGeoX(): InternalMapState = copy(topLeft = topLeft.copy(x = topLeft.x.mod(1.0)))

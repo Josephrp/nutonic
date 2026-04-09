@@ -8,18 +8,20 @@ import java.awt.image.BufferedImage
 import java.awt.image.ConvolveOp
 import java.awt.image.Kernel
 
+actual fun grayScaleFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyGrayScaleFilter(bitmap.toAwtImage()).toComposeImageBitmap()
 
-actual fun grayScaleFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyGrayScaleFilter(bitmap.toAwtImage()).toComposeImageBitmap()
-}
+actual fun pixelFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyPixelFilter(bitmap.toAwtImage()).toComposeImageBitmap()
 
-actual fun pixelFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyPixelFilter(bitmap.toAwtImage()).toComposeImageBitmap()
-}
-
-actual fun blurFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyBlurFilter(bitmap.toAwtImage()).toComposeImageBitmap()
-}
+actual fun blurFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyBlurFilter(bitmap.toAwtImage()).toComposeImageBitmap()
 
 actual class PlatformContext
 
@@ -29,7 +31,7 @@ actual fun getPlatformContext(): PlatformContext = PlatformContext()
 fun scaleBitmapAspectRatio(
     bitmap: BufferedImage,
     width: Int,
-    height: Int
+    height: Int,
 ): BufferedImage {
     val boundW: Float = width.toFloat()
     val boundH: Float = height.toFloat()
@@ -50,11 +52,12 @@ fun scaleBitmapAspectRatio(
 }
 
 private fun applyGrayScaleFilter(bitmap: BufferedImage): BufferedImage {
-    val result = BufferedImage(
-        bitmap.width,
-        bitmap.height,
-        BufferedImage.TYPE_BYTE_GRAY
-    )
+    val result =
+        BufferedImage(
+            bitmap.width,
+            bitmap.height,
+            BufferedImage.TYPE_BYTE_GRAY,
+        )
 
     val graphics = result.graphics
     graphics.drawImage(bitmap, 0, 0, null)
@@ -95,6 +98,6 @@ private fun applyBlurFilter(bitmap: BufferedImage): BufferedImage {
         radius,
         radius,
         result.width - radius * 2,
-        result.height - radius * 2
+        result.height - radius * 2,
     )
 }

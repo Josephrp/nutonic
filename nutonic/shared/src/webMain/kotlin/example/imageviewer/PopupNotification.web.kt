@@ -5,7 +5,7 @@ import example.imageviewer.view.ToastState
 
 class WebPopupNotification(
     private val toastState: MutableState<ToastState>,
-    localization: Localization
+    localization: Localization,
 ) : PopupNotification(localization) {
     override fun showPopUpMessage(text: String) {
         toastState.value = ToastState.Shown(text)

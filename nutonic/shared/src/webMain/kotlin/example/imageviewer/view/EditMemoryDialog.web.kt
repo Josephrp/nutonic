@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 actual fun BoxScope.EditMemoryDialog(
     previousName: String,
     previousDescription: String,
-    save: (name: String, description: String) -> Unit
+    save: (name: String, description: String) -> Unit,
 ) {
     var name by remember { mutableStateOf(previousName) }
     var description by remember { mutableStateOf(previousDescription) }
@@ -41,34 +41,38 @@ actual fun BoxScope.EditMemoryDialog(
         },
         buttons = {
             Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(30.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color.White),
+                modifier =
+                    Modifier
+                        .align(Alignment.Center)
+                        .padding(30.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 TextField(
                     value = name,
                     onValueChange = { name = it },
                     modifier = Modifier.fillMaxWidth(),
-                    colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = Color.White,
-                    ),
-                    textStyle = LocalTextStyle.current.copy(
-                        textAlign = TextAlign.Center,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
+                    colors =
+                        TextFieldDefaults.textFieldColors(
+                            backgroundColor = Color.White,
+                        ),
+                    textStyle =
+                        LocalTextStyle.current.copy(
+                            textAlign = TextAlign.Center,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
                 )
                 TextField(
                     value = description,
                     onValueChange = { description = it },
-                    colors = TextFieldDefaults.textFieldColors(
-                        backgroundColor = Color.White,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                    )
+                    colors =
+                        TextFieldDefaults.textFieldColors(
+                            backgroundColor = Color.White,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                        ),
                 )
             }
         },
@@ -78,8 +82,7 @@ actual fun BoxScope.EditMemoryDialog(
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.4f))
             .clickable {
-
-            }
+            },
     ) {
     }
 }

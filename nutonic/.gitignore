@@ -1,6 +1,8 @@
 *.iml
 .gradle
 /local.properties
+# Optional local Gradle overrides (never commit machine paths)
+gradle.properties.PERSONAL
 /.idea
 /.idea/caches
 /.idea/libraries

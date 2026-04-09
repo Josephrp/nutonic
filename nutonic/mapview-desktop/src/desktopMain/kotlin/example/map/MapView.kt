@@ -75,17 +75,19 @@ fun MapView(
     latitude: Double? = null,
     longitude: Double? = null,
     startScale: Double? = null,
-    state: State<MapState> = remember {
-        mutableStateOf(MapState(latitude ?: 0.0, longitude ?: 0.0, startScale ?: 1.0))
-    },
+    state: State<MapState> =
+        remember {
+            mutableStateOf(MapState(latitude ?: 0.0, longitude ?: 0.0, startScale ?: 1.0))
+        },
     onStateChange: (MapState) -> Unit = { (state as? MutableState<MapState>)?.value = it },
     onMapViewClick: (latitude: Double, longitude: Double) -> Boolean = { _, _ -> true },
     consumeScroll: Boolean = true,
 ) {
     val viewScope = rememberCoroutineScope()
-    val ioScope = remember {
-        CoroutineScope(SupervisorJob(viewScope.coroutineContext.job) + getDispatcherIO())
-    }
+    val ioScope =
+        remember {
+            CoroutineScope(SupervisorJob(viewScope.coroutineContext.job) + getDispatcherIO())
+        }
     val imageRepository = rememberTilesRepository(userAgent, ioScope)
 
     var width: Int by remember { mutableStateOf(100) }
@@ -140,61 +142,68 @@ fun MapView(
     var previousMoveDownPos by remember<MutableState<Offset?>> { mutableStateOf(null) }
     var previousPressTime by remember { mutableStateOf(0L) }
     var previousPressPos by remember<MutableState<Offset?>> { mutableStateOf(null) }
-    fun Modifier.applyPointerInput() = pointerInput(Unit) {
-        while (true) {
-            val event = awaitPointerEventScope {
-                awaitPointerEvent()
-            }
-            val current = event.changes.firstOrNull()?.position
-            if (event.type == PointerEventType.Scroll) {
-                val scrollY: Float? = event.changes.firstOrNull()?.scrollDelta?.y
-                if (scrollY != null && scrollY != 0f) {
-                    onZoom(current?.toPt(), -scrollY * Config.SCROLL_SENSITIVITY_DESKTOP)
-                }
-                if (consumeScroll) {
-                    event.changes.forEach {
-                        it.consume()
+
+    fun Modifier.applyPointerInput() =
+        pointerInput(Unit) {
+            while (true) {
+                val event =
+                    awaitPointerEventScope {
+                        awaitPointerEvent()
+                    }
+                val current = event.changes.firstOrNull()?.position
+                if (event.type == PointerEventType.Scroll) {
+                    val scrollY: Float? =
+                        event.changes
+                            .firstOrNull()
+                            ?.scrollDelta
+                            ?.y
+                    if (scrollY != null && scrollY != 0f) {
+                        onZoom(current?.toPt(), -scrollY * Config.SCROLL_SENSITIVITY_DESKTOP)
+                    }
+                    if (consumeScroll) {
+                        event.changes.forEach {
+                            it.consume()
+                        }
                     }
                 }
-            }
-            when (event.type) {
-                PointerEventType.Move -> {
-                    if (event.buttons.isPrimaryPressed) {
-                        val previous = previousMoveDownPos
-                        if (previous != null && current != null) {
-                            val dx = (current.x - previous.x).toInt()
-                            val dy = (current.y - previous.y).toInt()
-                            if (dx != 0 || dy != 0) {
-                                onMove(dx, dy)
+                when (event.type) {
+                    PointerEventType.Move -> {
+                        if (event.buttons.isPrimaryPressed) {
+                            val previous = previousMoveDownPos
+                            if (previous != null && current != null) {
+                                val dx = (current.x - previous.x).toInt()
+                                val dy = (current.y - previous.y).toInt()
+                                if (dx != 0 || dy != 0) {
+                                    onMove(dx, dy)
+                                }
+                            }
+                            previousMoveDownPos = current
+                        } else {
+                            previousMoveDownPos = null
+                        }
+                    }
+
+                    PointerEventType.Press -> {
+                        previousPressTime = timeMs()
+                        previousPressPos = current
+                        previousMoveDownPos = current
+                    }
+
+                    PointerEventType.Release -> {
+                        if (timeMs() - previousPressTime < Config.CLICK_DURATION_MS) {
+                            val previous = previousPressPos
+                            if (current != null && previous != null) {
+                                if (current.distanceTo(previous) < Config.CLICK_AREA_RADIUS_PX) {
+                                    onClick(current.toPt())
+                                }
                             }
                         }
-                        previousMoveDownPos = current
-                    } else {
+                        previousPressTime = timeMs()
                         previousMoveDownPos = null
                     }
                 }
-
-                PointerEventType.Press -> {
-                    previousPressTime = timeMs()
-                    previousPressPos = current
-                    previousMoveDownPos = current
-                }
-
-                PointerEventType.Release -> {
-                    if (timeMs() - previousPressTime < Config.CLICK_DURATION_MS) {
-                        val previous = previousPressPos
-                        if (current != null && previous != null) {
-                            if (current.distanceTo(previous) < Config.CLICK_AREA_RADIUS_PX) {
-                                onClick(current.toPt())
-                            }
-                        }
-                    }
-                    previousPressTime = timeMs()
-                    previousMoveDownPos = null
-                }
             }
         }
-    }
 
     Box(modifier) {
         Canvas(Modifier.fillMaxSize().applyPointerInput()) {
@@ -203,7 +212,7 @@ fun MapView(
             width = p1
             height = p2
             onStateChange(internalState.copy(width = p1, height = p2).toExternalState())
-            clipRect() {
+            clipRect {
                 displayTiles.forEach { (t, img) ->
                     if (img != null) {
                         val size = IntSize(t.size, t.size)
@@ -213,14 +222,19 @@ fun MapView(
                             srcOffset = IntOffset(img.offsetX, img.offsetY),
                             srcSize = IntSize(img.cropSize, img.cropSize),
                             dstOffset = position,
-                            dstSize = size
+                            dstSize = size,
                         )
                     }
                 }
             }
-            drawPath(path = Path().apply<Path> {
-                addRect(Rect(0f, 0f, size.width, size.height))
-            }, color = Color.Red, style = Stroke(4f))
+            drawPath(
+                path =
+                    Path().apply<Path> {
+                        addRect(Rect(0f, 0f, size.width, size.height))
+                    },
+                color = Color.Red,
+                style = Stroke(4f),
+            )
         }
         Row(Modifier.align(Alignment.BottomCenter)) {
             LinkText("OpenStreetMap license", Config.OPENSTREET_MAP_LICENSE)
@@ -233,22 +247,26 @@ fun InternalMapState.toExternalState() =
     MapState(
         centerGeo.latitude,
         centerGeo.longitude,
-        scale
+        scale,
     )
 
 @Composable
-private fun LinkText(text: String, link: String) {
+private fun LinkText(
+    text: String,
+    link: String,
+) {
     Text(
         text = text,
         color = Color.Blue,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.clickable {
-            navigateToUrl(link)
-        }
-            .padding(4.dp)
-            .background(Color.White.copy(alpha = 0.8f), shape = RoundedCornerShape(5.dp))
-            .padding(10.dp)
-            .clip(RoundedCornerShape(5.dp))
+        modifier =
+            Modifier
+                .clickable {
+                    navigateToUrl(link)
+                }.padding(4.dp)
+                .background(Color.White.copy(alpha = 0.8f), shape = RoundedCornerShape(5.dp))
+                .padding(10.dp)
+                .clip(RoundedCornerShape(5.dp)),
     )
 }
 

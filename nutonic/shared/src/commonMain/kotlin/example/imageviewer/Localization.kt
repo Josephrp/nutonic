@@ -2,7 +2,7 @@ package example.imageviewer
 
 enum class AvailableLanguages {
     DE,
-    EN;
+    EN,
 }
 
 expect fun getCurrentLanguage(): AvailableLanguages
@@ -16,11 +16,12 @@ private object EnglishLocalization : Localization {
     override val takePhoto = "Take a photo 📸"
     override val addPhoto = "Add a photo"
     override val kotlinConfName = "KotlinConf 2023 🎉"
-    override val kotlinConfDescription = """
+    override val kotlinConfDescription =
+        """
         This photo was taken during KotlinConf 2023 using #ComposeMultiplatform running on ${getCurrentPlatform()}! 🎊
         Let's build some stunning UIs! 🥳
         https://jb.gg/compose
-    """.trimIndent()
+        """.trimIndent()
     override val newPhotoName = "New Memory"
     override val newPhotoDescription = "May amazing things happen to you! 🙂"
 }
@@ -32,15 +33,17 @@ private object DeutschLocalization : Localization {
     override val takePhoto = "Mach ein Foto 📸"
     override val addPhoto = "Füge ein Foto hinzu"
     override val kotlinConfName = "KotlinConf 2023 🎉"
-    override val kotlinConfDescription = """
+    override val kotlinConfDescription =
+        """
         This photo was taken during KotlinConf 2023! 🎊
         Have a fun with Kotlin and Compose Multiplatform 🥳
-    """.trimIndent()
+        """.trimIndent()
     override val newPhotoName = "New Memory"
     override val newPhotoDescription = "May amazing things happen to you! 🙂"
 }
 
-fun getCurrentLocalization() = when (getCurrentLanguage()) {
-    AvailableLanguages.EN -> EnglishLocalization
-    AvailableLanguages.DE -> DeutschLocalization
-}
+fun getCurrentLocalization() =
+    when (getCurrentLanguage()) {
+        AvailableLanguages.EN -> EnglishLocalization
+        AvailableLanguages.DE -> DeutschLocalization
+    }

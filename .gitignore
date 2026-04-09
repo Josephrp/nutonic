@@ -1,1 +1,8 @@
 refs
+stitch
+
+# PM2 and local verification (Gradle, future server test runners)
+logs/
+
+# Root npm tooling (pm2, scripts)
+node_modules/

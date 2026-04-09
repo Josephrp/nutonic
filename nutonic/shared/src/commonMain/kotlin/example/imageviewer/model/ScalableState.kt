@@ -36,7 +36,7 @@ class ScalableState {
     val transformation: Transformation by derivedStateOf {
         Transformation(
             offset = offset,
-            scale = zoomToScale(zoom)
+            scale = zoomToScale(zoom),
         )
     }
 
@@ -87,14 +87,18 @@ class ScalableState {
             val offsetYLimits = centerLimits(targetSize.height * transformation.scale, areaSize.height)
 
             zoom = zoom.coerceIn(zoomLimits)
-            offset = Offset(
-                offset.x.coerceIn(offsetXLimits),
-                offset.y.coerceIn(offsetYLimits),
-            )
+            offset =
+                Offset(
+                    offset.x.coerceIn(offsetXLimits),
+                    offset.y.coerceIn(offsetYLimits),
+                )
         }
     }
 
-    private fun centerLimits(targetSize: Float, areaSize: Float): ClosedFloatingPointRange<Float> {
+    private fun centerLimits(
+        targetSize: Float,
+        areaSize: Float,
+    ): ClosedFloatingPointRange<Float> {
         val areaCenter = areaSize / 2
         val targetCenter = targetSize / 2
         val extra = (targetCenter - areaCenter).coerceAtLeast(0f)
@@ -111,7 +115,10 @@ class ScalableState {
      * After we apply the new scale, the camera should be focused on the same point in
      * the target coordinate system.
      */
-    fun addZoom(zoomMultiplier: Float, focus: Offset = Offset.Zero) {
+    fun addZoom(
+        zoomMultiplier: Float,
+        focus: Offset = Offset.Zero,
+    ) {
         setZoom(zoom * zoomMultiplier, focus)
     }
 
@@ -120,13 +127,17 @@ class ScalableState {
      * After we apply the new scale, the camera should be focused on the same point in
      * the target coordinate system.
      */
-    fun setZoom(zoom: Float, focus: Offset = Offset.Zero) {
+    fun setZoom(
+        zoom: Float,
+        focus: Offset = Offset.Zero,
+    ) {
         val newZoom = zoom.coerceIn(zoomLimits)
-        val newOffset = Transformation.offsetOf(
-            point = transformation.pointOf(focus),
-            transformedPoint = focus,
-            scale = zoomToScale(newZoom)
-        )
+        val newOffset =
+            Transformation.offsetOf(
+                point = transformation.pointOf(focus),
+                transformedPoint = focus,
+                scale = zoomToScale(newZoom),
+            )
         this.offset = newOffset
         this.zoom = newZoom
         applyLimits()
@@ -140,8 +151,11 @@ class ScalableState {
 
         companion object {
             // is derived from the equation `point = (transformedPoint - offset) / scale`
-            fun offsetOf(point: Offset, transformedPoint: Offset, scale: Float) =
-                transformedPoint - point * scale
+            fun offsetOf(
+                point: Offset,
+                transformedPoint: Offset,
+                scale: Float,
+            ) = transformedPoint - point * scale
         }
     }
 }

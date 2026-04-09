@@ -23,10 +23,11 @@ object ImageviewerColors {
 fun ImageViewerTheme(content: @Composable () -> Unit) {
     isSystemInDarkTheme() // todo check and change colors
     MaterialTheme(
-        colors = MaterialTheme.colors.copy(
-            background = ImageviewerColors.background,
-            onBackground = ImageviewerColors.onBackground
-        )
+        colors =
+            MaterialTheme.colors.copy(
+                background = ImageviewerColors.background,
+                onBackground = ImageviewerColors.onBackground,
+            ),
     ) {
         ProvideTextStyle(LocalTextStyle.current.copy(letterSpacing = 0.sp)) {
             content()

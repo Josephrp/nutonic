@@ -7,7 +7,10 @@ import example.imageviewer.model.PictureData
 class WebImageStorage : ImageStorage {
     private val pictures = HashMap<String, SavedPicture>()
 
-    override fun saveImage(picture: PictureData.Camera, image: PlatformStorableImage) {
+    override fun saveImage(
+        picture: PictureData.Camera,
+        image: PlatformStorableImage,
+    ) {
         pictures[picture.id] = SavedPicture(picture, image.imageBitmap)
     }
 
@@ -21,16 +24,13 @@ class WebImageStorage : ImageStorage {
         }
     }
 
-    override suspend fun getThumbnail(picture: PictureData.Camera): ImageBitmap {
-        return pictures[picture.id]?.bitmap ?: error("Picture was not found")
-    }
+    override suspend fun getThumbnail(picture: PictureData.Camera): ImageBitmap =
+        pictures[picture.id]?.bitmap ?: error("Picture was not found")
 
-    override suspend fun getImage(picture: PictureData.Camera): ImageBitmap {
-        return pictures[picture.id]?.bitmap ?: error("Picture was not found")
-    }
+    override suspend fun getImage(picture: PictureData.Camera): ImageBitmap = pictures[picture.id]?.bitmap ?: error("Picture was not found")
 
     private data class SavedPicture(
         val data: PictureData,
-        val bitmap: ImageBitmap
+        val bitmap: ImageBitmap,
     )
 }

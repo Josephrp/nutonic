@@ -7,5 +7,5 @@ import androidx.compose.runtime.Composable
 expect fun BoxScope.EditMemoryDialog(
     previousName: String,
     previousDescription: String,
-    save: (name: String, description: String) -> Unit
+    save: (name: String, description: String) -> Unit,
 )

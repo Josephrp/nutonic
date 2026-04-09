@@ -8,4 +8,3 @@ fun MainViewController(): UIViewController =
     ComposeUIViewController {
         ImageViewerIos()
     }
-

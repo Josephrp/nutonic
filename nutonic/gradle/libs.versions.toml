@@ -1,0 +1,6 @@
+# Version catalog for NU:TONIC Kotlin monorepo (nutonic/).
+# Kotlin / AGP / Compose remain in gradle.properties for pluginManagement compatibility.
+
+[versions]
+detekt = "1.23.8"
+ktlintCli = "1.4.1"

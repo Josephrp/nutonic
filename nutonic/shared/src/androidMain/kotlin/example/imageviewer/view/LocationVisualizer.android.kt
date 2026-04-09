@@ -19,12 +19,13 @@ actual fun LocationVisualizer(
     modifier: Modifier,
     gps: GpsPosition,
     title: String,
-    parentScrollEnableState: MutableState<Boolean>
+    parentScrollEnableState: MutableState<Boolean>,
 ) {
     val currentLocation = LatLng(gps.latitude, gps.longitude)
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(currentLocation, 10f)
-    }
+    val cameraPositionState =
+        rememberCameraPositionState {
+            position = CameraPosition.fromLatLngZoom(currentLocation, 10f)
+        }
     LaunchedEffect(cameraPositionState.isMoving) {
         // This code helps to use Compose GoogleMap inside scrollable container.
         // Useful code sample: https://github.com/googlemaps/android-maps-compose/blob/abb3e3581681f26316fdd0b8284597f8fc61daa1/app/src/main/java/com/google/maps/android/compose/MapInColumnActivity.kt#L57
@@ -33,17 +34,18 @@ actual fun LocationVisualizer(
         }
     }
     GoogleMap(
-        modifier = modifier.pointerInteropFilter(
-            onTouchEvent = {
-                when (it.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        parentScrollEnableState.value = false
-                        false
+        modifier =
+            modifier.pointerInteropFilter(
+                onTouchEvent = {
+                    when (it.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            parentScrollEnableState.value = false
+                            false
+                        }
+                        else -> true
                     }
-                    else -> true
-                }
-            }
-        ),
-        cameraPositionState = cameraPositionState
+                },
+            ),
+        cameraPositionState = cameraPositionState,
     )
 }

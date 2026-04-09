@@ -8,5 +8,5 @@ import example.imageviewer.model.PictureData
 @Composable
 expect fun CameraView(
     modifier: Modifier,
-    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit
+    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit,
 )

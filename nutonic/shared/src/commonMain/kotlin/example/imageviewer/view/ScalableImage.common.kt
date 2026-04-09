@@ -32,7 +32,11 @@ private const val INITIAL_ZOOM = 1.0f
 private const val SLIGHTLY_INCREASED_ZOOM = 1.5f
 
 @Composable
-fun ScalableImage(scalableState: ScalableState, image: ImageBitmap, modifier: Modifier = Modifier) {
+fun ScalableImage(
+    scalableState: ScalableState,
+    image: ImageBitmap,
+    modifier: Modifier = Modifier,
+) {
     BoxWithConstraints {
         val areaSize = areaSize
         val imageSize = image.size
@@ -47,30 +51,27 @@ fun ScalableImage(scalableState: ScalableState, image: ImageBitmap, modifier: Mo
                             it.translate(areaCenter.x, areaCenter.y)
                             it.translate(
                                 scalableState.transformation.offset.x,
-                                scalableState.transformation.offset.y
+                                scalableState.transformation.offset.y,
                             )
                             it.scale(
                                 scalableState.transformation.scale,
-                                scalableState.transformation.scale
+                                scalableState.transformation.scale,
                             )
                             it.translate(-imageCenter.x, -imageCenter.y)
                             drawImage(image)
                         }
                     }
-                }
-                .pointerInput(Unit) {
+                }.pointerInput(Unit) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         scalableState.addPan(pan)
                         scalableState.addZoom(zoom, centroid - areaCenter)
                     }
-                }
-                .onPointerEvent(PointerEventType.Scroll) {
+                }.onPointerEvent(PointerEventType.Scroll) {
                     val centroid = it.changes[0].position
                     val delta = it.changes[0].scrollDelta
                     val zoom = 1.2f.pow(-delta.y)
                     scalableState.addZoom(zoom, centroid - areaCenter)
-                }
-                .pointerInput(Unit) {
+                }.pointerInput(Unit) {
                     detectTapGestures(onDoubleTap = { position ->
                         // If a user zoomed significantly, the zoom should be the restored on double tap,
                         // otherwise the zoom should be increased
@@ -80,7 +81,7 @@ fun ScalableImage(scalableState: ScalableState, image: ImageBitmap, modifier: Mo
                             } else {
                                 scalableState.zoomLimits.endInclusive
                             },
-                            position - areaCenter
+                            position - areaCenter,
                         )
                     }) { }
                 },
@@ -95,6 +96,7 @@ fun ScalableImage(scalableState: ScalableState, image: ImageBitmap, modifier: Mo
 private val ImageBitmap.size get() = Size(width.toFloat(), height.toFloat())
 
 private val BoxWithConstraintsScope.areaSize
-    @Composable get() = with(LocalDensity.current) {
-        Size(maxWidth.toPx(), maxHeight.toPx())
-    }
+    @Composable get() =
+        with(LocalDensity.current) {
+            Size(maxWidth.toPx(), maxHeight.toPx())
+        }

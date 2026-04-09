@@ -32,7 +32,9 @@ fun CircularButton(
             .run {
                 if (enabled) {
                     clickable { onClick() }
-                } else this
+                } else {
+                    this
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -53,7 +55,7 @@ fun CircularButton(
             Icon(imageVector, null, Modifier.size(34.dp), Color.White)
         },
         enabled = enabled,
-        onClick = onClick
+        onClick = onClick,
     )
 }
 
@@ -62,7 +64,7 @@ fun BackButton(onClick: () -> Unit) {
     Tooltip(LocalLocalization.current.back) {
         CircularButton(
             imageVector = IconCustomArrowBack,
-            onClick = onClick
+            onClick = onClick,
         )
     }
 }

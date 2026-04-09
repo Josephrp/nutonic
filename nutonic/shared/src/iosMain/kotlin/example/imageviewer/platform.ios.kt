@@ -11,14 +11,13 @@ import platform.Foundation.CFBridgingRelease
 import platform.UIKit.UIImage
 
 class IosStorableImage(
-    val rawValue: UIImage
+    val rawValue: UIImage,
 )
 
 actual typealias PlatformStorableImage = IosStorableImage
 
 @OptIn(ExperimentalForeignApi::class)
-actual fun createUUID(): String =
-    CFBridgingRelease(CFUUIDCreateString(null, CFUUIDCreate(null))) as String
+actual fun createUUID(): String = CFBridgingRelease(CFUUIDCreateString(null, CFUUIDCreate(null))) as String
 
 actual val ioDispatcher = Dispatchers.IO
 

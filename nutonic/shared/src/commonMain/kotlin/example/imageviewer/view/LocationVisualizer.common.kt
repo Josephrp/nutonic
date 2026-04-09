@@ -10,5 +10,5 @@ expect fun LocationVisualizer(
     modifier: Modifier,
     gps: GpsPosition,
     title: String,
-    parentScrollEnableState: MutableState<Boolean>
+    parentScrollEnableState: MutableState<Boolean>,
 )

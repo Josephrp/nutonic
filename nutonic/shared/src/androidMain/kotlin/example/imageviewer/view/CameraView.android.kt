@@ -49,15 +49,16 @@ private val executor = Executors.newSingleThreadExecutor()
 @Composable
 actual fun CameraView(
     modifier: Modifier,
-    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit
+    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit,
 ) {
-    val cameraPermissionState = rememberMultiplePermissionsState(
-        listOf(
-            android.Manifest.permission.CAMERA,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
+    val cameraPermissionState =
+        rememberMultiplePermissionsState(
+            listOf(
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+            ),
         )
-    )
     if (cameraPermissionState.allPermissionsGranted) {
         CameraWithGrantedPermission(modifier, onCapture)
     } else {
@@ -71,7 +72,7 @@ actual fun CameraView(
 @Composable
 private fun CameraWithGrantedPermission(
     modifier: Modifier,
-    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit
+    onCapture: (picture: PictureData.Camera, image: PlatformStorableImage) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -82,17 +83,19 @@ private fun CameraWithGrantedPermission(
     val previewView = remember { PreviewView(context) }
     val imageCapture: ImageCapture = remember { ImageCapture.Builder().build() }
     var isFrontCamera by rememberSaveable { mutableStateOf(false) }
-    val cameraSelector = remember(isFrontCamera) {
-        val lensFacing =
-            if (isFrontCamera) {
-                CameraSelector.LENS_FACING_FRONT
-            } else {
-                CameraSelector.LENS_FACING_BACK
-            }
-        CameraSelector.Builder()
-            .requireLensFacing(lensFacing)
-            .build()
-    }
+    val cameraSelector =
+        remember(isFrontCamera) {
+            val lensFacing =
+                if (isFrontCamera) {
+                    CameraSelector.LENS_FACING_FRONT
+                } else {
+                    CameraSelector.LENS_FACING_BACK
+                }
+            CameraSelector
+                .Builder()
+                .requireLensFacing(lensFacing)
+                .build()
+        }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -101,32 +104,36 @@ private fun CameraWithGrantedPermission(
     }
 
     LaunchedEffect(isFrontCamera) {
-        cameraProvider = suspendCoroutine<ProcessCameraProvider> { continuation ->
-            ProcessCameraProvider.getInstance(context).also { cameraProvider ->
-                cameraProvider.addListener({
-                    continuation.resume(cameraProvider.get())
-                }, executor)
+        cameraProvider =
+            suspendCoroutine<ProcessCameraProvider> { continuation ->
+                ProcessCameraProvider.getInstance(context).also { cameraProvider ->
+                    cameraProvider.addListener({
+                        continuation.resume(cameraProvider.get())
+                    }, executor)
+                }
             }
-        }
         cameraProvider?.unbindAll()
         cameraProvider?.bindToLifecycle(
             lifecycleOwner,
             cameraSelector,
             preview,
-            imageCapture
+            imageCapture,
         )
         preview.setSurfaceProvider(previewView.surfaceProvider)
     }
     val nameAndDescription = createNewPhotoNameAndDescription()
     var capturePhotoStarted by remember { mutableStateOf(false) }
 
-    Box(modifier = modifier.pointerInput(isFrontCamera) {
-        detectHorizontalDragGestures { change, dragAmount ->
-            if (dragAmount.absoluteValue > 50.0) {
-                isFrontCamera = !isFrontCamera
-            }
-        }
-    }) {
+    Box(
+        modifier =
+            modifier.pointerInput(isFrontCamera) {
+                detectHorizontalDragGestures { change, dragAmount ->
+                    if (dragAmount.absoluteValue > 50.0) {
+                        isFrontCamera = !isFrontCamera
+                    }
+                }
+            },
+    ) {
         AndroidView({ previewView }, modifier = Modifier.fillMaxSize())
         CircularButton(
             imageVector = IconPhotoCamera,
@@ -139,13 +146,14 @@ private fun CameraWithGrantedPermission(
                         createCameraPictureData(
                             name = nameAndDescription.name,
                             description = nameAndDescription.description,
-                            gps = gpsPosition
+                            gps = gpsPosition,
                         ),
-                        AndroidStorableImage(imageBitmap)
+                        AndroidStorableImage(imageBitmap),
                     )
                     capturePhotoStarted = false
                 }
-                LocationServices.getFusedLocationProviderClient(context)
+                LocationServices
+                    .getFusedLocationProviderClient(context)
                     .getCurrentLocation(CurrentLocationRequest.Builder().build(), null)
                     .apply {
                         addOnSuccessListener {
@@ -158,14 +166,17 @@ private fun CameraWithGrantedPermission(
             }
 
             capturePhotoStarted = true
-            imageCapture.takePicture(executor, object : OnImageCapturedCallback() {
-                override fun onCaptureSuccess(image: ImageProxy) {
-                    val byteArray: ByteArray = image.planes[0].buffer.toByteArray()
-                    val imageBitmap = byteArray.toImageBitmap()
-                    image.close()
-                    addLocationInfoAndReturnResult(imageBitmap)
-                }
-            })
+            imageCapture.takePicture(
+                executor,
+                object : OnImageCapturedCallback() {
+                    override fun onCaptureSuccess(image: ImageProxy) {
+                        val byteArray: ByteArray = image.planes[0].buffer.toByteArray()
+                        val imageBitmap = byteArray.toImageBitmap()
+                        image.close()
+                        addLocationInfoAndReturnResult(imageBitmap)
+                    }
+                },
+            )
             viewScope.launch {
                 // TODO: There is a known issue with Android emulator
                 //  https://partnerissuetracker.corp.google.com/issues/161034252
@@ -173,7 +184,7 @@ private fun CameraWithGrantedPermission(
                 delay(5000)
                 if (capturePhotoStarted) {
                     addLocationInfoAndReturnResult(
-                        Res.readBytes("files/android-emulator-photo.jpg").toImageBitmap()
+                        Res.readBytes("files/android-emulator-photo.jpg").toImageBitmap(),
                     )
                 }
             }
@@ -189,8 +200,8 @@ private fun CameraWithGrantedPermission(
 }
 
 private fun ByteBuffer.toByteArray(): ByteArray {
-    rewind()    // Rewind the buffer to zero
+    rewind() // Rewind the buffer to zero
     val data = ByteArray(remaining())
-    get(data)   // Copy the buffer into a byte array
+    get(data) // Copy the buffer into a byte array
     return data // Return the byte array
 }

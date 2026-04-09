@@ -12,26 +12,32 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 
-actual fun grayScaleFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyGrayScaleFilter(bitmap.asAndroidBitmap()).asImageBitmap()
-}
+actual fun grayScaleFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyGrayScaleFilter(bitmap.asAndroidBitmap()).asImageBitmap()
 
-actual fun pixelFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyPixelFilter(bitmap.asAndroidBitmap()).asImageBitmap()
-}
+actual fun pixelFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyPixelFilter(bitmap.asAndroidBitmap()).asImageBitmap()
 
-actual fun blurFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap {
-    return applyBlurFilter(bitmap.asAndroidBitmap(), context.androidContext).asImageBitmap()
-}
+actual fun blurFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap = applyBlurFilter(bitmap.asAndroidBitmap(), context.androidContext).asImageBitmap()
 
-actual class PlatformContext(val androidContext: Context)
+actual class PlatformContext(
+    val androidContext: Context,
+)
 
 @Composable
 actual fun getPlatformContext(): PlatformContext = PlatformContext(LocalContext.current)
 
-
-private fun applyBlurFilter(bitmap: Bitmap, context: Context): Bitmap {
-
+private fun applyBlurFilter(
+    bitmap: Bitmap,
+    context: Context,
+): Bitmap {
     val result: Bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
 
     val renderScript: RenderScript = RenderScript.create(context)
@@ -51,9 +57,7 @@ private fun applyBlurFilter(bitmap: Bitmap, context: Context): Bitmap {
     return result
 }
 
-
 private fun applyGrayScaleFilter(bitmap: Bitmap): Bitmap {
-
     val result: Bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
 
     val canvas = Canvas(result)
@@ -70,7 +74,6 @@ private fun applyGrayScaleFilter(bitmap: Bitmap): Bitmap {
 }
 
 private fun applyPixelFilter(bitmap: Bitmap): Bitmap {
-
     var result: Bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
     val w: Int = bitmap.width
     val h: Int = bitmap.height
@@ -84,7 +87,7 @@ private fun scaleBitmapAspectRatio(
     bitmap: Bitmap,
     width: Int,
     height: Int,
-    filter: Boolean = false
+    filter: Boolean = false,
 ): Bitmap {
     val boundW: Float = width.toFloat()
     val boundH: Float = height.toFloat()
@@ -98,4 +101,3 @@ private fun scaleBitmapAspectRatio(
 
     return Bitmap.createScaledBitmap(bitmap, resultW, resultH, filter)
 }
-

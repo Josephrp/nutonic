@@ -1,0 +1,19 @@
+{
+  "name": "nutonic-monorepo",
+  "private": true,
+  "description": "NU:TONIC monorepo tooling (PM2 Gradle threads → logs/)",
+  "scripts": {
+    "pm2:test": "pm2 start ecosystem.config.cjs --only nutonic-test",
+    "pm2:quality": "pm2 start ecosystem.config.cjs --only nutonic-quality",
+    "pm2:ci-local": "pm2 start ecosystem.config.cjs --only nutonic-ci-local",
+    "pm2:build-verify": "pm2 start ecosystem.config.cjs --only nutonic-build-verify",
+    "pm2:test-watch": "pm2 start ecosystem.config.cjs --only nutonic-test-watch",
+    "pm2:stop": "node scripts/pm2-stop-nutonic.cjs",
+    "pm2:logs": "pm2 logs",
+    "pm2:jlist": "node scripts/pm2-jlist-json.cjs",
+    "pm2:wait-stopped": "node scripts/pm2-wait-until-stopped.cjs"
+  },
+  "devDependencies": {
+    "pm2": "^6.0.14"
+  }
+}

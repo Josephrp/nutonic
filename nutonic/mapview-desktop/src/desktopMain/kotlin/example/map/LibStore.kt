@@ -11,13 +11,14 @@ typealias Reducer<STATE, INTENT> = suspend (STATE, INTENT) -> STATE
 
 interface Store<STATE, INTENT> {
     fun send(intent: INTENT)
+
     val stateFlow: StateFlow<STATE>
     val state get() = stateFlow.value
 }
 
 fun <STATE, INTENT> CoroutineScope.createStore(
     init: STATE,
-    reducer: Reducer<STATE, INTENT>
+    reducer: Reducer<STATE, INTENT>,
 ): Store<STATE, INTENT> {
     val mutableStateFlow = MutableStateFlow(init)
     val channel: Channel<INTENT> = Channel(Channel.UNLIMITED)
@@ -45,37 +46,38 @@ typealias ReducerSE<STATE, INTENT, EFFECT> = suspend (STATE, INTENT) -> ReducerR
 
 data class ReducerResult<STATE, EFFECT>(
     val state: STATE,
-    val sideEffects: List<EFFECT> = emptyList()
+    val sideEffects: List<EFFECT> = emptyList(),
 )
 
 fun <STATE, INTENT, EFFECT> CoroutineScope.createStoreWithSideEffect(
     init: STATE,
     effectHandler: (store: Store<STATE, INTENT>, sideEffect: EFFECT) -> Unit,
-    reducer: ReducerSE<STATE, INTENT, EFFECT>
+    reducer: ReducerSE<STATE, INTENT, EFFECT>,
 ): Store<STATE, INTENT> {
     lateinit var store: Store<STATE, INTENT>
-    store = createStore(init) { state, intent ->
-        val result = reducer(state, intent)
+    store =
+        createStore(init) { state, intent ->
+            val result = reducer(state, intent)
 
-        result.sideEffects.forEach {
-            effectHandler(store, it)
+            result.sideEffects.forEach {
+                effectHandler(store, it)
+            }
+
+            result.state
         }
-
-        result.state
-    }
     return store
 }
 
 fun <STATE : Any, EFFECT> STATE.noSideEffects() = ReducerResult(this, emptyList<EFFECT>())
-fun <STATE : Any, EFFECT> STATE.addSideEffects(sideEffects: List<EFFECT>) =
-    ReducerResult(this, sideEffects)
+
+fun <STATE : Any, EFFECT> STATE.addSideEffects(sideEffects: List<EFFECT>) = ReducerResult(this, sideEffects)
 
 fun <STATE : Any, EFFECT> STATE.addSideEffect(effect: EFFECT) = addSideEffects(listOf(effect))
 
 fun <T, R> StateFlow<T>.mapStateFlow(
     scope: CoroutineScope,
     init: R,
-    transform: suspend (T) -> R
+    transform: suspend (T) -> R,
 ): StateFlow<R> {
     val result = MutableStateFlow(init)
     scope.launch {

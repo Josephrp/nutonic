@@ -9,12 +9,12 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 class MainActivity : AppCompatActivity() {
-
-    val externalEvents = MutableSharedFlow<ExternalImageViewerEvent>(
-        replay = 0,
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    val externalEvents =
+        MutableSharedFlow<ExternalImageViewerEvent>(
+            replay = 0,
+            extraBufferCapacity = 1,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -25,5 +25,4 @@ class MainActivity : AppCompatActivity() {
             externalEvents.tryEmit(ExternalImageViewerEvent.ReturnBack)
         }
     }
-
 }

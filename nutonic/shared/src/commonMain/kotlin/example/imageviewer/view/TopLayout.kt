@@ -21,7 +21,7 @@ fun TopLayout(
         Modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.systemBars)
-            .padding(12.dp)
+            .padding(12.dp),
     ) {
         Row(Modifier.align(Alignment.CenterStart)) {
             alignLeftContent()

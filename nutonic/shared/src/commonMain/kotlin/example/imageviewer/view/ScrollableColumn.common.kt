@@ -8,10 +8,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 @Composable
-expect fun ScrollableColumn(modifier: Modifier, content: @Composable ColumnScope.() -> Unit)
+expect fun ScrollableColumn(
+    modifier: Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+)
 
 @Composable
-fun TouchScrollableColumn(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun TouchScrollableColumn(
+    modifier: Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val scrollState = rememberScrollState()
     Column(modifier.verticalScroll(scrollState)) {
         content()

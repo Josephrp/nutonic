@@ -1,0 +1,10 @@
+# Copy to `local.properties` in this directory (file is gitignored).
+# Android Gradle Plugin reads `sdk.dir` and your Maps secrets plugin reads `MAPS_API_KEY`.
+
+sdk.dir=/absolute/path/to/Android/sdk
+MAPS_API_KEY=your_developer_key
+
+# JDK: do NOT put machine-specific JDK paths in git. Use one of:
+#   - JAVA_HOME (recommended for everyone)
+#   - org.gradle.java.home in ~/.gradle/gradle.properties (per-user override)
+# See ../rules/11-vscode-testing-linting-and-ci.md (section 7 — Team JDK) and gradle.properties.PERSONAL.example.

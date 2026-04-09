@@ -16,9 +16,7 @@ enum class ExternalImageViewerEvent {
 }
 
 @Composable
-fun ImageViewerCommon(
-    dependencies: Dependencies
-) {
+fun ImageViewerCommon(dependencies: Dependencies) {
     CompositionLocalProvider(
         LocalLocalization provides dependencies.localization,
         LocalNotification provides dependencies.notification,
@@ -32,19 +30,19 @@ fun ImageViewerCommon(
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun ImageViewerWithProvidedDependencies(
-    pictures: SnapshotStateList<PictureData>
-) {
+fun ImageViewerWithProvidedDependencies(pictures: SnapshotStateList<PictureData>) {
     // rememberSaveable is required to properly handle Android configuration changes (such as device rotation)
     val selectedPictureIndex = rememberSaveable { mutableStateOf(0) }
-    val navigationStack = rememberSaveable(
-        saver = listSaver<NavigationStack<Page>, Page>(
-            restore = { NavigationStack(*it.toTypedArray()) },
-            save = { it.stack },
-        )
-    ) {
-        NavigationStack(GalleryPage())
-    }
+    val navigationStack =
+        rememberSaveable(
+            saver =
+                listSaver<NavigationStack<Page>, Page>(
+                    restore = { NavigationStack(*it.toTypedArray()) },
+                    save = { it.stack },
+                ),
+        ) {
+            NavigationStack(GalleryPage())
+        }
 
     val externalEvents = LocalInternalEvents.current
     LaunchedEffect(Unit) {
@@ -65,7 +63,7 @@ fun ImageViewerWithProvidedDependencies(
             fadeIn() with fadeOut(tween(delayMillis = 150))
         } else {
             slideInHorizontally { w -> multiplier * w } with
-                    slideOutHorizontally { w -> multiplier * -1 * w }
+                slideOutHorizontally { w -> multiplier * -1 * w }
         }
     }) { (_, page) ->
         when (page) {
@@ -75,7 +73,7 @@ fun ImageViewerWithProvidedDependencies(
                     selectedPictureIndex = selectedPictureIndex,
                     onClickPreviewPicture = { previewPictureIndex ->
                         navigationStack.push(MemoryPage(previewPictureIndex))
-                    }
+                    },
                 ) {
                     navigationStack.push(CameraPage())
                 }
@@ -86,7 +84,7 @@ fun ImageViewerWithProvidedDependencies(
                     picture = pictures[page.pictureIndex],
                     back = {
                         navigationStack.back()
-                    }
+                    },
                 )
             }
 

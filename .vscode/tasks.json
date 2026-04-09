@@ -1,0 +1,65 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "nutonic: quality (ktlint + detekt)",
+      "type": "shell",
+      "command": "${workspaceFolder}/nutonic/gradlew",
+      "args": ["--no-configuration-cache", "quality"],
+      "windows": {
+        "command": "${workspaceFolder}\\nutonic\\gradlew.bat",
+        "args": ["--no-configuration-cache", "quality"]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/nutonic"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "nutonic: test",
+      "type": "shell",
+      "command": "${workspaceFolder}/nutonic/gradlew",
+      "args": ["--no-configuration-cache", "test"],
+      "windows": {
+        "command": "${workspaceFolder}\\nutonic\\gradlew.bat",
+        "args": ["--no-configuration-cache", "test"]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/nutonic"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "nutonic: formatKotlin (ktlintFormat)",
+      "type": "shell",
+      "command": "${workspaceFolder}/nutonic/gradlew",
+      "args": ["--no-configuration-cache", "formatKotlin"],
+      "windows": {
+        "command": "${workspaceFolder}\\nutonic\\gradlew.bat",
+        "args": ["--no-configuration-cache", "formatKotlin"]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/nutonic"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

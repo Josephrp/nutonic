@@ -1,0 +1,103 @@
+# NU:TONIC shared Detekt configuration (nutonic/).
+# https://detekt.dev/docs/introduction/configurations/
+#
+# Kotlin Multiplatform + Compose: several "strict library" defaults are relaxed here.
+# Formatting is enforced by ktlint (.editorconfig + Gradle ktlint plugin), not detekt-formatting.
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+build:
+  maxIssues: 0
+
+style:
+  MaxLineLength:
+    active: true
+    maxLineLength: 160
+    excludePackageStatements: true
+    excludeImportStatements: true
+  # Wildcards are common in Compose/interop; ktlint already encodes team policy in .editorconfig.
+  WildcardImport:
+    active: false
+  # UI literals (dp, colors, weights) are noisy; re-enable stricter checks in domain modules later.
+  MagicNumber:
+    active: false
+  MayBeConst:
+    active: false
+  # Allow TODO; still flag serious ship-stoppers (override defaults from buildUponDefaultConfig).
+  ForbiddenComment:
+    active: true
+    comments:
+      - value: "FIXME:"
+        reason: "Resolve FIXME or track in issue tracker."
+      - value: "STOPSHIP:"
+        reason: "STOPSHIP must be cleared before release."
+  ReturnCount:
+    active: true
+    max: 4
+    excludedFunctions:
+      - equals
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: false
+  PrintStackTrace:
+    active: false
+  SwallowedException:
+    active: false
+
+complexity:
+  LongMethod:
+    active: true
+    threshold: 120
+    excludes:
+      - "**/test/**"
+      - "**/androidTest/**"
+      - "**/*Test.kt"
+      - "**/*Tests.kt"
+  LongParameterList:
+    active: true
+    functionThreshold: 12
+    constructorThreshold: 12
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+    ignoreAnnotated:
+      - Composable
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 35
+    ignoreSingleWhenExpression: true
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 30
+    thresholdInClasses: 30
+    thresholdInInterfaces: 30
+    thresholdInObjects: 30
+    thresholdInEnums: 30
+    ignoreDeprecated: true
+    ignorePrivate: true
+    ignoreOverridden: true
+
+naming:
+  FunctionNaming:
+    active: true
+    ignoreAnnotated:
+      - Composable
+  # KMP uses `Foo.common.kt` / `platform.android.kt` with types not matching file stem; not Java-style one-class-per-file.
+  MatchingDeclarationName:
+    active: false
+
+empty-blocks:
+  EmptyFunctionBlock:
+    active: true
+    excludes:
+      - "**/test/**"
+      - "**/androidTest/**"
+      - "**/desktopTest/**"
+      - "**/commonTest/**"
+      - "**/*Test.kt"
+
+performance:
+  SpreadOperator:
+    active: false

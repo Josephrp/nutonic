@@ -18,16 +18,17 @@ actual fun LocationVisualizer(
     modifier: Modifier,
     gps: GpsPosition,
     title: String,
-    parentScrollEnableState: MutableState<Boolean>
+    parentScrollEnableState: MutableState<Boolean>,
 ) {
     val location = CLLocationCoordinate2DMake(gps.latitude, gps.longitude)
-    val annotation = remember {
-        MKPointAnnotation(
-            location,
-            title = null,
-            subtitle = null
-        )
-    }
+    val annotation =
+        remember {
+            MKPointAnnotation(
+                location,
+                title = null,
+                subtitle = null,
+            )
+        }
     val mkMapView = remember { MKMapView().apply { addAnnotation(annotation) } }
     annotation.setTitle(title)
     UIKitView(
@@ -39,10 +40,11 @@ actual fun LocationVisualizer(
             mkMapView.setRegion(
                 MKCoordinateRegionMakeWithDistance(
                     centerCoordinate = location,
-                    10_000.0, 10_000.0
+                    10_000.0,
+                    10_000.0,
                 ),
-                animated = false
+                animated = false,
             )
-        }
+        },
     )
 }

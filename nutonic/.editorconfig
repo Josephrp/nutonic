@@ -1,0 +1,17 @@
+# EditorConfig + ktlint (via Gradle plugin). Official Kotlin style: kotlin.code.style=official in gradle.properties.
+root = true
+
+[*]
+charset = utf-8
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{kt,kts}]
+indent_style = space
+indent_size = 4
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ij_kotlin_allow_trailing_comma_on_declaration_site = true
+# Template / KMP / Compose: ktlint cannot auto-fix these; align tooling to project reality.
+ktlint_function_naming_ignore_when_annotated_with = Composable
+ktlint_standard_no-wildcard-imports = disabled
+ktlint_standard_filename = disabled

@@ -9,18 +9,19 @@ import androidx.compose.ui.input.pointer.*
 fun Modifier.onPointerEvent(
     eventType: PointerEventType,
     pass: PointerEventPass = PointerEventPass.Main,
-    onEvent: AwaitPointerEventScope.(event: PointerEvent) -> Unit
-): Modifier = composed {
-    val currentEventType by rememberUpdatedState(eventType)
-    val currentOnEvent by rememberUpdatedState(onEvent)
-    pointerInput(pass) {
-        awaitPointerEventScope {
-            while (true) {
-                val event = awaitPointerEvent(pass)
-                if (event.type == currentEventType) {
-                    currentOnEvent(event)
+    onEvent: AwaitPointerEventScope.(event: PointerEvent) -> Unit,
+): Modifier =
+    composed {
+        val currentEventType by rememberUpdatedState(eventType)
+        val currentOnEvent by rememberUpdatedState(onEvent)
+        pointerInput(pass) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(pass)
+                    if (event.type == currentEventType) {
+                        currentOnEvent(event)
+                    }
                 }
             }
         }
     }
-}

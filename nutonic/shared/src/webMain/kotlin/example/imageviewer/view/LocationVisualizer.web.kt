@@ -15,12 +15,12 @@ actual fun LocationVisualizer(
     modifier: Modifier,
     gps: GpsPosition,
     title: String,
-    parentScrollEnableState: MutableState<Boolean>
+    parentScrollEnableState: MutableState<Boolean>,
 ) {
     Image(
         painter = painterResource(Res.drawable.dummy_map),
         contentDescription = "Map",
         contentScale = ContentScale.Crop,
-        modifier = modifier
+        modifier = modifier,
     )
 }

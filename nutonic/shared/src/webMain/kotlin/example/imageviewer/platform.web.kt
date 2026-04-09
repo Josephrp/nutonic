@@ -8,7 +8,7 @@ import example.imageviewer.utils.UUID
 import kotlinx.coroutines.Dispatchers
 
 class WebStorableImage(
-    val imageBitmap: ImageBitmap
+    val imageBitmap: ImageBitmap,
 )
 
 actual typealias PlatformStorableImage = WebStorableImage

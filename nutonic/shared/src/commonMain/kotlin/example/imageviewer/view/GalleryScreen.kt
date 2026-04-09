@@ -46,7 +46,7 @@ import kotlin.math.absoluteValue
 
 enum class GalleryStyle {
     SQUARES,
-    LIST
+    LIST,
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -55,16 +55,17 @@ fun GalleryScreen(
     pictures: SnapshotStateList<PictureData>,
     selectedPictureIndex: MutableState<Int>,
     onClickPreviewPicture: (index: Int) -> Unit,
-    onMakeNewMemory: () -> Unit
+    onMakeNewMemory: () -> Unit,
 ) {
     val imageProvider = LocalImageProvider.current
     val viewScope = rememberCoroutineScope()
 
-    val pagerState = rememberPagerState(
-        initialPage = selectedPictureIndex.value,
-        initialPageOffsetFraction = 0f,
-        pageCount = { pictures.size },
-    )
+    val pagerState =
+        rememberPagerState(
+            initialPage = selectedPictureIndex.value,
+            initialPageOffsetFraction = 0f,
+            pageCount = { pictures.size },
+        )
     LaunchedEffect(pagerState) {
         // Subscribe to page changes
         snapshotFlow { pagerState.currentPage }.collect { page ->
@@ -75,7 +76,7 @@ fun GalleryScreen(
     fun nextImage() {
         viewScope.launch {
             pagerState.animateScrollToPage(
-                (pagerState.currentPage + 1).mod(pictures.size)
+                (pagerState.currentPage + 1).mod(pictures.size),
             )
         }
     }
@@ -83,7 +84,7 @@ fun GalleryScreen(
     fun previousImage() {
         viewScope.launch {
             pagerState.animateScrollToPage(
-                (pagerState.currentPage - 1).mod(pictures.size)
+                (pagerState.currentPage - 1).mod(pictures.size),
             )
         }
     }
@@ -92,10 +93,11 @@ fun GalleryScreen(
         viewScope.launch {
             pagerState.animateScrollToPage(
                 index,
-                animationSpec = tween(
-                    easing = LinearOutSlowInEasing,
-                    durationMillis = AnimationConstants.DefaultDurationMillis * 2
-                )
+                animationSpec =
+                    tween(
+                        easing = LinearOutSlowInEasing,
+                        durationMillis = AnimationConstants.DefaultDurationMillis * 2,
+                    ),
             )
         }
     }
@@ -114,15 +116,18 @@ fun GalleryScreen(
     Column(modifier = Modifier.background(MaterialTheme.colors.background)) {
         Box {
             Box(
-                Modifier.fillMaxWidth().height(393.dp)
+                Modifier
+                    .fillMaxWidth()
+                    .height(393.dp)
                     .background(Color.Black),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Box(
-                    Modifier.fillMaxSize()
+                    Modifier
+                        .fillMaxSize()
                         .clickable {
                             onClickPreviewPicture(pagerState.currentPage)
-                        }
+                        },
                 ) {
                     HorizontalPager(state = pagerState) { index ->
                         val picture = pictures[index]
@@ -136,7 +141,7 @@ fun GalleryScreen(
                                     bitmap = image!!,
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
+                                    contentScale = ContentScale.Crop,
                                 )
                                 MemoryTextOverlay(picture)
                             }
@@ -149,28 +154,31 @@ fun GalleryScreen(
                 alignRightContent = {
                     CircularButton(
                         imageVector = IconMenu,
-                        modifier = Modifier.testTag("toggleGalleryStyleButton")
+                        modifier = Modifier.testTag("toggleGalleryStyleButton"),
                     ) {
-                        galleryStyle = when (galleryStyle) {
-                            GalleryStyle.SQUARES -> GalleryStyle.LIST
-                            GalleryStyle.LIST -> GalleryStyle.SQUARES
-                        }
+                        galleryStyle =
+                            when (galleryStyle) {
+                                GalleryStyle.SQUARES -> GalleryStyle.LIST
+                                GalleryStyle.LIST -> GalleryStyle.SQUARES
+                            }
                     }
                 },
             )
         }
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             when (galleryStyle) {
-                GalleryStyle.SQUARES -> SquaresGalleryView(
-                    images = pictures,
-                    pagerState = pagerState,
-                    onSelect = { selectPicture(it) },
-                )
-                GalleryStyle.LIST -> ListGalleryView(
-                    pictures = pictures,
-                    onSelect = { selectPicture(it) },
-                    onFullScreen = { onClickPreviewPicture(it) },
-                )
+                GalleryStyle.SQUARES ->
+                    SquaresGalleryView(
+                        images = pictures,
+                        pagerState = pagerState,
+                        onSelect = { selectPicture(it) },
+                    )
+                GalleryStyle.LIST ->
+                    ListGalleryView(
+                        pictures = pictures,
+                        onSelect = { selectPicture(it) },
+                        onFullScreen = { onClickPreviewPicture(it) },
+                    )
             }
             CircularButton(
                 Icons.Filled.Add,
@@ -187,7 +195,7 @@ expect fun GalleryLazyVerticalGrid(
     modifier: Modifier,
     verticalArrangement: Arrangement.Vertical,
     horizontalArrangement: Arrangement.Horizontal,
-    content: LazyGridScope.() -> Unit
+    content: LazyGridScope.() -> Unit,
 )
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -201,13 +209,13 @@ private fun SquaresGalleryView(
         columns = GridCells.Adaptive(minSize = 130.dp),
         modifier = Modifier.padding(top = 4.dp).testTag("squaresGalleryView"),
         verticalArrangement = Arrangement.spacedBy(1.dp),
-        horizontalArrangement = Arrangement.spacedBy(1.dp)
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
     ) {
         itemsIndexed(images) { index, picture ->
             SquareThumbnail(
                 picture = picture,
                 onClick = { onSelect(index) },
-                isHighlighted = pagerState.targetPage == index
+                isHighlighted = pagerState.targetPage == index,
             )
         }
     }
@@ -217,10 +225,10 @@ private fun SquaresGalleryView(
 fun SquareThumbnail(
     picture: PictureData,
     isHighlighted: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
     Box(
-        Modifier.aspectRatio(1.0f).clickable(onClick = onClick)
+        Modifier.aspectRatio(1.0f).clickable(onClick = onClick),
     ) {
         Tooltip(picture.name) {
             ThumbnailImage(
@@ -228,11 +236,12 @@ fun SquareThumbnail(
                 picture = picture,
             )
         }
-        val tween = tween<Float>(
-            durationMillis = AnimationConstants.DefaultDurationMillis * 3,
-            delayMillis = 100,
-            easing = LinearOutSlowInEasing,
-        )
+        val tween =
+            tween<Float>(
+                durationMillis = AnimationConstants.DefaultDurationMillis * 3,
+                delayMillis = 100,
+                easing = LinearOutSlowInEasing,
+            )
         AnimatedVisibility(isHighlighted, enter = fadeIn(tween), exit = fadeOut(tween)) {
             Box(Modifier.fillMaxSize().background(ImageviewerColors.uiLightBlack)) {
                 Box(
@@ -246,7 +255,7 @@ fun SquareThumbnail(
                         .clickable {
                             onClick()
                         },
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = IconVisibility,
@@ -268,7 +277,7 @@ private fun ListGalleryView(
 ) {
     val notification = LocalNotification.current
     ScrollableColumn(
-        modifier = Modifier.fillMaxSize().testTag("listGalleryView")
+        modifier = Modifier.fillMaxSize().testTag("listGalleryView"),
     ) {
         Spacer(modifier = Modifier.height(10.dp))
         for (p in pictures.withIndex()) {
@@ -290,12 +299,14 @@ private fun ListGalleryView(
 }
 
 @OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.animatePageChanges(pagerState: PagerState, index: Int) =
-    graphicsLayer {
-        val x = (pagerState.currentPage - index + pagerState.currentPageOffsetFraction) * 2
-        alpha = 1f - (x.absoluteValue * 0.7f).coerceIn(0f, 0.7f)
-        val scale = 1f - (x.absoluteValue * 0.4f).coerceIn(0f, 0.4f)
-        scaleX = scale
-        scaleY = scale
-        rotationY = x * 15f
-    }
+private fun Modifier.animatePageChanges(
+    pagerState: PagerState,
+    index: Int,
+) = graphicsLayer {
+    val x = (pagerState.currentPage - index + pagerState.currentPageOffsetFraction) * 2
+    alpha = 1f - (x.absoluteValue * 0.7f).coerceIn(0f, 0.7f)
+    val scale = 1f - (x.absoluteValue * 0.4f).coerceIn(0f, 0.4f)
+    scaleX = scale
+    scaleY = scale
+    rotationY = x * 15f
+}

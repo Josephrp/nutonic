@@ -1,0 +1,215 @@
+# CI for the Kotlin Multiplatform client under nutonic/ (Compose Multiplatform).
+# See rules/11-vscode-testing-linting-and-ci.md for local VS Code / Gradle parity.
+
+name: nutonic — quality, tests, clients
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "nutonic/**"
+      - ".github/workflows/nutonic-ci.yml"
+      - "rules/**"
+  pull_request:
+    paths:
+      - "nutonic/**"
+      - ".github/workflows/nutonic-ci.yml"
+      - "rules/**"
+
+concurrency:
+  group: nutonic-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: nutonic
+
+jobs:
+  quality-and-unit-tests:
+    name: Quality + JVM tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Must run before writing sdk.dir — ANDROID_SDK_ROOT is set by this action.
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: quality + tests (single Gradle invocation)
+        run: ./gradlew --no-configuration-cache --continue quality test
+
+      - name: Publish unit test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: nutonic/**/build/test-results/**/*.xml
+          check_name: Unit tests (Gradle)
+          comment_mode: off
+          report_individual_runs: true
+
+      - name: Upload JUnit XML (backup)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-xml
+          path: nutonic/**/build/test-results/**/*.xml
+          if-no-files-found: ignore
+
+      - name: Upload Gradle test HTML reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-html
+          path: nutonic/**/build/reports/tests/
+          if-no-files-found: ignore
+
+      - name: Upload detekt reports
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: detekt-reports
+          path: nutonic/**/build/reports/detekt/
+          if-no-files-found: ignore
+
+  android-debug-apk:
+    name: Android assembleDebug
+    needs: quality-and-unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Assemble debug APK
+        run: ./gradlew --no-configuration-cache :androidApp:assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: androidApp/build/outputs/apk/debug/*.apk
+
+  desktop-deb:
+    name: Desktop package (Linux deb)
+    needs: quality-and-unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI (maps stub)
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Package release .deb
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDeb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-linux-deb
+          path: desktopApp/build/compose/binaries/main-release/deb/*.deb
+
+  web-bundles:
+    name: Web JS + Wasm production bundles
+    needs: quality-and-unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties stub
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: JS browser production bundle
+        run: ./gradlew --no-configuration-cache :webApp:jsBrowserProductionWebpack
+
+      - name: Wasm browser production bundle
+        run: ./gradlew --no-configuration-cache :webApp:wasmJsBrowserProductionWebpack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-js-productionExecutable
+          path: webApp/build/dist/js/productionExecutable/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-wasm-productionExecutable
+          path: webApp/build/dist/wasmJs/productionExecutable/
+
+  ios-framework:
+    name: iOS shared framework (simulator)
+    needs: quality-and-unit-tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for Gradle (Android targets in KMP)
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Link debug framework for iOS Simulator (arm64)
+        run: ./gradlew --no-configuration-cache :shared:linkDebugFrameworkIosSimulatorArm64
+
+      - name: Zip shared.framework
+        run: |
+          cd shared/build/bin/iosSimulatorArm64/debugFramework
+          zip -r "$GITHUB_WORKSPACE/ios-shared-debug-framework.zip" shared.framework
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-shared-debug-framework
+          path: ios-shared-debug-framework.zip

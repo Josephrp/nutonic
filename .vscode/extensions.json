@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "fwcd.kotlin",
+    "vscjava.vscode-java-pack",
+    "vscjava.vscode-gradle",
+    "redhat.java",
+    "vscjava.vscode-java-debug",
+    "vscjava.vscode-java-test"
+  ],
+  "unwantedRecommendations": []
+}

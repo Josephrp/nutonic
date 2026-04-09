@@ -23,46 +23,56 @@ import platform.UIKit.UIWindow
 internal fun ImageViewerIos() {
     val toastState = remember { mutableStateOf<ToastState>(ToastState.Hidden) }
     val ioScope: CoroutineScope = rememberCoroutineScope { ioDispatcher }
-    val dependencies = remember(ioScope) {
-        getDependencies(ioScope, toastState)
-    }
+    val dependencies =
+        remember(ioScope) {
+            getDependencies(ioScope, toastState)
+        }
 
     ImageViewerTheme {
         Surface(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
         ) {
             ImageViewerCommon(
-                dependencies = dependencies
+                dependencies = dependencies,
             )
             Toast(toastState)
         }
     }
 }
 
-fun getDependencies(ioScope: CoroutineScope, toastState: MutableState<ToastState>) =
-    object : Dependencies() {
-        override val notification: Notification = object : PopupNotification(localization) {
+fun getDependencies(
+    ioScope: CoroutineScope,
+    toastState: MutableState<ToastState>,
+) = object : Dependencies() {
+    override val notification: Notification =
+        object : PopupNotification(localization) {
             override fun showPopUpMessage(text: String) {
                 toastState.value = ToastState.Shown(text)
             }
         }
 
-        override val imageStorage: IosImageStorage = IosImageStorage(pictures, ioScope)
+    override val imageStorage: IosImageStorage = IosImageStorage(pictures, ioScope)
 
-        override val sharePicture: SharePicture = object : SharePicture {
-            override fun share(context: PlatformContext, picture: PictureData) {
+    override val sharePicture: SharePicture =
+        object : SharePicture {
+            override fun share(
+                context: PlatformContext,
+                picture: PictureData,
+            ) {
                 ioScope.launch {
                     imageStorage.getNSURLToShare(picture).path?.let { imageUrl ->
                         withContext(Dispatchers.Main) {
                             val window = UIApplication.sharedApplication.windows.last() as? UIWindow
                             val currentViewController = window?.rootViewController
-                            val activityViewController = UIActivityViewController(
-                                activityItems = listOf(
-                                    UIImage.imageWithContentsOfFile(imageUrl),
-                                    picture.description
-                                ),
-                                applicationActivities = null
-                            )
+                            val activityViewController =
+                                UIActivityViewController(
+                                    activityItems =
+                                        listOf(
+                                            UIImage.imageWithContentsOfFile(imageUrl),
+                                            picture.description,
+                                        ),
+                                    applicationActivities = null,
+                                )
                             currentViewController?.presentViewController(
                                 viewControllerToPresent = activityViewController,
                                 animated = true,
@@ -73,4 +83,4 @@ fun getDependencies(ioScope: CoroutineScope, toastState: MutableState<ToastState
                 }
             }
         }
-    }
+}

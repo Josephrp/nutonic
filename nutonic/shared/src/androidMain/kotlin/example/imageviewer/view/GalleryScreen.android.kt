@@ -13,13 +13,13 @@ actual fun GalleryLazyVerticalGrid(
     modifier: Modifier,
     verticalArrangement: Arrangement.Vertical,
     horizontalArrangement: Arrangement.Horizontal,
-    content: LazyGridScope.() -> Unit
+    content: LazyGridScope.() -> Unit,
 ) {
     LazyVerticalGrid(
         columns = columns,
         modifier = modifier,
         verticalArrangement = verticalArrangement,
         horizontalArrangement = horizontalArrangement,
-        content = content
+        content = content,
     )
 }

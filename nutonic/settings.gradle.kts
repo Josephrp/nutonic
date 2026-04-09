@@ -19,6 +19,8 @@ pluginManagement {
         id("com.android.application").version(agpVersion)
         id("com.android.library").version(agpVersion)
         id("org.jetbrains.compose").version(composeVersion)
+        id("org.jlleitschuh.gradle.ktlint") version "12.2.0"
+        id("io.gitlab.arturbosch.detekt") version "1.23.8"
     }
 }
 

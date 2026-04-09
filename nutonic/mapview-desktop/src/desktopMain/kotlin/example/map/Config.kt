@@ -67,5 +67,5 @@ object Config {
 data class Tile(
     val zoom: Int,
     val x: Int,
-    val y: Int
+    val y: Int,
 )

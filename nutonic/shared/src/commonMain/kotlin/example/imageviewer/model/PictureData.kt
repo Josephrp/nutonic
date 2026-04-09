@@ -10,7 +10,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 class GpsPosition(
     val latitude: Double,
-    val longitude: Double
+    val longitude: Double,
 )
 
 sealed interface PictureData {
@@ -41,20 +41,25 @@ sealed interface PictureData {
                 val instantTime = Instant.fromEpochSeconds(timeStampSeconds, 0)
                 val utcTime = instantTime.toLocalDateTime(TimeZone.UTC)
                 val date = utcTime.date
-                val monthStr = date.month.name.lowercase()
-                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-                    .take(3)
+                val monthStr =
+                    date.month.name
+                        .lowercase()
+                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                        .take(3)
                 val dayStr = date.dayOfMonth
                 return "$dayStr $monthStr."
             }
     }
 }
 
-fun createCameraPictureData(name: String, description: String, gps: GpsPosition) =
-    PictureData.Camera(
-        id = createUUID(),
-        timeStampSeconds = Clock.System.now().epochSeconds,
-        name = name,
-        description = description,
-        gps = gps,
-    )
+fun createCameraPictureData(
+    name: String,
+    description: String,
+    gps: GpsPosition,
+) = PictureData.Camera(
+    id = createUUID(),
+    timeStampSeconds = Clock.System.now().epochSeconds,
+    name = name,
+    description = description,
+    gps = gps,
+)

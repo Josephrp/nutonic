@@ -1,21 +1,17 @@
 package example.map
 
-fun InternalMapState.geoLengthToDisplay(geoLength: Double): Int {
-    return (height * geoLength * scale).toInt()
-}
+fun InternalMapState.geoLengthToDisplay(geoLength: Double): Int = (height * geoLength * scale).toInt()
 
 fun InternalMapState.geoXToDisplay(x: Double): Int = geoLengthToDisplay(x - topLeft.x)
+
 fun InternalMapState.geoYToDisplay(y: Double): Int = geoLengthToDisplay(y - topLeft.y)
 
 @Suppress("unused")
-fun InternalMapState.geoToDisplay(geoPt: GeoPoint): DisplayPoint =
-    DisplayPoint(geoXToDisplay(geoPt.x), geoYToDisplay(geoPt.y))
+fun InternalMapState.geoToDisplay(geoPt: GeoPoint): DisplayPoint = DisplayPoint(geoXToDisplay(geoPt.x), geoYToDisplay(geoPt.y))
 
-fun InternalMapState.displayLengthToGeo(displayLength: Int): Double =
-    displayLength / (scale * height)
+fun InternalMapState.displayLengthToGeo(displayLength: Int): Double = displayLength / (scale * height)
 
-fun InternalMapState.displayLengthToGeo(pt: DisplayPoint): GeoPoint =
-    GeoPoint(displayLengthToGeo(pt.x), displayLengthToGeo(pt.y))
+fun InternalMapState.displayLengthToGeo(pt: DisplayPoint): GeoPoint = GeoPoint(displayLengthToGeo(pt.x), displayLengthToGeo(pt.y))
 
 fun InternalMapState.displayToGeo(displayPt: DisplayPoint): GeoPoint {
     val x1 = displayLengthToGeo((displayPt.x))
@@ -37,7 +33,10 @@ internal fun fastPow2ForPositiveInt(x: Int): Int {
     return 1 shl x
 }
 
-fun InternalMapState.zoom(zoomCenter: DisplayPoint?, change: Double): InternalMapState {
+fun InternalMapState.zoom(
+    zoomCenter: DisplayPoint?,
+    change: Double,
+): InternalMapState {
     val state = this
     val pt = zoomCenter ?: DisplayPoint(state.width / 2, state.height / 2)
     var multiply = (1 + change)

@@ -8,18 +8,21 @@ import platform.Foundation.*
 import platform.posix.memcpy
 
 val NSFileManager.DocumentDirectory
-    get() = URLForDirectory(
-        directory = NSDocumentDirectory,
-        inDomain = NSUserDomainMask,
-        create = true,
-        appropriateForURL = null,
-        error = null
-    )!!
+    get() =
+        URLForDirectory(
+            directory = NSDocumentDirectory,
+            inDomain = NSUserDomainMask,
+            create = true,
+            appropriateForURL = null,
+            error = null,
+        )!!
 
 // Mimic to java's File class
 @Suppress("FunctionName")
-fun File(dir: NSURL, child: String) =
-    dir.URLByAppendingPathComponent(child)!!
+fun File(
+    dir: NSURL,
+    child: String,
+) = dir.URLByAppendingPathComponent(child)!!
 
 val NSURL.isDirectory: Boolean
     get() {
@@ -35,7 +38,8 @@ fun NSURL.mkdirs() {
 }
 
 fun NSURL.listFiles(filter: (NSURL, String) -> Boolean) =
-    NSFileManager.defaultManager.contentsOfDirectoryAtPath(path!!, null)
+    NSFileManager.defaultManager
+        .contentsOfDirectoryAtPath(path!!, null)
         ?.map { it.toString() }
         ?.filter { filter(this, it) }
         ?.map { File(this, it) }
@@ -48,8 +52,9 @@ fun NSURL.delete() {
 suspend fun NSURL.readData(): NSData {
     while (true) {
         val data = NSData.dataWithContentsOfURL(this)
-        if (data != null)
+        if (data != null) {
             return data
+        }
         yield()
     }
 }
@@ -75,6 +80,6 @@ fun NSURL.writeText(text: String) {
         url = this,
         atomically = true,
         encoding = NSUTF8StringEncoding,
-        error = null
+        error = null,
     )
 }

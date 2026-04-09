@@ -10,9 +10,20 @@ fun getFilter(type: FilterType): (ImageBitmap, PlatformContext) -> ImageBitmap =
         FilterType.Blur -> ::blurFilter
     }
 
-expect fun grayScaleFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap
-expect fun pixelFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap
-expect fun blurFilter(bitmap: ImageBitmap, context: PlatformContext): ImageBitmap
+expect fun grayScaleFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap
+
+expect fun pixelFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap
+
+expect fun blurFilter(
+    bitmap: ImageBitmap,
+    context: PlatformContext,
+): ImageBitmap
 
 expect class PlatformContext
 

@@ -3,6 +3,8 @@
 
 ## Setting up your development environment
 
+Use **JDK 17+** and set **`JAVA_HOME`** (or `org.gradle.java.home` in `~/.gradle/gradle.properties`). See **`gradle.properties.PERSONAL.example`** and **`../rules/11-vscode-testing-linting-and-ci.md`** (section 7 — Team JDK).
+
 To setup the environment, please consult these [instructions](https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-setup.html).
 
 ## How to run

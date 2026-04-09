@@ -11,16 +11,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-actual fun ScrollableColumn(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+actual fun ScrollableColumn(
+    modifier: Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val scrollState = rememberScrollState()
     Box(modifier) {
         Column(Modifier.verticalScroll(scrollState)) {
             content()
         }
         VerticalScrollbar(
-            modifier = Modifier.align(Alignment.CenterEnd)
-                .padding(4.dp)
-                .fillMaxHeight(),
+            modifier =
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(4.dp)
+                    .fillMaxHeight(),
             adapter = rememberScrollbarAdapter(scrollState),
         )
     }

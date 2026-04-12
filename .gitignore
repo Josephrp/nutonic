@@ -1,5 +1,10 @@
 refs
 stitch
+# Large/local payloads stay untracked; version tooling under data/scripts only.
+data/*
+!data/scripts/
+!data/scripts/**
+.cache
 
 # PM2 and local verification (Gradle, future server test runners)
 logs/

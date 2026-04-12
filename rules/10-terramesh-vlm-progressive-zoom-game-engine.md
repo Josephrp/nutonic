@@ -1,72 +1,72 @@
-# TerraMind / TerraMesh reference and VLM progressive-zoom game engine
+# TerraMesh cache, VLM, and progressive-zoom game engine
 
-## What the reference code actually is
+## What the reference code under `refs/terramind-geogen-main/` is
 
-The codebase under `refs/terramind-geogen-main/` is a **geospatial ML research pipeline** around **TerraMesh** (IBM, Hugging Face `ibm-esa-geospatial/TerraMesh`): WebDataset shards, multimodal inputs (e.g. `S2L2A`), optional coordinate metadata, transforms (`MultimodalTransforms`, Albumentations), and **Terramind** models for generation/evaluation.
+The codebase under `refs/terramind-geogen-main/` is a **geospatial ML research pipeline** around **TerraMesh** (IBM, Hugging Face `ibm-esa-geospatial/TerraMesh`): WebDataset shards, multimodal inputs (e.g. `S2L2A`), optional coordinate metadata, transforms (`MultimodalTransforms`, Albumentations), and various **research** models for generation/evaluation. **Product server code** may use **TerraMind TiM** (`*_tim`) and **TerraMind full generation** (`terramind_v1_*_generate`) per `rules/06-server-vlm-tim-and-on-device-ml.md` and `rules/12-python-gradio-terramind-server.md`—not an in-app PyTorch runtime.
 
-Authoritative pieces for **location semantics and scoring geometry**:
+**Product use of TerraMesh (narrow):** batch/server jobs may emit **cached AI-guess lat/long (and metadata) per `map_id`**. Clients consume that cache over HTTP or bundled manifests—**not** full TerraMesh tensors at runtime. **TiM alignment:** **`AiGuessStore`** / manifest rows **must** accept **`ai_lat` / `ai_lon`** hydrated from **TerraMind TiM `Coordinates`** outputs ( **`tim_modality_outputs.Coordinates`** ) produced by the **same TiM worker** the game server uses for PRO (`rules/06-server-vlm-tim-and-on-device-ml.md`, `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`). TerraMesh-only Jobs remain valid; when both exist, OpenAPI defines **precedence** (default: **TiM `Coordinates` wins** for the AI marker if present for that `map_id` revision). **Same JSON shape ≠ same store:** PRO tab responses include **`tim_modality_outputs`** for the **dashboard**; they **do not** imply an **`AiGuessStore`** write unless the request is **`map_id`**-bound or OpenAPI defines an explicit registration path (**`docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` §1.1.1**).
+
+Authoritative pieces for **location semantics and scoring geometry** (batch / server):
 
 | Artifact | Role |
 |----------|------|
 | `src/terramesh.py` | Dataset construction (`build_terramesh_dataset`), splits (`train` / `val`), modalities, metadata such as **center_lon / center_lat** when `return_metadata=True`. |
-| `src/geo_utils.py` | **Haversine** distance in km between (lon, lat) pairs—use the same definition server-side for guess-vs-ground-truth scoring to stay consistent with research metrics. |
+| `src/geo_utils.py` | **Haversine** distance in km between (lon, lat) pairs—implement the **same definition in `commonMain`** for player-visible scoring; server/batch code may mirror it for analytics. |
 | `src/terramesh_statistics.yaml` | Normalization bounds for modalities; relevant if server-side models consume TerraMesh-style tensors. |
 | `scripts/generate_and_evaluate.py` | Batch inference + per-modality metrics; **pattern** for how predictions are compared to ground truth (including coordinate error). |
-| `scripts/plot_error_heatmap.py` | Geographic **binned error heatmaps** (lon/lat bins, aggregated haversine error)—inform **difficulty tuning** (where the world is inherently harder) and analytics dashboards, not the mobile map widget. |
+| `scripts/plot_error_heatmap.py` | Geographic **binned error heatmaps** (lon/lat bins, aggregated haversine error)—inform **difficulty tuning** and analytics dashboards, not the mobile map widget. |
 | `src/plotting_utils.py` | Visualization helpers for satellite-style tensors (e.g. RGB compositing). |
 | `notebooks/*.ipynb` | Validate transforms, TerraMesh val workflows, and generation experiments—**behavioral reference** for data handling, not runtime code to embed in clients. |
 
-**Rule:** Treat this tree as **server/research reference**. Kotlin clients must not depend on PyTorch, WebDataset, or TerraMesh loaders. Expose game behavior through **HTTP/WebSocket APIs** (see `05-networking-leaderboard.md`, `06-server-embedding-and-ai.md`).
+**Rule:** Treat this tree as **research / server-batch reference**. Kotlin clients must not depend on PyTorch, WebDataset, or TerraMesh loaders. **Gameplay state** and **trust** for **non-ranked** play live on the client (`rules/00-product-intent.md`); **ranked** trust follows `docs/RANKED-MODE.md`. Optional HTTP APIs supply hints, **per-`map_id` AI lat/long cache rows**, or static bundles (`rules/05-networking-leaderboard.md`, `rules/06-server-vlm-tim-and-on-device-ml.md`).
 
 ---
 
-## NU:TONIC game loop (product engine, server-authoritative)
+## NU:TONIC game loop (client-authoritative engine for non-ranked)
 
-This loop extends the generic map flow in `04-maps-and-gameplay.md`.
+**Default loop** (`docs/GAME-ENGINE.md` §2, §8–§9): **solo-first**—**no lobbies**, **no blocking on other players’ submits**. **World map** + **basemap**, **primary Mapbox reference still**, **collapsible** assist panels for **(a)** **pre-cached Street View description text** (batch LFM-VL over sampled panos per target—`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`), **(b)** **pre-cached useful hints** (three tiers: continent → regional EO landmark / hydrology → country, script- or job-generated), **(c)** optional **peer marker** after **Reveal uplink** (hint only), **bottom-right guess modal**, **one primary human guess**, **narrative overlay** (authorial `prompts/` + **user text**—not a smuggled substitute for labeled assists), then **AI marker** from **cached** `ai_lat`/`ai_lon` (**TerraMesh** / **`AiGuessStore`** / TiM **`Coordinates`** when enabled). **On-device VLM** is **PRO tab only** (`rules/06-server-vlm-tim-and-on-device-ml.md`).
+
+**Ranked:** expanding **Street View descriptions**, **any useful-hint tier**, or **peer reveal** before `submit` **forfeits** verified placement—server endpoints per **`docs/RANKED-MODE.md`**. **Non-ranked:** assists optional, **no** score consequence.
+
+**Rounds, guesses, AI marker, and scores** are driven by **`commonMain`** for **non-ranked** missions. Bundled assists must not be the **only** way to obtain the Mapbox still or map; **primary still** always ships for SCAN.
 
 ### Rounds and data
 
-1. **Dataset**: Rounds are drawn from a **preloaded GeoGuessr-style (or equivalent) location pool** with **ground-truth coordinates** and **Street View–sourced imagery** (or API handles) for the VLM path. TerraMesh is **not** a drop-in substitute for Street View; use TerraMesh only where product explicitly uses satellite/modality generation—otherwise keep datasets separate but use the same **haversine** and metadata discipline as TerraMesh eval.
-2. **Difficulty**: **Easy / medium / hard** are **server-defined profiles** that adjust tunables such as:
-   - **Initial map viewport** radius (larger = easier),
-   - **Maximum zoom-in steps** (`max_zooms`) and **per-step shrink factor** toward ground truth,
-   - **VLM hint strength** (specificity vs vague narrative),
-   - **Time or turn limits**,
-   - Optional **starting blur / distortion** on clues.
-   Profiles must be **versioned** in API responses so clients render the correct UX copy (“Hard mode: 4 zoom steps”).
+1. **Dataset**: Rounds are drawn from a **location pool** with **ground-truth coordinates** bundled in-app, fetched as static manifest from the reference server, or both. **TerraMesh** supplies **cached lat/long guesses per `map_id`** for AI marker / analytics—not a drop-in Street View substitute.
+2. **Challenge tuning**: Prefer **`assist_level` / `challenge_tone`** (and mission metadata) over a player-facing **Easy / Medium / Hard** menu (`docs/GAME-ENGINE.md` §7). Version **`ruleset_version`** in **local** leaderboard rows (and in any **optional** community **`POST`**) so rows stay comparable (`rules/05-networking-leaderboard.md`).
 
 ### VLM and human flow
 
-3. **VLM input**: The VLM receives **Google Maps Street View–style images** (and any allowed metadata) and produces a **natural-language description / plan** for humans—not raw coordinates exposed to the client before round end.
-4. **Human-facing map**: The **main UI shows a zoomed-out map** at round start; it **does not** start at street level unless difficulty says so.
-5. **Progressive zoom**: On each **qualified turn** (e.g. user message, hint request, or server-paced tick—pick one contract and stick to it), the server advances **zoom state** (camera bounds toward truth) until **max_zooms** is reached. **Rule:** Zoom level and center are **authoritative on the server**; the client applies the viewport the server sends. Prevents map hacks from learning extra precision early.
-6. **Chat UI**: VLM hints and chat live in a **glass-like, semi-transparent overlay** on top of the map (`refs/DESIGN.md` glass rules, scanline/glow discipline in `02-design-system.md`). Chat must not obscure the **primary tap-to-place** affordance; follow `08-ux-and-performance-footguns.md` for hit targets and responsiveness.
+3. **Assist UI** is **optional and collapsible**: **authorial** overlay (`prompts/` + user typing) is separate from **Street View description** and **useful-hint** panels (`rules/06-server-vlm-tim-and-on-device-ml.md`). **Street View / LFM-VL** runs in **batch** to fill bundles—not on-device during SCAN play.
+4. **Human-facing map**: Initial camera may be **zoomed out** per mission; **progressive zoom is not required** for the player to submit a guess.
+5. **Progressive zoom** (optional adjunct): **Client-owned** zoom state when enabled (tier index, bounds toward truth). If a **server-assisted** mode is added, the server may **suggest** bounds; the **playing client** still applies them through the shared `MapViewport` abstraction. Document which mode is active in API/flags.
+6. **Overlay** must not block **map pan** or the **guess modal** (`rules/08-ux-and-performance-footguns.md`).
 
-### Markers and multiplayer
+### Markers and async competition
 
-7. **User markers**: Each participant submits **guess coordinates** through the same abstract map interface as in `04-maps-and-gameplay.md`; server records **who guessed when** and validates against match rules.
-8. **Join ongoing games**: Matches expose a **joinable state** (lobby vs in-progress) over the realtime channel; late joiners receive **current zoom tier + chat history slice + VLM summary** per API contract. Do not fork divergent game state per client.
-9. **AI marker phase**: After **all human players** in the match have submitted (or forfeited per rules), the **AI places a single marker**—**required** for normal resolution. Coordinates are **always** produced for clients; in production they should come **primarily from precomputed cache** (HF Jobs → Dataset → server sync) with **live** TerraMind/VLM as an enhancement when available. One broadcast **`AI_GUESS_PLACED`** event; same coordinate schema as human guesses for scoring UI (`rules/13-client-cache-and-data-plane.md`).
+7. **User markers**: Submitted through the shared map interface; **eligibility and timing** are enforced in **client** state—**not** by server score validation for **non-ranked** play. **Display:** **self** vs **optional peer hint** (after **Reveal uplink** only) vs **AI** (after human phase)—see **`docs/GAME-ENGINE.md` §10.1** and **`rules/04-maps-and-gameplay.md`**. Peer marker is **never** a lobby gate.
+8. **Non-ranked outcomes:** Players resolve against **local round truth**, then **write** rows to the **device-local** per-**`map_id`** leaderboard. **Optional** **`POST .../guesses/record`** may mirror coords + client distance for **telemetry** only (`rules/05-networking-leaderboard.md`). **Server-visible** competition with other humans requires **ranked** and/or **optional** community APIs (`docs/SOCIAL-AND-COMPETITION.md`).
+9. **AI marker phase**: After human phase, **one AI marker** is produced (local policy, **TerraMesh per-`map_id` cache**, bundled table, or optional server). Emit **`AI_GUESS_PLACED`** (or equivalent) for results UI. **Leaderboard** must expose **AI vs golden answer** metrics separately from human PvP rows (`rules/05-networking-leaderboard.md`). **Ranked:** peer reveal before `submit` **forfeits** verified score—**`docs/RANKED-MODE.md`**.
 
 ### Scoring
 
-10. **Distance and leaderboard**: Compute **haversine km** (or product-defined score derived from it) from each guess to ground truth using the **same formula** as `geo_utils.haversine` conceptually; persist results for leaderboard hydration (`05-networking-leaderboard.md`).
+10. **Distance and local rows**: Compute **haversine km** (or product score) in **`commonMain`** aligned with `geo_utils.py` semantics. **Persist** **player role**, **matchup type**, and **AI-vs-truth** fields on **local** leaderboard rows. **Optional** community **`POST`** uses OpenAPI when product ships it.
 
 ---
 
 ## Implementation checklist (agents and humans)
 
-- [ ] Server owns **round state machine**: difficulty profile, zoom step index, VLM transcript, participant list, guess status, AI phase.
-- [ ] Client owns **presentation**: map viewport from server, glass chat overlay, markers, optimistic UI within reconciliation rules.
-- [ ] Street View / Maps **API keys and ToS** isolated per platform; never embed secrets in `commonMain`.
-- [ ] Notebooks/scripts under `refs/terramind-geogen-main` remain **reference**; production server code lives under the project’s service module with explicit API docs.
+- [ ] **Client (`commonMain`)** owns **round state machine**: mission/assist config, optional zoom step, narrative + **collapsible** assist panels + guesses, AI phase, resolution.
+- [ ] **Server** supplies optional VLM strings, imagery handles, **per-`map_id` cached AI-guess** lat/long rows (**TerraMind TiM `Coordinates`** and/or **TerraMesh** batch), or static cache rows—**no mandatory** server for core single-device **non-ranked** play.
+- [ ] Street View / Maps **API keys** isolated per platform; never embed secrets in `commonMain`.
+- [ ] Notebooks/scripts under `refs/terramind-geogen-main` remain **reference**; production server code (if any) lives under **`server/`** with explicit API docs.
 
 ---
 
 ## Related rules
 
 - `04-maps-and-gameplay.md` — map abstraction, tap-to-place, feedback latency.
-- `05-networking-leaderboard.md` — APIs for matches and leaderboard.
-- `06-server-embedding-and-ai.md` — VLM/embeddings on server, fallbacks.
-- `02-design-system.md` — glass surfaces and typography for the chat overlay.
-- `00-product-intent.md` — multi-user parity and server authority.
+- `05-networking-leaderboard.md` — **local** default, optional community API, leaderboard dimensions (PvP roles + AI vs golden), **auto-refetch off by default**.
+- `06-server-vlm-tim-and-on-device-ml.md` — VLM overlay, `refs/VLMExample/` on-device ML, server ML, fallbacks.
+- `02-design-system.md` — glass surfaces and typography for overlays.
+- `00-product-intent.md` — client authority and parity.

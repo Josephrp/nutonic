@@ -1,22 +1,38 @@
 # NU:TONIC implementation rules
 
-These documents define **design patterns and non-negotiable constraints** for implementing the multi-user NU:TONIC game in this repository. They tie together:
+These documents define **design patterns and non-negotiable constraints** for implementing NU:TONIC in this repository (**solo-first** play, **async** comparison on shared **`map_id`**—**no** live lobbies or player push channels for core loops; **`docs/GAME-ENGINE.md` §14**, **`docs/SOCIAL-AND-COMPETITION.md`**). **Gameplay state, scoring, and fairness are client-authoritative** for **non-ranked** missions (`rules/00-product-intent.md`). **Non-ranked leaderboards are device-local by default**—no score **`POST`** to the server is required (`rules/05-networking-leaderboard.md`, `rules/13-client-cache-and-data-plane.md`). **SCAN** ships **pre-cached Mapbox stills** (primary reference) plus **optional bundled assists** (Street View description text, three-tier useful hints—scripts + Datasets + batch inference per `docs/GAME-ENGINE.md` §9); **on-device VLM is required for the PRO tab only** (`rules/06-server-vlm-tim-and-on-device-ml.md`, `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`). Clients use a **game-server session JWT** (anonymous device OK) for **API** access to **limit spam** and enable **server-side caching** (`rules/05-networking-leaderboard.md`). The reference server may serve **ML or POI bundles**, optional **read-only** manifests, and—if product ships it—**optional** community score ingest; **ranked** missions use **server-held round secrets** and **server-verified** scores from **guess-only** submits (`docs/RANKED-MODE.md`). **Store / marketplace builds** add **JWT + official-client registration + schema-strict POSTs** for **server-mutating** paths (community scores, POI, ranked, etc.—see **`docs/POI-PACKAGES-AND-OFFICIAL-CLIENTS.md`**, **`rules/05-networking-leaderboard.md`**). **JWT alone** on optional non-ranked community writes still does not prove mathematical honesty if the client held round truth; **ranked** missions address verification.
 
-- `refs/DESIGN.md` — visual and interaction system
+**Ranked missions (server-secret rounds, verified scores, server-processed POI):** Read **`docs/RANKED-MODE.md`** and **`rules/05-networking-leaderboard.md`**.
+
+They tie together:
+
+- `docs/DESIGN.md` — visual and interaction system
 - `refs/stitch/nu_tonic_interface_design_specification.html` — product UX and flows
 - `refs/stitch/*/code.html` and `screen.png` — per-screen layout and copy targets
 - Kotlin Multiplatform + Compose Multiplatform app under `nutonic/`
 
-**How to use:** Read `00-product-intent.md` first, then `01-navigation-architecture.md` (canonical IA). Implement features only against the checklist in `07-screens-checklist.md` unless product explicitly changes scope.
+**How to use:** Read `00-product-intent.md` first, then `01-navigation-architecture.md` (canonical IA: **SCAN / INTEL / RANK / SETUP / PRO** tabs, route IDs vs labels, **SCAN** default after shell). Implement features only against the checklist in `07-screens-checklist.md` unless product explicitly changes scope.
 
-**VLM + progressive zoom + TerraMesh reference:** For the Street View → VLM description → map zoom-per-turn → multiplayer → AI marker flow, and how `refs/terramind-geogen-main` relates (TerraMesh, haversine, heatmaps), read **`10-terramesh-vlm-progressive-zoom-game-engine.md`**.
+**Screen music:** One bundled BGM loop per primary route, **header music on/off on every checklist screen**, prefs in **`docs/CLIENT-SETTINGS-SPEC.md`** §6.7 — read **`docs/SCREEN-MUSIC-SPEC.md`**.
 
-**Python reference server (FastAPI + optional Gradio, TerraMind/TerraTorch, Hub uploads):** Read **`12-python-gradio-terramind-server.md`** and **`plans/2026-04-07-gradio-terramind-backend.md`**.
+**Simplified gameplay + narrative:** Single-guess loop, `prompts/` Markdown serialized at build time, basemap + Mapbox reference + bottom-right modal—read **`docs/GAME-ENGINE.md`** (§2, §7–11) and **`docs/NARRATIVE-AND-PROMPTS.md`**.
+
+**Social / competition model:** Async play on **shared `map_id`**, roles enrich leaderboards, optional **POI share**—read **`docs/SOCIAL-AND-COMPETITION.md`** and **`rules/05-networking-leaderboard.md`**.
+
+**TerraMesh + optional inference reference:** For **SCAN** cached bundles + narrative overlay, optional progressive zoom, **TerraMesh** per-`map_id` AI cache, and **PRO** on-device VLM, read **`10-terramesh-vlm-progressive-zoom-game-engine.md`** and **`rules/06-server-vlm-tim-and-on-device-ml.md`** (**`refs/VLMExample/`** applies to **PRO** only). **PRO** TiM **`Coordinates`** vs **`AiGuessStore`** persistence: **`docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` §1.1.1**.
+
+**Python backend (script-first hydration, then `inference/*`):** **`data/scripts/`** + CI + **HF Jobs** materialize caches; **`inference/*`** services implement **validated** script logic as HTTP workers; **thin `server/`** orchestrates only (**no** torch). Read **`12-python-gradio-terramind-server.md`**, **`plans/2026-04-07-gradio-terramind-backend.md` §2**, **`plans/2026-04-07-game-server-thin-orchestrator.md`**.
+
+**Split thin Python `server/` vs Python `inference/*`, HF Spaces/Datasets/Jobs, DB vs artifacts:** Read **`docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`** (orchestrator topology, **Python game node for this plan**, hypothetical non-Python game tier in §3, decision checklist). **LFM-VL Spaces** (Street View hints + satellite specialist, not the game server): **`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`**, **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`**, **`inference/README.md`**.
 
 **Client cache vs Hub (no `hf` on device, Jobs → Dataset → server → client):** Read **`13-client-cache-and-data-plane.md`** and the data-plane sections in **`plans/2026-04-07-complete-implementation-architecture.md`**.
 
+**Per-map leaderboards (local default), map selection entry, optional POI / community score submit, optional non-ranked `guesses/record`, peer reveal vs ranked forfeit, hydration commit:** Read **`05-networking-leaderboard.md`**, **`13-client-cache-and-data-plane.md`**, **`docs/LEADERBOARD-MAP-POI-SCORES.md`**, and **`docs/GAME-ENGINE.md` §10.1 / §12.3–12.4**.
+
+**POI asset tree (Mapbox / Sentinel / `poi.json`), server-held bundles, lightweight client, PRO on-device ML (`refs/VLMExample/`), official-app JWT:** Read **`docs/POI-PACKAGES-AND-OFFICIAL-CLIENTS.md`** (casual vs **redacted** ranked clue manifests in **`docs/RANKED-MODE.md`** §3).
+
 **HTML / Web stack:** If you consider embedding or vendoring Stitch HTML, read `09-html-vendoring-and-interface-stack.md` before changing build layout or `kotlin-js-store`.
 
-**Order of authority when sources conflict:** Product intent in `01` and `00` overrides individual mockups. Visual tokens default to `refs/DESIGN.md`; where stitch HTML uses extra fonts (e.g. Orbitron), treat stitch as layout reference and align tokens to DESIGN unless design sign-off extends the palette.
+**Order of authority when sources conflict:** Product intent in **`00-product-intent.md`** and **`01-navigation-architecture.md`** overrides individual stitch mockups. **Visual / interaction system (canonical for implementers):** use **`docs/DESIGN.md`** first for colors, surfaces, and **typography** (**Space Grotesk** + **Inter** + **Orbitron** for tactical/HUD only per §3), plus component behaviors shipped in Compose. **`rules/02-design-system.md`** adds **implementation** rules (semantic tokens in code, **vendored** font files under the KMP tree—no runtime font CDN—`NutonicTypography`, glass fallbacks where blur is costly). **`refs/DESIGN.md`**, if present, is **legacy** token reference for older stitch alignment only—it does **not** override **`docs/DESIGN.md`** for shipped typography.
 
-**Tooling, tests, linters, CI:** For VS Code + Gradle (`nutonic/`), ktlint/detekt, GitHub Actions artifacts (Android, desktop `.deb`, JS/Wasm bundles, iOS Simulator framework), **team JDK / no hardcoded paths**, and optional **PM2** local Gradle threads with output under gitignored **`logs/`**, read **`11-vscode-testing-linting-and-ci.md`** and **`docs/PM2_LOCAL_VERIFICATION.md`** (see **`nutonic/gradle.properties.PERSONAL.example`**, repo-root **`ecosystem.config.cjs`**).
+**Tooling, tests, linters, CI:** For VS Code + Gradle (`nutonic/`), ktlint/detekt, GitHub Actions artifacts (Android, desktop `.deb`, JS/Wasm bundles, iOS Simulator framework), **team JDK / no hardcoded paths**, and **mandatory PM2 local verification** (§9.2) with assessment of gitignored **`logs/`** before merging **`nutonic/**`** changes, read **`11-vscode-testing-linting-and-ci.md`** and **`docs/PM2_LOCAL_VERIFICATION.md`** (see **`nutonic/gradle.properties.PERSONAL.example`**, repo-root **`ecosystem.config.cjs`**).

@@ -2,13 +2,16 @@
 
 This document records how NU:TONIC runs **Kotlin Multiplatform** checks under **PM2**, where output lands, what was **verified on a real machine**, and how to avoid common **PM2 / Windows** pitfalls.
 
-**Normative pointers:** `ecosystem.config.cjs`, `rules/11-vscode-testing-linting-and-ci.md` §9, `scripts/pm2-run-gradle.cjs`.
+**Normative rule:** **`rules/11-vscode-testing-linting-and-ci.md` §9.2** makes PM2-backed runs and **log assessment** **mandatory** before merging changes under **`nutonic/`** (with §9.4 fallback if the toolchain is unavailable). This file is the **operational runbook** for that rule.
+
+**Also see:** `ecosystem.config.cjs`, `scripts/pm2-run-gradle.cjs`.
 
 ---
 
 ## 1. Purpose
 
-- Run **`quality`**, **`test`**, and **smoke builds** (Android debug, desktop compile, JS + Wasm production webpack) in the **background**, with **timestamped logs** under **`logs/`** (gitignored).
+- Satisfy **§9.2**: run **`nutonic-ci-local`** (always) and **`nutonic-build-verify`** (when the rule says so), then **assess** **`logs/*.log`** for **`BUILD SUCCESSFUL`** before PR / merge.
+- Run **`quality`**, **`test`**, and **smoke builds** in the **background**, with **timestamped logs** under **`logs/`** (gitignored).
 - Same Gradle commands as CI and VS Code tasks, but **supervised by PM2** so you can close the terminal or attach later with `pm2 logs`.
 
 ---

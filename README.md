@@ -1,6 +1,6 @@
 # 🛰️ NU:TONIC
 
-Nu:Tonic is a post-apocalyptic, geo-guessing multiplayer game where:
+Nu:Tonic is a post-apocalyptic, **solo-first** geo-guessing game with **async** comparison on shared **maps** (no live lobbies or synchronized opponent sessions—see `docs/SOCIAL-AND-COMPETITION.md`, `docs/GAME-ENGINE.md` §14) where:
 *   Earth players (“Humans”) / (“Aliens”)
 *   Stranded orbital players (“Astronauts”)
 *   AI opponents - NüTonic 
@@ -34,3 +34,11 @@ In NU:TONIC, every round is a quiet act of defiance against forgetting.
 
 Because when the world breaks,
 **memory becomes the game.**
+
+---
+
+## Developer documentation
+
+Implementation rules live under [`rules/README.md`](rules/README.md). **Screen background music** (one loop per primary route, **music on/off in the header on every shipped screen**, bundled assets) is specified in [`docs/SCREEN-MUSIC-SPEC.md`](docs/SCREEN-MUSIC-SPEC.md) and preference keys in [`docs/CLIENT-SETTINGS-SPEC.md`](docs/CLIENT-SETTINGS-SPEC.md) §6.7.
+
+**Inference (not the game client):** [`inference/README.md`](inference/README.md) indexes **Street View pano**, **standard LFM-VL hints**, and **specialist satellite** LFM-VL (caption / VQA / grounding, `refs/satellite-vlm/` prompts, Gradio demo). Master plan: [`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`](plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md). Street View drill-down: [`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`](plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md). Orchestration: [`docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`](docs/SERVER-AND-INFERENCE-ARCHITECTURE.md).

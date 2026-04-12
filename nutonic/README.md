@@ -5,6 +5,8 @@
 
 Use **JDK 17+** and set **`JAVA_HOME`** (or `org.gradle.java.home` in `~/.gradle/gradle.properties`). See **`gradle.properties.PERSONAL.example`** and **`../rules/11-vscode-testing-linting-and-ci.md`** (section 7 — Team JDK).
 
+**Screen music:** Ship **one** background loop per primary route; place assets per **`../docs/SCREEN-MUSIC-SPEC.md`**. Every production screen must include the **header music on/off** control (`audio.music_master_enabled` in **`../docs/CLIENT-SETTINGS-SPEC.md`** §6.7).
+
 To setup the environment, please consult these [instructions](https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-setup.html).
 
 ## How to run

@@ -1,0 +1,23 @@
+# Hub-side rules for NuTonic/code-repo-with-data (dataset repo only).
+#
+# Do NOT copy the repo-root .gitignore here: rules like `data/*`, `refs`, and
+# `stitch` tell the Hub API to skip uploads for those trees.
+#
+# Push this file to the Hub as `.gitignore`:
+#   hf upload NuTonic/code-repo-with-data hf-dataset.gitignore .gitignore --repo-type dataset
+# Keep excluding BOTH `.gitignore` (repo root) and `**/.gitignore` (nested) from
+# `hf upload-large-folder`. Python fnmatch does NOT match `**/.gitignore` to the
+# root file `.gitignore`, so the root dev file was re-committed and overwrote this.
+
+.env
+.env.*
+**/.env
+**/.env.*
+
+**/build/**
+**/.gradle/**
+**/out/**
+
+**/node_modules/**
+
+logs/

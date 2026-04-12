@@ -1,6 +1,6 @@
 # VS Code, Kotlin tests, linters, and CI (nutonic monorepo)
 
-This document is the **authoritative rule** for how we develop the Kotlin Multiplatform client under `nutonic/`, how we assess common VS Code + Gradle advice, and how CI produces **multiplatform client artifacts** aligned with `03-kotlin-multiplatform-structure.md`.
+This document is the **authoritative rule** for how we develop the Kotlin Multiplatform client under `nutonic/`, how we assess common VS Code + Gradle advice, how CI produces **multiplatform client artifacts** aligned with `03-kotlin-multiplatform-structure.md`, and how **mandatory local verification** uses **PM2** and **`logs/`** before client changes ship.
 
 ---
 
@@ -126,6 +126,7 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 
 ### CI conventions
 
+- **Themed typography (ship contract):** Release builds must use **bundled** **Space Grotesk**, **Inter**, and **Orbitron** under the KMP resource tree—**no** `fonts.googleapis.com` or other runtime font CDNs (`docs/DESIGN.md` §3, `docs/NU_TONIC_ARTIFACT_REFERENCE.md` §10). APK/DEB/web jobs implicitly verify that theme code resolves `Font` resources; add a dedicated Gradle “font manifest” check later if product wants an explicit gate.
 - **`--no-configuration-cache`** is used in CI to avoid known edge cases with some Kotlin/JS and third-party tasks; local builds may still use configuration cache per `gradle.properties`.
 - **`android-actions/setup-android`** runs **before** appending `sdk.dir=${ANDROID_SDK_ROOT}` to `local.properties`; otherwise `sdk.dir` can be empty on a clean runner.
 - **`MAPS_API_KEY=CI_STUB`** mirrors `default.local.properties`; real keys stay out of CI.
@@ -147,8 +148,10 @@ Extend the workflow when product requires store-ready artifacts.
 1. Install **JDK 17+** (CI uses **21** on Ubuntu). Ensure Gradle can see it (see **section 7 — Team JDK**).
 2. Open **`nutonic/`** in VS Code (or multi-root including it).
 3. Install recommended extensions; reload window.
-4. Run `./gradlew test` and `./gradlew quality`.
-5. Before pushing, run `./gradlew formatKotlin` if ktlint fails on style-only issues.
+4. At **repository root**: **`npm install`** (PM2 + scripts) when `package-lock.json` changes or on first clone.
+5. **Mandatory — PM2 local verification** for any PR that touches **`nutonic/**`** (see **§9**): run **`nutonic-ci-local`**, wait for completion, **assess** `logs/nutonic-ci-local.out.log` and `logs/nutonic-ci-local.err.log` (**`BUILD SUCCESSFUL`** required). For PRs that change **`webApp`**, **`androidApp`**, **`desktopApp`**, **`shared`** build logic, or **`nutonic/kotlin-js-store/`**, also run **`nutonic-build-verify`** and assess its logs the same way.
+6. Run **`./gradlew test`** and **`./gradlew quality`** from **`nutonic/`** when iterating (or rely on §9 PM2 equivalents); keep in sync with what CI runs.
+7. Before pushing, run **`./gradlew formatKotlin`** if ktlint fails on style-only issues.
 
 ---
 
@@ -214,62 +217,84 @@ If **`quality`** fails on **ktlint** for the legacy template tree, run **`./grad
 
 ---
 
-## 9. PM2 (optional): local Gradle test/build threads → `logs/`
+## 9. PM2 (mandatory): local Gradle test/build threads, assessment, and `logs/`
 
-For long-running or background verification (for example **`./gradlew test --continuous`** while editing), the repo root includes **`ecosystem.config.cjs`** and **`scripts/pm2-run-gradle.cjs`**. PM2 writes **stdout/stderr** to **`logs/*.log`** at the repository root; that directory is **gitignored** so log output never lands in commits.
+The repository root includes **`ecosystem.config.cjs`** and **`scripts/pm2-run-gradle.cjs`**. **PM2 is the required way** to run the **mandatory local verification** commands in §9.2 so that **stdout/stderr** are captured under **`logs/*.log`** (gitignored) for **review before merge**. You may still run raw **`./gradlew`** from **`nutonic/`** while iterating (§3–§4), but **assessment for shipping** (PR / merge) must go through §9.2 unless §9.4 fallback applies.
 
-**Detailed runbook (verified commands, log interpretation, Windows pitfalls):** **`docs/PM2_LOCAL_VERIFICATION.md`**.
+**Detailed runbook (commands, log interpretation, Windows pitfalls):** **`docs/PM2_LOCAL_VERIFICATION.md`**.
 
-### Prerequisites
+### 9.1 Prerequisites
 
-- **Node.js** (LTS) and **`npm install`** once at the **repository root** (installs **`pm2` v6.x** as a devDependency — keep this aligned with your global PM2 daemon to avoid **`pm2 jlist`** banner noise; see runbook §6).
+- **Node.js** (LTS) and **`npm install`** at the **repository root** whenever **`package.json`** / **`package-lock.json`** changes (installs **`pm2` v6.x** — keep aligned with your global PM2 daemon to avoid **`pm2 jlist`** banner noise; see runbook §6).
 - **`JAVA_HOME`** / JDK as in §7 — Gradle behavior is unchanged; PM2 only supervises the process.
 
-### Defined apps (start one at a time unless you want parallel Gradle load)
+### 9.2 Mandatory testing and assessment (before PR / merge)
+
+**Scope:** Any change under **`nutonic/`** that you intend to merge.
+
+| Step | Action | Pass criteria |
+|------|--------|----------------|
+| **A. Lint + unit tests (always)** | From **repository root**: `npm install` if needed → `npx pm2 start ecosystem.config.cjs --only nutonic-ci-local` → `npm run pm2:wait-stopped -- nutonic-ci-local 3600000` (or wait until PM2 shows **stopped**). | **`logs/nutonic-ci-local.out.log`** contains **`BUILD SUCCESSFUL`**. **`logs/nutonic-ci-local.err.log`** reviewed (JVM noise vs new errors). |
+| **B. Smoke build (when required)** | Same pattern with **`nutonic-build-verify`** and **`npm run pm2:wait-stopped -- nutonic-build-verify 7200000`** (long timeout; webpack + wasm). | **`logs/nutonic-build-verify.out.log`** contains **`BUILD SUCCESSFUL`**. |
+
+**When step B is required:** The PR modifies **`nutonic/webApp/`**, **`nutonic/androidApp/`**, **`nutonic/desktopApp/`**, **`nutonic/shared/`** in ways that affect compilation or resources, **or** **`nutonic/kotlin-js-store/`**, **or** root Gradle / version catalog under **`nutonic/`** that affects those modules. If in doubt, run **B**.
+
+**Assessment record:** In the PR description (or review comment), state that **§9.2** was run and name the log files checked (or paste the final **`BUILD SUCCESSFUL`** line). Do not commit **`logs/`**.
+
+**CI (§5)** remains the **cross-platform** authority; §9.2 is **mandatory local** evidence that the same Gradle graph passed on **your** machine with **retained logs**.
+
+### 9.3 PM2 apps reference (start one optional app at a time for extra threads)
 
 | PM2 name | Gradle intent |
 |----------|----------------|
 | **`nutonic-test`** | `./gradlew --no-configuration-cache test` |
 | **`nutonic-quality`** | `./gradlew --no-configuration-cache quality` |
-| **`nutonic-ci-local`** | `./gradlew --no-configuration-cache --continue quality test` (mirrors CI “lint + tests both run”) |
-| **`nutonic-build-verify`** | Broad smoke build per §8 one-liner (Android debug, desktop compile, JS + Wasm production webpack) |
-| **`nutonic-test-watch`** | `./gradlew test --continuous` — **long-running**; `autorestart` enabled if the watcher crashes |
+| **`nutonic-ci-local`** | **Mandatory** §9.2 step A — `./gradlew --no-configuration-cache --continue quality test` |
+| **`nutonic-build-verify`** | **Mandatory** §9.2 step B when triggered — same tasks as §8 one-liner |
+| **`nutonic-test-watch`** | `./gradlew test --continuous` — **optional** while editing; long-running; `autorestart` if the watcher crashes |
 
-### Commands
+### 9.4 Fallback (PM2 or Node unavailable)
+
+If **Node**, **npm**, or **PM2** cannot run on the machine (document **why** in the PR), you must run the **identical Gradle invocations** from a terminal, **capture** the full console output to a **local file** (not committed), and paste or attach the **tail** showing **`BUILD SUCCESSFUL`** (or failure) in the PR. This is **exception-only**; fix the toolchain when possible.
+
+### 9.5 Commands (repository root)
 
 ```bash
-# repository root
 npm install
-npm run pm2:test          # or: npx pm2 start ecosystem.config.cjs --only nutonic-test
 npm run pm2:ci-local
-tail -f logs/nutonic-test.out.log   # optional; or: npx pm2 logs nutonic-test
-npm run pm2:stop          # best-effort delete of the nutonic-* app names
-npm run pm2:jlist         # clean JSON array (strips pm2 jlist banners) — pipe to jq if desired
-npm run pm2:wait-stopped -- nutonic-build-verify 3600000   # poll until app leaves "online"
+npm run pm2:wait-stopped -- nutonic-ci-local 3600000
+# assess logs/nutonic-ci-local.out.log and .err.log
+
+npm run pm2:build-verify   # when §9.2 step B applies
+npm run pm2:wait-stopped -- nutonic-build-verify 7200000
+
+npm run pm2:stop           # remove nutonic-* PM2 entries when done
+npm run pm2:jlist          # clean JSON for tooling
+npm run pm2:test           # optional ad-hoc
 ```
 
-### Helper scripts
+### 9.7 Helper scripts
 
 | Script | Role |
 |--------|------|
 | **`scripts/pm2-jlist-json.cjs`** | Prints parseable **`pm2 jlist`** JSON (skips leading non-JSON lines). |
 | **`scripts/pm2-wait-until-stopped.cjs`** | Async poll until a named app is not **`online`** (timeout arg, default 1h). |
-| **`scripts/pm2-stop-nutonic.cjs`** | **`npx pm2 delete`** for each **`nutonic-*`** name. |
+| **`scripts/pm2-stop-nutonic.cjs`** | Deletes registered **`nutonic-*`** PM2 apps without spurious errors. |
 
-### Implications and caveats
+### 9.6 Implications and caveats
 
-- **Not a substitute for CI:** GitHub Actions remains authoritative for multi-OS artifacts (§5). PM2 is for **developer convenience** and **local log retention**.
-- **Gradle parallelism:** Starting **`nutonic-test`** and **`nutonic-quality`** at the same time spins **two** Gradle invocations; they coordinate via the daemon but increase CPU/RAM use. Prefer **`nutonic-ci-local`** for a single combined run.
+- **CI is still required:** GitHub Actions (§5) is authoritative for **Ubuntu/macOS** matrix artifacts. **§9.2 is mandatory in addition** for local evidence and **`logs/`** retention, not a replacement for green CI.
+- **Gradle parallelism:** Starting **`nutonic-test`** and **`nutonic-quality`** at the same time spins **two** Gradle invocations; they coordinate via the daemon but increase CPU/RAM use. For mandatory checks, use **`nutonic-ci-local`** (single invocation) unless you intentionally split runs.
 - **Windows vs Unix:** The launcher selects **`nutonic/gradlew.bat`** vs **`gradlew`** automatically (aligned with **`.vscode/tasks.json`**).
 - **Do not pipe raw `pm2 jlist` through PowerShell `ConvertFrom-Json`:** PM2’s payload can include **duplicate env keys** differing only by case; use **`npm run pm2:jlist`** or **`node scripts/pm2-jlist-json.cjs`** and parse in Node.
 - **`pm2 update`:** Restarts the PM2 daemon and may **restore** apps from **`~/.pm2/dump.pm2`**; use with care on shared laptops (see runbook §6.3).
 - **Web / Wasm builds:** **`nutonic-build-verify`** can take a long time and may require a valid **`kotlin-js-store`** / lockfile state per §7.
-- **Future `server/` tests:** Add a second PM2 app (e.g. **`pytest`** or **`uv run pytest`**) with **`out_file` / `error_file`** under **`logs/`** when the Python server lands (`plans/2026-04-07-gradio-terramind-backend.md`).
+- **Future `server/` tests:** When **`server/`** lands, extend mandatory assessment with a PM2 app (e.g. **`pytest`**) and **`logs/`** paths; document in **`docs/PM2_LOCAL_VERIFICATION.md`** and add a row to §9.2 (`plans/2026-04-07-gradio-terramind-backend.md`).
 
 ---
 
 ## 10. Related rules
 
 - **`03-kotlin-multiplatform-structure.md`** — where tests and shared code live.
-- **`05-networking-leaderboard.md`** — server contracts (not covered by this file).
+- **`05-networking-leaderboard.md`** — **local** default leaderboards, optional community API, ranked contracts (not covered by this file).
 - **`README.md`** (rules) — reading order for product and UX constraints.

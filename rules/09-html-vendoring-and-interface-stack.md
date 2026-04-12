@@ -52,7 +52,7 @@ Only document this in `README` or ADR when product **opts in**. Then **all** of 
    - Clarify: **Web-only** (static + small Kotlin/JS bridge) vs **WebView on every native target**. The latter is a **different product architecture** from Compose-parity NU:TONIC.
 
 3. **Bridge contract**  
-   - Define a **single JSON/message contract** between Kotlin and the page (navigation, auth state, leaderboard payload). **No** business rules duplicated inside `<script>` without tests.
+   - Define a **single JSON/message contract** between Kotlin and the page (navigation, optional account state, leaderboard payload). **No** business rules duplicated inside `<script>` without tests.
 
 4. **Maps**  
    - A map inside WebView (MapLibre/Leaflet) vs native map SDKs **will diverge** in gestures, performance, and licensing. **Rule:** One **map strategy** per target family, documented; avoid invisible mixing of WebView map + native Compose map on the same screen without explicit UX sign-off.

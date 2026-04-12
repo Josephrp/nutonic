@@ -31,11 +31,15 @@ All interactive panels must utilize **Glassmorphism**.
 ---
 
 ## 3. Typography
-We use a dual-typeface system to bridge the gap between "Machine Intelligence" and "Human Readability."
+We use a **three-family** stack so HUD and long-form copy stay distinct: engineered display, readable UI, and tactical numerics.
 
 *   **Display & Headlines (`Space Grotesk`):** Chosen for its geometric, engineered feel. Use `display-lg` (3.5rem) for major terminal headers. Always set to uppercase with +5% letter spacing to evoke a digital broadcast.
 *   **Titles & Body (`Inter`):** This is our "Operating System" font. It provides the high-legibility needed for complex game stats.
+*   **Tactical / numeric HUD (`Orbitron`):** Sequence IDs, coordinate readouts, latency or accuracy micro-labels, and other “sci-fi instrument” lines where stitch uses tactical display—**not** for whole paragraphs. Prefer **Inter** for any block of body copy.
 *   **Visual Hierarchy:** Headlines should feel "heavy" and authoritative, while body text should feel light and recessed (`on_surface_variant`).
+
+### Ship contract (repository build / publish / CI)
+**Themed typography is vendored in this repo**—production and release pipelines must **not** depend on runtime font CDNs (e.g. `fonts.googleapis.com`). Implementations should load **Space Grotesk**, **Inter**, and **Orbitron** from packaged assets (Compose Multiplatform convention: e.g. `nutonic/shared/src/commonMain/composeResources/font/` with `FontFamily` / `NutonicTypography` in theme code). **`docs/DESIGN.md`** (this file) plus **`rules/02-design-system.md`** are the canonical spec for what ships; CI should fail or warn once a font-check task exists and expected files are missing.
 
 ---
 
@@ -75,6 +79,11 @@ Forget black shadows. In this system, "elevation" is light.
 *   **Rule:** Zero dividers. 
 *   **Separation:** Use `md` (0.75rem) vertical spacing. Group items by nesting them inside a `surface_container_low` wrapper. 
 *   **Interactions:** List items should highlight with a subtle `surface_bright` flash on tap.
+
+### Screen music control (header chrome)
+*   **Presence:** Every shipped screen exposes a **music on/off** control in the **top bar** (trailing cluster, e.g. beside profile), per [`SCREEN-MUSIC-SPEC.md`](SCREEN-MUSIC-SPEC.md). Same touch target and glow discipline as other header actions; **active state** (muted) must be visually obvious (icon + optional subtle dim of the “signal” accent).
+*   **Semantics:** The control reflects **global** persisted `audio.music_master_enabled` from [`CLIENT-SETTINGS-SPEC.md`](CLIENT-SETTINGS-SPEC.md) §6.7 — header and **SETUP → Audio** stay in sync.
+*   **Theming:** Use `primary` / `on_surface` for the icon; do not rely on color alone — pair with filled vs outline icon variant where the icon set allows.
 
 ---
 

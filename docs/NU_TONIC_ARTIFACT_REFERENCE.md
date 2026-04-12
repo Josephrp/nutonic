@@ -1,13 +1,14 @@
 # NU:TONIC — Complete artifact reference and formatting guide
 
-This document is the **implementation-facing** companion to the visual and HTML references. Game apps must be **highly themed** and depend on **static, custom-designed artifacts** held in the repository—not on runtime CDN styling. Use this guide when mapping Stitch/HTML reference layouts into **Compose Multiplatform** (or any other UI stack): **tokens, hierarchy, spacing, and copy** must align here and in **`rules/DESIGN.md`**.
+This document is the **implementation-facing** companion to the visual and HTML references. Game apps must be **highly themed** and depend on **static, custom-designed artifacts** held in the repository—not on runtime CDN styling. Use this guide when mapping Stitch/HTML reference layouts into **Compose Multiplatform** (or any other UI stack): **tokens, hierarchy, spacing, and copy** must align here and in **`docs/DESIGN.md`** (with **`rules/02-design-system.md`** for Kotlin theme rules).
 
 **Precedence when sources differ**
 
-1. **`rules/DESIGN.md`** — color semantics, glass/glow rules, typography roles, component behavior.  
-2. **`rules/01-navigation-architecture.md`** — canonical tab routes and depth.  
-3. **Stitch `code.html`** — layout density, Tailwind token names, Orbitron usage on specific screens, Material Symbols choices.  
-4. **`refs/stitch/nu_tonic_interface_design_specification.html`** (when present) — product copy, footguns, screen list.  
+1. **`docs/DESIGN.md`** — color semantics, glass/glow rules, **typography (Space Grotesk + Inter + Orbitron tactical)**, component behavior, ship contract (vendored fonts).  
+2. **`rules/02-design-system.md`** — semantic tokens in code, bundled fonts, `NutonicTypography`, blur fallbacks.  
+3. **`rules/01-navigation-architecture.md`** — canonical tab routes and depth.  
+4. **Stitch `code.html`** — layout density, Tailwind token names, tactical font call sites, Material Symbols choices.  
+5. **`refs/stitch/nu_tonic_interface_design_specification.html`** (when present) — product copy, footguns, screen list.  
 
 If Stitch’s Tailwind `borderRadius.lg` (0.5rem) conflicts with DESIGN’s primary button radius (1rem), **implement DESIGN** (≈12–16dp CTA corners) unless product signs a waiver.
 
@@ -17,8 +18,8 @@ If Stitch’s Tailwind `borderRadius.lg` (0.5rem) conflicts with DESIGN’s prim
 
 | Kind | Canonical path | Role |
 |------|----------------|------|
-| Design system prose | `rules/DESIGN.md` | North star, palette, glass, type, components, do/don’t. |
-| Navigation truth | `rules/01-navigation-architecture.md` | Home · Map · Play · Leaderboard · Settings; stitch label mapping. |
+| Design system prose | `docs/DESIGN.md` | North star, palette, glass, type (incl. Orbitron HUD), components, do/don’t; ship contract for build/CI. |
+| Navigation truth | `rules/01-navigation-architecture.md` | **Five** shell tabs: **SCAN · INTEL · RANK · SETUP · PRO** (route IDs `ScanHub`, `Intel`, `Rank`, `Setup`, `Pro`); tactical labels are the real UI strings. Legacy prose (Home/Map/Play/Leaderboard/Settings) maps per `01`. |
 | Design rules (code) | `rules/02-design-system.md` | How to apply tokens in Kotlin theme. |
 | Screen inventory | `rules/07-screens-checklist.md` | Which `refs/stitch/<id>/` pairs exist. |
 | HTML reference | `refs/stitch/<screen_id>/code.html` | Structure, class names, inline CSS hooks (**reference only**). |
@@ -26,6 +27,9 @@ If Stitch’s Tailwind `borderRadius.lg` (0.5rem) conflicts with DESIGN’s prim
 | Global UX spec | `refs/stitch/nu_tonic_interface_design_specification.html` | Flows, footguns, nav intent. |
 | Interface stack | `rules/09-html-vendoring-and-interface-stack.md` | No production CDN; Compose is primary UI. |
 | Server-mediated cache | `rules/13-client-cache-and-data-plane.md` | Clients pull **bundles / manifests** from the NU:TONIC API only; **no** Hugging Face CLI or Hub tokens on device. |
+| Per-map leaderboard + POI + scores | `docs/LEADERBOARD-MAP-POI-SCORES.md` + `rules/05-networking-leaderboard.md` | **Non-ranked default:** **local** per-`map_id` rows (no score POST). Optional **GET** reference/community, **POST** POI and optional community score when shipped. |
+| POI bundles + official clients | `docs/POI-PACKAGES-AND-OFFICIAL-CLIENTS.md` + `rules/13-client-cache-and-data-plane.md` | `poi.json` + `mapbox/` + `sentinel-2-l2a/` tree, server-held downsampled assets, **store** JWT writes. |
+| Screen background music | [`docs/SCREEN-MUSIC-SPEC.md`](SCREEN-MUSIC-SPEC.md) + [`docs/CLIENT-SETTINGS-SPEC.md`](CLIENT-SETTINGS-SPEC.md) §6.7 | **One** loop per primary route (`track_id`); **bundled** under `shared` resources; **header music on/off** on every shipped screen; no CDN streaming in v1. |
 
 **Static assets the themed app must vendor in-repo** (no Google Fonts / Material Symbols CDN in production):
 
@@ -33,12 +37,13 @@ If Stitch’s Tailwind `borderRadius.lg` (0.5rem) conflicts with DESIGN’s prim
 - **Icons:** Equivalent vectors or a **single** bundled icon font set; map Stitch `material-symbols-outlined` names to your set consistently.  
 - **Textures:** Optional scanline/grid overlays as drawable/asset files (PNG/SVG) or Compose-drawn equivalents.  
 - **Brand:** Logo mark, globe/splash art if used—stored under e.g. `shared/src/commonMain/composeResources/` (or project convention).  
+- **Music:** One **loopable** file per `track_id` in [`SCREEN-MUSIC-SPEC.md`](SCREEN-MUSIC-SPEC.md) (e.g. `composeResources/files/music/`); cleared licenses; consistent loudness across tracks.  
 
 ---
 
 ## 2. Semantic color tokens (canonical hex)
 
-Use **only these names** in theme code; hex values below match **`rules/DESIGN.md`** and Stitch Tailwind extension (aligned set).
+Use **only these names** in theme code; hex values below match **`docs/DESIGN.md`** and Stitch Tailwind extension (aligned set).
 
 ### 2.1 Core surfaces (Void)
 
@@ -226,11 +231,12 @@ Pseudo-ring: 2dp stroke primary_container, circular, scaled from pin anchor; opa
 ### 5.8 Bottom navigation (“Horizon bar”)
 
 - Container: **`surface_container_low`** + **~24dp** blur equivalent.  
-- **Play** (canonical route): **elevated** circular **`primary_container`** with **strong bloom**.  
+- **SCAN** (`ScanHub`): **elevated** circular **`primary_container`** with **strong bloom** (default dominant game entry per `rules/01-navigation-architecture.md`, `rules/02-design-system.md`).  
 - **Active tab:** **2dp tall** `primary` bar **above** the icon (not below).  
 - Inactive icons: **`primary` at ~60% opacity** or `on_surface_variant`.  
+- **Tabs (labels = routes):** **SCAN** (converged map/play hub), **INTEL** (dashboard), **RANK** (global + pick `map_id` leaderboard), **SETUP** (settings/protocol), **PRO** (non-game VLA tools — UI spec forthcoming).
 
-**Stitch label mapping** (when reading mocks): `SCAN` → gameplay/map context; `INTEL` → intel feed if product adds; `RANK` → Leaderboard; `SQUAD` → Settings or social—see `rules/01-navigation-architecture.md`.
+**Reading older stitch/HTML:** canonical shell tabs are **SCAN / INTEL / RANK / SETUP / PRO**—see `rules/01-navigation-architecture.md`.
 
 ### 5.9 Top app bar
 
@@ -248,7 +254,7 @@ Pair each row with **`refs/stitch/<folder>/code.html` + `screen.png`** when thos
 | 1 | Splash | `splash_screen` | Globe / glitch art, **NU:TONIC** logotype, tagline *“MEMORY IS ALL THAT REMAINS”*, **INITIALIZE PROTOCOL** CTA, footer status row | Tagline flanked by thin horizontal rules; footer: green **SYSTEM STABLE**, signal + **XP ACTIVE**, sector label; **BUILD** micro string corner. Dark void + cyan glow on title. |
 | 2 | Authentication | `authentication` | Rocket/brand icon, **NU:TONIC**, system version string, card “Reconnect to Earth”, identity + password fields, **ENTER THE NETWORK**, Create Identity, biometric/QR hints | Card is elevated glass panel; **EMERGENCY RESET?** link right-aligned above primary; footer **SERVER:** + copyright. |
 | 3 | Role selection | `role_selection` | **SELECT YOUR IDENTITY**, subtitle italic gray, three horizontal **role cards** (Human / Astronaut / Alien) with icon, tag (STABLE / VOYAGER / XENO), chevron, **INITIALIZE** + bolt | Cards: role-specific accent (orange rocket, green alien); protocol version under CTA. |
-| 4 | Dashboard | `dashboard` | XP chip, **RANK PROGRESS** + bar, circular **PLAY NOW**, **MEMORY STABILITY** gradient bar, **CURRENT SESSION** media card, **DAILY PROTOCOLS** checklist | Progress bars thin cyan; memory bar green→purple gradient; quest rows with check circles and XP rewards. |
+| 4 | Dashboard (**INTEL** tab) | `dashboard` | XP chip, **RANK PROGRESS** + bar, circular **PLAY NOW** (may deep-link to **SCAN** with last/featured `map_id`), **MEMORY STABILITY** gradient bar, **CURRENT SESSION** media card, **DAILY PROTOCOLS** checklist | Progress bars thin cyan; memory bar green→purple gradient; quest rows with check circles and XP rewards. |
 | 5 | World map gameplay | `world_map_gameplay` | Header wordmark, **SCORE PREVIEW** card, **SIGNAL EXPIRATION** timer + cyan dot, hint bulb, **map** with grid + **pin** + `SCAN_POINT_*` label, **LOCK IN GUESS**, **LAT/LNG/ELV** row, bottom bar | Timer **tabular / digital** feel; primary CTA full width; coords **monospace**; scanline overlay optional. |
 | 6 | Success overlay | `success_overlay` | Modal card, cyan check in glowing circle, particles (respect reduced motion), **SIGNAL LOCK ACHIEVED**, precision + XP stat boxes, **VIEW FULL RESULTS →**, **RETURN TO SECTOR MAP** | **PRECISION** neutral; **GROWTH** XP in **tertiary / green**; primary cyan button. |
 | 7 | Final results | `final_results` | **MISSION COMPLETE**, sequence id, large score card, **LIVE INTEL MAP** card, **TACTICAL BREAKDOWN** rows, **LEVEL UP PROGRESSION** bar, **GLOBAL RANKS** + role filters, leaderboard rows, **PLAY AGAIN**, **SHARE DATA** | Sequence **monospace**; score **large cyan**; filters **HUMAN | ASTRONAUT | ALIEN**; ranks **1 cyan border**, **2 orange + YOU**, **3 green**; each row **ACCURACY %** + **LATENCY ms**. |
@@ -256,7 +262,7 @@ Pair each row with **`refs/stitch/<folder>/code.html` + `screen.png`** when thos
 
 ### 6.1 Leaderboard row schema (presentation)
 
-For **GLOBAL RANKS** (results screen and Leaderboard tab), each row must support:
+For **GLOBAL RANKS** (results screen, **RANK** tab, and embedded leaderboard in **SCAN**), each row must support:
 
 - **Rank** (1-based), **display name**, **role tag** (e.g. CARTOGRAPHER), **title** (e.g. GLOBAL MASTER), **score** (tabular), **accuracy** (%), **latency** (ms).  
 - **You** row: distinct **secondary_container** border; score aligns with mission score.  
@@ -276,9 +282,10 @@ Stitch uses **`material-symbols-outlined`** with `data-icon` for tooling. Standa
 |---------|-------------------------|
 | Brand / signal | `sensors` |
 | Profile | `account_circle` |
-| Leaderboard / rank | `leaderboard` |
-| Home / play | `home`, `rocket_launch` (per mock) |
-| Settings | `settings` or gear in mock |
+| Leaderboard / **RANK** tab | `leaderboard` |
+| **INTEL** (dashboard) vs **SCAN** (play hub) | `home` (or mock equivalent for INTEL); **`rocket_launch`** / crosshair-style icon for **SCAN** per mock — keep **one** mapping in the route enum |
+| **SETUP** | `settings` or gear in mock |
+| **PRO** (VLA) | TBD when UI spec lands |
 | Hint | `lightbulb` |
 | Lock guess | `lock` |
 | Security | `shield` |
@@ -328,11 +335,12 @@ Mandatory alignment with **`rules/08-ux-and-performance-footguns.md`**:
 
 | Document | Purpose |
 |----------|---------|
-| `rules/DESIGN.md` | Authoritative design system prose |
+| `docs/DESIGN.md` | Authoritative design system prose (shipped typography + tokens) |
 | `rules/02-design-system.md` | Theme application in code |
 | `rules/04-maps-and-gameplay.md` | Map abstraction and gameplay |
 | `rules/05-networking-leaderboard.md` | API hydration |
-| `rules/06-server-embedding-and-ai.md` | Server-side embeddings |
+| `rules/06-server-vlm-tim-and-on-device-ml.md` | Server **TiM**, VLM, on-device ML rules |
+| `docs/INTEL-TAB-SPEC.md` | **INTEL** (dashboard) product and layout spec beyond stitch tokens |
 | `plans/2026-04-07-gradio-terramind-backend.md` | Reference server architecture |
 
 ---

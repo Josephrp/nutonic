@@ -1,6 +1,6 @@
 # Design system rules
 
-Source of truth: **`refs/DESIGN.md`**, with stitch HTML as **layout and density** reference.
+**Typography and visual tokens for shipped builds:** canonical product spec is **`docs/DESIGN.md`** (Neon Relic palette, glass rules, **Space Grotesk + Inter + Orbitron** roles, component behaviors). **This file** adds **implementation** constraints: semantic tokens in Kotlin, bundled font files (no runtime font CDN), `NutonicTypography` indirection, and degraded blur where needed. **Stitch** (`refs/stitch/...`) is **layout and density** reference only—if a mock predates `docs/DESIGN.md`, implement **`docs/DESIGN.md`** and record deltas in theme code. **`refs/DESIGN.md`** is optional legacy token prose when present in a checkout; it does **not** override `docs/DESIGN.md` for new work.
 
 ## Colors
 
@@ -12,9 +12,9 @@ Source of truth: **`refs/DESIGN.md`**, with stitch HTML as **layout and density*
 
 - **Display / headlines:** Space Grotesk — uppercase + modest positive letter-spacing where DESIGN specifies.
 - **Body / UI chrome:** Inter (or platform equivalent with same role).
-- **Tactical / numeric HUD:** Monospace or Orbitron **only** where stitch/spec demands strong sci-fi labeling; do not set entire screens in display fonts (readability footgun in spec).
+- **Tactical / numeric HUD:** **Orbitron** (bundled with the app alongside Space Grotesk and Inter) or monospace **only** where stitch/spec demands strong sci-fi labeling; do not set entire screens in display fonts (readability footgun in spec).
 
-Load fonts in a **platform-appropriate** way; theme exposes `NutonicTypography`, not raw `Font` in feature screens.
+Load fonts in a **platform-appropriate** way; theme exposes `NutonicTypography`, not raw `Font` in feature screens. **Orbitron** files live in repo resources (not runtime CDN) for production builds.
 
 ## Surfaces and depth
 
@@ -28,7 +28,8 @@ Load fonts in a **platform-appropriate** way; theme exposes `NutonicTypography`,
 | Primary button | Filled `primary_container`, large radius (~12–16dp), pressed/hover scale per DESIGN |
 | Inputs | Recessed surface, **focus = primary stroke + small outer glow**, label 4dp above field |
 | Cards | Rounded; separation by **spacing and surface level**, not divider lines |
-| Bottom bar | Blurred/low surface; **Play node elevated**; active indicator **above** icon |
+| Bottom bar | Blurred/low surface; **elevate the dominant game tab** — **default:** **SCAN** hub tab (see `rules/01-navigation-architecture.md`); active indicator **above** icon |
+| Header music toggle | **Every** checklist screen (`rules/07-screens-checklist.md`): trailing **music on/off** bound to `audio.music_master_enabled`; matches SETUP Audio section. **One BGM loop per primary route** — mapping and assets in [`docs/SCREEN-MUSIC-SPEC.md`](../docs/SCREEN-MUSIC-SPEC.md). |
 
 ## Motion and accessibility
 

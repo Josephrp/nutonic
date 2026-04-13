@@ -1,5 +1,7 @@
 *.iml
 .gradle
+.kotlin/
+kotlin-js-store/
 /local.properties
 # Optional local Gradle overrides (never commit machine paths)
 gradle.properties.PERSONAL
@@ -12,6 +14,7 @@ gradle.properties.PERSONAL
 /.idea/assetWizardSettings.xml
 .DS_Store
 build/
+*.hprof
 /captures
 .externalNativeBuild
 .cxx

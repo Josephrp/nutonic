@@ -8,11 +8,15 @@ on:
   push:
     paths:
       - "nutonic/**"
+      - "server/**"
+      - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
       - "rules/**"
   pull_request:
     paths:
       - "nutonic/**"
+      - "server/**"
+      - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
       - "rules/**"
 
@@ -25,6 +29,20 @@ defaults:
     working-directory: nutonic
 
 jobs:
+  server-unit-tests:
+    name: Python game server (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dev dependencies
+        run: pip install -e "./server[dev]"
+      - name: Pytest
+        working-directory: server
+        run: pytest -q
+
   quality-and-unit-tests:
     name: Quality + JVM tests
     runs-on: ubuntu-latest

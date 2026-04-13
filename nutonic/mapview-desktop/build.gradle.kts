@@ -1,4 +1,4 @@
-plugins {
+﻿plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
     id("org.jetbrains.compose")
@@ -9,6 +9,7 @@ version = "1.0-SNAPSHOT"
 
 kotlin {
     jvm("desktop")
+    jvmToolchain(17)
 
     sourceSets {
         val commonMain by getting {
@@ -19,7 +20,7 @@ kotlin {
         }
         val desktopMain by getting {
             dependencies {
-                implementation("io.ktor:ktor-client-cio:2.2.1")
+                implementation("io.ktor:ktor-client-cio:3.0.3")
                 implementation(compose.desktop.common)
             }
         }

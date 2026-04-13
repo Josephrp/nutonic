@@ -26,7 +26,7 @@ Product default: **mission selection**, **map selection**, **play on map**, and 
 
 ## 3. POI sharing as light social
 
-- **`POST /api/maps/{map_id}/poi`** (optional) can record user-suggested points; **sharing** a POI with others (system share sheet, deep link `nutonic://map/{map_id}?poi={poi_id}`, or HTTPS universal link) is **explicitly allowed** and helps discovery (“play this sector / check this marker”).
+- **`POST /api/v1/maps/{map_id}/poi`** (optional) can record user-suggested points; **sharing** a POI with others (system share sheet, deep link `nutonic://map/{map_id}?poi={poi_id}`, or HTTPS universal link) is **explicitly allowed** and helps discovery (“play this sector / check this marker”).
 - POI share is **not** the in-round guess unless product merges flows; keep **guess submit** and **POI suggest** distinct in UI (`rules/05-networking-leaderboard.md`).
 - **Store builds:** treat **POI + score writes** as **official-client-only** when enabled—**JWT**, **registered signing identity**, **strict JSON Schema**—see **`docs/POI-PACKAGES-AND-OFFICIAL-CLIENTS.md`**. **Ranked** missions add **round_ticket**, **guess-only** submit, **server-verified** scores, **server-secret** POIs for active rounds. **`POST .../poi`** on the **game server** is the **only** ingestion path; once **accepted**, user POIs join **map selection**, **hint hydration**, and **ranked** pools for others **immediately**, alongside **`data/`**-curated packages (`rules/00-product-intent.md`, `docs/RANKED-MODE.md` §4).
 

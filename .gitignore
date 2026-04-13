@@ -12,3 +12,8 @@ logs/
 
 # Root npm tooling (pm2, scripts)
 node_modules/
+
+# Python bytecode and caches (repo scripts under data/scripts/, scripts/, etc.)
+__pycache__/
+*.py[cod]
+*$py.class

@@ -339,12 +339,12 @@ Normative contracts live with the reference server. Illustrative endpoints (REST
 - `POST /api/ranked/rounds/{round_id}/forfeit-reveal` — **optional** ranked: user chose **peer reveal** before `submit`; server invalidates ticket, records **DNF/forfeit**, returns **no** verified score row.
 - `POST /api/ranked/rounds/{round_id}/forfeit-assists` — **optional** ranked: user opened **Street View description** and/or **useful-hint** tiers before `submit`; same ticket invalidation as **`forfeit-reveal`** (OpenAPI may merge into one **forfeit-ranked-integrity** endpoint with a `reason` enum).
 - `POST /rounds/{id}/hint` — consumes hint credit, may advance zoom (optional).
-- `GET /api/maps` — list maps/levels for selection.
-- `GET /api/maps/{map_id}/leaderboard` — query: matchup, role, pagination, ETag.
-- `GET /api/maps/{map_id}/reference` — optional golden / precomputed AI bundle + `content_version`.
-- `POST /api/maps/{map_id}/scores/self-report` — **optional** community sync: sanitized body + idempotency key (**not** default non-ranked).
-- `POST /api/maps/{map_id}/guesses/record` — **optional** non-ranked telemetry: guess coords + **client-reported** distance/points + ids; **not** score authority.
-- `POST /api/maps/{map_id}/poi` — optional POI proposal (`device_gps` | `map_pick` | `manual_entry`).
+- `GET /api/v1/maps` — list maps/levels for selection (normative reference server; older prose may say `/api/maps`).
+- `GET /api/v1/maps/{map_id}/leaderboard` — query: matchup, role, pagination, ETag.
+- `GET /api/v1/maps/{map_id}/reference` — optional golden / precomputed AI bundle + `content_version`.
+- `POST /api/v1/maps/{map_id}/scores/self-report` — **optional** community sync: sanitized body + idempotency key (**not** default non-ranked).
+- `POST /api/v1/maps/{map_id}/guesses/record` — **optional** non-ranked telemetry: guess coords + **client-reported** distance/points + ids; **not** score authority.
+- `POST /api/v1/maps/{map_id}/poi` — optional POI proposal (`device_gps` | `map_pick` | `manual_entry`).
 - Legacy/global: `GET /leaderboard` — only if product keeps a non–map-scoped view; must not contradict per-map rows in UI.
 
 **In-process engine / UI events** (typed in **`commonMain`** for navigation and results—**not** a network wire protocol): e.g. `ROUND_STARTED`, `ZOOM_CHANGED`, `PLAYER_GUESS`, `AI_GUESS_PLACED`, `ROUND_RESOLVED`.

@@ -1,0 +1,36 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# pytest and other test runners
+.pytest_cache/
+.tox/
+htmlcov/
+.benchmarks/
+.hypothesis/
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Linters / type checkers (common optional dev deps)
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# Hatch / PEP 517 build outputs (hatchling)
+dist/
+build/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Hatch-managed env metadata (if used)
+.hatch/
+
+# Local SQLite file from default `sqlite:///data/nutonic_leaderboard.db`
+data/

@@ -296,7 +296,7 @@ Phases are **sequential** where noted; some client phases can overlap with serve
 
 ## 13. Next actions (ordered)
 
-1. Approve **monorepo layout** §2 and **map engine matrix** for v1.  
+1. Approve **monorepo layout** §2 and **map engine matrix** for v1 — **matrix + v1 parity direction:** [`docs/map-engines.md`](../docs/map-engines.md); **product flags, PRO day-one, all tabs, `/api/v1`, optional server `features`:** [`plans/2026-04-13-product-flags-v1.md`](2026-04-13-product-flags-v1.md) (sign-off tables in both files).  
 2. Land **OpenAPI skeleton** + **FastAPI** P0 (leaderboard + health) per `plans/2026-04-07-gradio-terramind-backend.md`.  
 3. Execute client **C0 → C2** in parallel with server **S0 → S1**.  
 4. Implement **MapViewport** + **per-map leaderboard REST** (S1c), then **bundle + manifest** (S3).  

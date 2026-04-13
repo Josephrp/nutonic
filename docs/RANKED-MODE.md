@@ -40,7 +40,7 @@ This document defines **product and engineering intent** for **ranked** missions
 
 ## 4. Contract shape (illustrative — replace with OpenAPI)
 
-Implementers should document real paths, errors, and TTLs.
+Implementers should document real paths, errors, and TTLs. **Normative prefix for the game server:** **`/api/v1/...`** (e.g. `POST /api/v1/ranked/rounds/start`). Paths below omit the prefix for readability where they show `.../api/ranked/...` — **prefix with `v1`** in shipped OpenAPI (`plans/2026-04-07-complete-implementation-architecture.md` §4.1).
 
 1. **`POST /api/ranked/rounds/start`** (or `.../sessions/start`)  
    - Headers: `Authorization: Bearer <JWT>`.  
@@ -61,10 +61,10 @@ Implementers should document real paths, errors, and TTLs.
    - Server: **same** outcome as **`forfeit-reveal`**—invalidate **`round_ticket`**, **DNF/forfeit**, no verified row. OpenAPI may instead expose a **single** **`.../forfeit-ranked-integrity`** endpoint with `{ "reason": "peer_reveal" | "assists" | ... }`.  
    - **Rationale:** These assists narrow the search space beyond the **primary Mapbox still + map submit** contract; ranked verified rows remain **guess-only** from that baseline.
 
-5. **`GET /api/maps/{map_id}/leaderboard`**  
-   - Query: `tier=ranked` or separate path **`/api/maps/{map_id}/leaderboard/ranked`** so casual and ranked aggregates **do not mix** unless product explicitly merges with labels.
+5. **`GET /api/v1/maps/{map_id}/leaderboard`**  
+   - Query: `tier=ranked` or separate path **`/api/v1/maps/{map_id}/leaderboard/ranked`** so casual and ranked aggregates **do not mix** unless product explicitly merges with labels.
 
-6. **`POST /api/maps/{map_id}/poi`** (user POI)  
+6. **`POST /api/v1/maps/{map_id}/poi`** (user POI)  
    - Same schema-strict rules as casual. The **game server** validates, stores, dedupes, and republishes the POI for **map lists**, **bundle refresh** (clue stills), and **ranked** round pools for other players **once accepted**—never trust client flag `ranked_eligible: true`.
 
 ---

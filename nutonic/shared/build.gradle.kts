@@ -41,22 +41,31 @@ kotlin {
             }
         }
 
+        val ktorVersion = "3.0.3"
+
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material)
             implementation(compose.components.resources)
             implementation("org.jetbrains.compose.material:material-icons-core:1.6.11")
+            implementation("org.jetbrains.compose.material:material-icons-extended:1.6.11")
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+            implementation("io.ktor:ktor-client-core:$ktorVersion")
+            implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+            implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
         }
 
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+            implementation("io.ktor:ktor-client-mock:$ktorVersion")
         }
 
         androidMain.dependencies {
+            implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
             api("androidx.activity:activity-compose:1.8.2")
             api("androidx.appcompat:appcompat:1.6.1")
             api("androidx.core:core-ktx:1.12.0")
@@ -69,23 +78,26 @@ kotlin {
             implementation("com.google.maps.android:maps-compose:2.11.2")
         }
 
-        val webMain by getting {
-            dependsOn(commonMain.get())
+        val iosMain by getting {
             dependencies {
+                implementation("io.ktor:ktor-client-darwin:$ktorVersion")
+            }
+        }
+
+        val webMain by getting {
+            dependencies {
+                implementation("io.ktor:ktor-client-js:$ktorVersion")
                 implementation(npm("uuid", "^9.0.1"))
             }
         }
 
-        val jsMain by getting {
-            dependsOn(webMain)
-        }
+        val jsMain by getting
 
-        val wasmJsMain by getting {
-            dependsOn(webMain)
-        }
+        val wasmJsMain by getting
 
         val desktopMain by getting
         desktopMain.dependencies {
+            implementation("io.ktor:ktor-client-cio:$ktorVersion")
             implementation(compose.desktop.common)
             implementation(project(":mapview-desktop"))
         }
@@ -99,7 +111,7 @@ kotlin {
 
 android {
     compileSdk = 35
-    namespace = "example.imageviewer.shared"
+    namespace = "com.nutonic.shared"
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
 
@@ -113,4 +125,10 @@ android {
     kotlin {
         jvmToolchain(17)
     }
+}
+
+compose.resources {
+    // Stable package: avoids parent-package import ambiguity with `package com.nutonic` sources.
+    packageOfResClass = "com.nutonic.resources"
+    publicResClass = true
 }

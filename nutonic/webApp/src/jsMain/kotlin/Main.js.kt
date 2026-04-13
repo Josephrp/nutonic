@@ -6,7 +6,7 @@ import org.jetbrains.skiko.wasm.onWasmReady
 fun main() {
     onWasmReady {
         ComposeViewport("composeApp") {
-            ImageViewerWeb()
+            NutonicWebHost()
         }
     }
 }

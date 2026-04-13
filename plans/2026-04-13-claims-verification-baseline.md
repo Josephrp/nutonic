@@ -15,7 +15,12 @@
 | C | Spot-check **repo reality** (Gradle tree, packages, presence of `server/`, `inference/*` scaffolds). |
 | D | Verdict: **Verified**, **Partial** (nuance), or **Corrected**. |
 
-**Repo snapshot date:** 2026-04-13 (workspace inspection).
+**Repo snapshot date:** 2026-04-13 (initial workspace inspection).  
+**Reassessment date:** 2026-04-13 (second pass: reverified `nutonic/`, `server/`, `docs/openapi.yaml` against claims in §2.3–§2.4 and §3).  
+**Third pass:** 2026-04-14 — **IMP-070** / partial **IMP-071** / **IMP-072** (static maps) + **CI** `server/` pytest reflected in §3 (gap analysis **v0.5**).  
+**Fourth pass:** 2026-04-14 — **IMP-060** SQLite **`LeaderboardStore`** (gap analysis **v0.6**).  
+**Fifth pass:** 2026-04-14 — gap **v0.7** / **v0.8** prep: manifest route, redaction, gameplay + SCAN wiring (**IMP-080** / **IMP-083** partial).  
+**Sixth pass:** 2026-04-13 — backlog **§0.1** table re-verified vs `nutonic/` + `server/`; gap analysis **v0.8**; this memo **v0.7**.
 
 ---
 
@@ -44,7 +49,7 @@
 |---------|--------------|
 | Evidence | `plans/2026-04-07-complete-implementation-architecture.md` §9 table rows **C0**, **C1**, **C2** with exit criteria; §13 next actions explicitly: “Execute client **C0 → C2** in parallel with server **S0 → S1**.” |
 
-**Repo reality:** `nutonic/settings.gradle.kts` still has `rootProject.name = "imageviewer"`; shared sources still use `package example.imageviewer` — **C0 not started** (confirms §9 C0 is still applicable).
+**Repo reality (reverified 2026-04-13):** `nutonic/settings.gradle.kts` has **`rootProject.name = "nutonic"`**; shared and app sources use **`package com.nutonic...`** (no `example.imageviewer` under `nutonic/`). **Verdict: Corrected** — prior “C0 not started” claim was **false** for identity/namespace; **Partial** for strict C0 “remove all template-only surfaces” (legacy **photo gallery** sample remains reachable from SETUP for dev/demo).
 
 ---
 
@@ -54,7 +59,7 @@
 |---------|--------------|
 | Evidence | `plans/2026-04-07-game-server-thin-orchestrator.md` §8 **P0** (FastAPI skeleton, **`GET /api/v1/health`**, OpenAPI stub, Dockerfile); §0 dependency table (“exclude torch, transformers, terratorch”); `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §0–§0.2. |
 
-**Repo reality:** No `server/` directory present; no `openapi.yaml` at repo root — **P0/S0 not landed**.
+**Repo reality (reverified 2026-04-13):** All **2026-04-14** items **plus** GET /api/v1/cache/manifest (ETag, comma-separated If-None-Match, locations/i_guesses omitted by default unless NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH is set for full fixture assertions in server/tests/test_health.py); Settings exposes safer eatures defaults and configurable jwt_secret. **Client:** NutonicApiClient, SCAN scanHubRefreshCatalog (manifest-first catalog when ContentCacheRepository returns maps), WorldMapGameplayDetail wired with contentCacheRepository + LocalNonRankedLeaderboardRepository (**IMP-083** core). docs/openapi.yaml + pytest route parity unchanged. **Verdict:** Thin server **P0 + S0 + S1c/manifest slice** **landed**; spine completion per gap **v0.8** / backlog **section 0.1** (**IMP-081**, **IMP-083** E2E exit, **IMP-084**, **IMP-090**).
 
 ---
 
@@ -134,10 +139,14 @@
 
 | Gap | Impact |
 |-----|--------|
-| No `server/` tree | All S* / P* server work is greenfield. |
+| ~~No `server/` tree~~ | **Resolved** for thin reference slice — see §2.4 reassessment. |
 | §9 **S1c** prose used unversioned `/api/maps` | **Corrected** in `plans/2026-04-07-complete-implementation-architecture.md` §9 — implement paths only from **`docs/openapi.yaml`**. |
-| `inference/*` packages absent | Inference plans are preparatory until spine + contracts exist. |
-| KMP still template identity | C0 is prerequisite to avoid shipping wrong package IDs. |
+| `inference/*` packages absent | Inference plans are preparatory until spine + contracts exist (**unchanged**). |
+| ~~KMP still template identity~~ | **Largely resolved** — `com.nutonic` + `nutonic` root name; residual template UX (legacy gallery) is optional debt. |
+| ~~**KMP ↔ server wire-up**~~ | **Largely resolved** — **`NutonicApiClient`** in `shared` (**Ktor** + **`kotlinx.serialization`** DTOs aligned to **`docs/openapi.yaml`**); **SCAN** / **RANK** call **GET maps**, **GET/POST leaderboard**, **GET config**, **auth token** paths (**IMP-070**). **Partial** **IMP-071**: shared hub **`map_id`**, **Final results → RANK** + saveable route **`rankFocusMapId`** / **`#`** fragment (not yet production “no hardcoded rows” / full C4). |
+| ~~**Community `LeaderboardStore` only in-memory**~~ | **Resolved** — **`IMP-060`**: **`SqliteLeaderboardStore`** + idempotency table, env-configurable URL, **`pytest`** file persistence + **`TestClient`** hermetic in-memory default. |
+| **`MapViewport` / gameplay spine** | **Updated (2026-04-13)** — **`MapViewport`** interactive + **`WorldMapGameplayDetail`** wired; **local** non-ranked **`appendRow`** on submit (**`IMP-083`** **partial**). **Remaining:** **IMP-081** bundle bytes, **IMP-083** **E2E** acceptance + optional telemetry **`POST`**, **IMP-084** polish, full **`docs/GAME-ENGINE.md` §10** state machine. |
+| ~~**CI scope**~~ | **Resolved** for **`server/`** — **`nutonic-ci.yml`** runs **`pytest`** when `server/**` (or related paths) change; PM2 local verification remains manual (`docs/PM2_LOCAL_VERIFICATION.md`). |
 
 ---
 
@@ -147,3 +156,9 @@
 |---------|------|-------|
 | 0.1 | 2026-04-13 | Initial verification memo tied to advisory + repo inspection |
 | 0.2 | 2026-04-13 | Health path reconciliation (`/api/v1/health`); S1c versioned paths note; cross-links to backlog contract invariants |
+| 0.3 | 2026-04-13 | **Reassessment:** §2.3–§2.4 repo reality **corrected** (KMP identity + `server/` + OpenAPI landed); §3 gaps table updated; second-pass snapshot called out in header |
+| 0.4 | 2026-04-13 | §2.4: note **403** feature gating, **Idempotency-Key** dedupe, OpenAPI **RFC 3986** server URL rule, and **pytest** contract parity vs FastAPI |
+| 0.5 | 2026-04-14 | §3: **KMP ↔ server** and **CI** gaps closed per **gap analysis v0.5**; **IMP-071** recorded as **partial**; **MapViewport** / spine gap unchanged |
+| 0.6 | 2026-04-14 | **Fourth pass** header; §2.4 repo reality: **`GET /api/v1/maps` → 200** + **IMP-060** SQLite **`LeaderboardStore`**; §3 new resolved gap row; aligns with gap analysis **v0.6** |
+| 0.7 | 2026-04-13 | **Sixth pass** header; §2.4 repo reality extended (**cache/manifest**, redaction, client wiring); §3 spine gap narrowed; aligns with gap analysis **v0.8** + backlog **§0.1** refresh |
+

@@ -85,11 +85,11 @@
 
 ### 1.7 POI ingest (optional)
 
-- **`POST /api/maps/{map_id}/poi`**: schema-strict body; validation, rounding, storage (`rules/05`, POI doc).
+- **`POST /api/v1/maps/{map_id}/poi`**: schema-strict body; validation, rounding, storage (`rules/05`, POI doc).
 
 ### 1.8 Optional guess telemetry + ranked integrity forfeits
 
-- **`POST /api/maps/{map_id}/guesses/record`** (when shipped): persist **non-ranked** guess coords + **client-reported** distance for **ops / analytics** only—**no** trust as score authority (`docs/GAME-ENGINE.md` §12.3, `rules/05`).
+- **`POST /api/v1/maps/{map_id}/guesses/record`** (when shipped): persist **non-ranked** guess coords + **client-reported** distance for **ops / analytics** only—**no** trust as score authority (`docs/GAME-ENGINE.md` §12.3, `rules/05`).
 - **`POST /api/ranked/rounds/{round_id}/forfeit-reveal`** (when shipped): invalidate **`round_ticket`**, record **DNF/forfeit** when ranked UI offers **Reveal uplink** and the player accepts (`docs/RANKED-MODE.md` §4).
 - **`POST /api/ranked/rounds/{round_id}/forfeit-assists`** (when shipped): same state transition when the player accepts **Street View description** and/or **useful-hint** tiers before `submit` (`docs/GAME-ENGINE.md` §9, **`docs/RANKED-MODE.md` §4**). OpenAPI may merge both into **`.../forfeit-ranked-integrity`** with a **`reason`** field. **`routes_ranked.py`** owns **submit** and all **forfeit-*** transitions.
 

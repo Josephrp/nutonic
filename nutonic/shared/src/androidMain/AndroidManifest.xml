@@ -7,8 +7,8 @@
 
     <application>
         <provider
-            android:name="example.imageviewer.ImageViewerFileProvider"
-            android:authorities="example.imageviewer.fileprovider"
+            android:name="com.nutonic.NutonicFileProvider"
+            android:authorities="com.nutonic.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

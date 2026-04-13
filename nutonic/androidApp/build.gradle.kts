@@ -19,13 +19,18 @@ kotlin {
 
 android {
     compileSdk = 35
-    namespace = "example.imageviewer"
+    namespace = "com.nutonic"
+    buildFeatures {
+        buildConfig = true
+    }
     defaultConfig {
-        applicationId = "org.jetbrains.Imageviewer"
+        applicationId = "com.nutonic.android"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+        // Game server origin only (no `/api/v1`); override per build type or `buildTypes { debug { ... } }` as needed.
+        buildConfigField("String", "NUTONIC_SERVER_ORIGIN", "\"http://10.0.2.2:7860\"")
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

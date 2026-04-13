@@ -36,16 +36,16 @@ Implementations should replace with real OpenAPI under the reference server.
 
 | Method | Path | Role |
 |--------|------|------|
-| `GET` | `/api/maps` | List selectable maps/levels (`map_id`, title, thumbnail ref). |
-| `GET` | `/api/maps/{map_id}/leaderboard` | **Optional** when product ships community boards: aggregated rows for **matchup dimensions** + optional **AI vs golden** summary. Query: `matchup`, `role`, `cursor`, `limit`. |
-| `GET` | `/api/maps/{map_id}/reference` | Optional bundle: golden coordinates per `round_id`/`location_id` **metadata for display only**, precomputed **AI guess** rows, `content_version`, ETag. |
-| `POST` | `/api/maps/{map_id}/scores/self-report` | **Optional** community sync only: sanitized payload + **idempotency-key**; **store** may require JWT. **Not** used for default non-ranked local play. |
-| `POST` | `/api/maps/{map_id}/guesses/record` | **Optional** non-ranked: record **guess_lat/lon** + **client_distance_km** + ids for **telemetry / ops**; **no** cryptographic honesty claim. |
+| `GET` | `/api/v1/maps` | List selectable maps/levels (`map_id`, title, thumbnail ref). |
+| `GET` | `/api/v1/maps/{map_id}/leaderboard` | **Optional** when product ships community boards: aggregated rows for **matchup dimensions** + optional **AI vs golden** summary. Query: `matchup`, `role`, `cursor`, `limit`. |
+| `GET` | `/api/v1/maps/{map_id}/reference` | Optional bundle: golden coordinates per `round_id`/`location_id` **metadata for display only**, precomputed **AI guess** rows, `content_version`, ETag. |
+| `POST` | `/api/v1/maps/{map_id}/scores/self-report` | **Optional** community sync only: sanitized payload + **idempotency-key**; **store** may require JWT. **Not** used for default non-ranked local play. |
+| `POST` | `/api/v1/maps/{map_id}/guesses/record` | **Optional** non-ranked: record **guess_lat/lon** + **client_distance_km** + ids for **telemetry / ops**; **no** cryptographic honesty claim. |
 | `POST` | `/api/ranked/rounds/{round_id}/forfeit-reveal` | **Optional** ranked: peer-reveal **forfeit**; invalidates **`round_ticket`** (`docs/RANKED-MODE.md`). |
 | `POST` | `/api/ranked/rounds/start` | **Ranked:** returns `round_id`, **`round_ticket`**, clue manifest **without** ground truth (`docs/RANKED-MODE.md`). |
 | `POST` | `/api/ranked/rounds/{round_id}/submit` | **Ranked:** `guess_lat`/`guess_lon` + ticket; server returns **verified** score row. |
-| `GET` | `/api/maps/{map_id}/leaderboard/ranked` | Optional path: ranked-only aggregates (or `?tier=ranked`). |
-| `POST` | `/api/maps/{map_id}/poi` | User- or device-sourced POI proposal (see §3); **game server** validates and publishes for **map/hint/ranked** use **once accepted** (`docs/RANKED-MODE.md` §4). |
+| `GET` | `/api/v1/maps/{map_id}/leaderboard/ranked` | Optional path: ranked-only aggregates (or `?tier=ranked`). |
+| `POST` | `/api/v1/maps/{map_id}/poi` | User- or device-sourced POI proposal (see §3); **game server** validates and publishes for **map/hint/ranked** use **once accepted** (`docs/RANKED-MODE.md` §4). |
 
 ---
 

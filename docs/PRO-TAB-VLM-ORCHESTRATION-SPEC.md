@@ -118,7 +118,7 @@ sequenceDiagram
 | Concern | Rule / doc | Implication for PRO |
 |--------|------------|----------------------|
 | **Ranked rounds** | `docs/RANKED-MODE.md`, `rules/06` | **PRO** is a **separate** shell tab from **SCAN** ranked play; keep **navigation and job state** disjoint so operators do not conflate an **active ranked** session with a **PRO** materialize job. |
-| **User POI proposal** | `rules/05`, `docs/RANKED-MODE.md` §4 | If PRO “send to server” is used to **propose a POI**, use **`POST /api/maps/{map_id}/poi`** with the **OpenAPI** body (`rules/05`). |
+| **User POI proposal** | `rules/05`, `docs/RANKED-MODE.md` §4 | If PRO “send to server” is used to **propose a POI**, use **`POST /api/v1/maps/{map_id}/poi`** with the **OpenAPI** body (`rules/05`). |
 | **Server payloads** | `rules/06` | Fields on **`POST`** paths follow **OpenAPI** DTOs. |
 
 ### 3.1 PRO entitlement (initial build)

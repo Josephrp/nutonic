@@ -13,4 +13,6 @@ This directory hosts **deployables that are not the game server**. Kotlin client
 
 **TerraMind TiM is elsewhere:** EO **TiM** / **`_generate`** inference and Gradio demos live under **`demos/terramind_space/`** (and related plans)—**not** under `inference/streetview_pano_service` or `inference/lfm_vl_hint_service`.
 
-Scaffold the two subprojects per that plan (P0–P6). Until then, this folder is a **contractual anchor** for repo layout.
+**Status:** `streetview_pano_service/` now contains a minimal **FastAPI** stub (`IMP-110` scaffold). Remaining packages are still **planned** until their PR series land.
+
+**Game server wiring (IMP-092):** set **`NUTONIC_INFERENCE_WORKER_BASE_URL`** on the thin **`server/`** process to a worker origin (e.g. `http://127.0.0.1:7861` where pano service exposes **`GET /health`**). With **`FEATURE_PRO_JOBS=true`**, **`POST /api/v1/pro/jobs`** probes that URL via **`InferenceClient`** and returns **`inference_upstream_ok`** on the stub **`ProJobCreateOut`** payload.

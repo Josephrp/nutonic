@@ -9,6 +9,6 @@ fun main() {
         resourcePathMapping { path -> "./$path" }
     }
     ComposeViewport("composeApp") {
-        ImageViewerWeb()
+        NutonicWebHost()
     }
 }

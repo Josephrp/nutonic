@@ -18,11 +18,11 @@ kotlin {
 
 compose.desktop {
     application {
-        mainClass = "example.imageviewer.MainKt"
+        mainClass = "com.nutonic.MainKt"
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "ImageViewer"
+            packageName = "nutonic"
             packageVersion = "1.0.0"
 
             val iconsRoot = project.file("desktop-icons")

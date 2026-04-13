@@ -1,0 +1,834 @@
+openapi: 3.1.0
+info:
+  title: NU:TONIC Game Server API
+  version: 0.1.0
+  description: |
+    Versioned REST for Kotlin clients under **`/api/v1/*`**.
+
+    **Server URL vs paths:** `servers[0].url` is the deployment **origin only** (no `/api/v1` suffix).
+    Every operation path includes the full **`/api/v1/...`** prefix so URL joiners (RFC 3986) resolve
+    correctly—do not combine `https://host/api/v1` with path `/health` (that resolves to `https://host/health`).
+
+    **Feature toggles (`GET /api/v1/config` → `features`):** When `community_lb_get` or `community_lb_post`
+    is `false`, matching routes return **403** with `application/json` body
+    `{"error":"feature_disabled","feature":"<name>"}` (`plans/2026-04-13-product-flags-v1.md`).
+
+    **Community leaderboard POST** is **not** ranked verification: client-supplied scores/distances are
+    presentation or lab aggregates only (`rules/05-networking-leaderboard.md`).
+
+    Hand-maintained; keep in sync with `server/src/nutonic_server/` until export automation lands (IMP-011).
+
+servers:
+  - url: https://example.invalid
+    description: Replace with deployment origin (scheme + host, optional port); paths carry `/api/v1`
+
+tags:
+  - name: health
+  - name: config
+  - name: auth
+  - name: debug
+  - name: maps
+  - name: cache
+  - name: leaderboard
+  - name: telemetry
+  - name: ranked
+  - name: pro
+
+paths:
+  /api/v1/auth/token:
+    post:
+      tags: [auth]
+      summary: Issue anonymous session JWT
+      operationId: postAuthToken
+      responses:
+        "200":
+          description: Bearer access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+
+  /api/v1/debug/session:
+    get:
+      tags: [debug]
+      summary: Validate Bearer JWT (debug)
+      operationId: getDebugSession
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Token OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, session_id]
+                properties:
+                  ok:
+                    type: boolean
+                  session_id:
+                    type: string
+        "401":
+          description: Missing or invalid token
+
+  /api/v1/maps/{map_id}/leaderboard:
+    get:
+      tags: [leaderboard]
+      summary: In-memory leaderboard rows (S0 community slice)
+      description: |
+        Optional community / lab aggregate when `features.community_lb_get` is true.
+        When false, **403** `feature_disabled`.
+      operationId: getMapLeaderboard
+      parameters:
+        - name: map_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rows for map_id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardRow"
+        "403":
+          description: features.community_lb_get is false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+    post:
+      tags: [leaderboard]
+      summary: Append a dev/lab community leaderboard row (JWT required)
+      description: |
+        Non-authoritative for non-ranked math; **not** a ranked `submit` path.
+        Duplicate **`Idempotency-Key`** for the same `map_id` returns the first stored row (HTTP 200).
+      operationId: postMapLeaderboard
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: map_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: "Recommended on writes; server dedupes when present (rules/05)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LeaderboardPostIn"
+      responses:
+        "200":
+          description: Stored row (or prior row when Idempotency-Key repeats)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardRow"
+        "401":
+          description: Missing or invalid token
+        "403":
+          description: features.community_lb_post is false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+
+  /api/v1/health:
+    get:
+      tags: [health]
+      summary: Liveness
+      operationId: getHealth
+      responses:
+        "200":
+          description: Process is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/config:
+    get:
+      tags: [config]
+      summary: Public deployment config and feature toggles
+      description: |
+        Canonical **`features`** block for clients (IMP-001). Prefer this over embedding the same object on `/health` to avoid two sources of truth.
+      operationId: getConfig
+      responses:
+        "200":
+          description: Config payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfigResponse"
+
+  /api/v1/maps:
+    get:
+      tags: [maps]
+      summary: List published maps (S1c minimal catalog)
+      description: |
+        Same catalog rows as **`GET /api/v1/cache/manifest`** until a DB-backed index ships.
+        Core non-ranked scoring remains client-local (`rules/05`, `docs/GAME-ENGINE.md` §0).
+      operationId: listMaps
+      responses:
+        "200":
+          description: Published map ids the client may offer for play or community views
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapSummary"
+
+  /api/v1/cache/manifest:
+    get:
+      tags: [cache]
+      summary: Hydration manifest (catalog + content_version)
+      description: |
+        Client cache anchor per **`rules/13`** (**IMP-080**). Response includes **`ETag`**; send
+        **`If-None-Match`** to receive **304** when unchanged. Large bundle bytes stay on CDN/workers—this
+        JSON is the index only (`plans/2026-04-07-complete-implementation-architecture.md` §9 **S3**).
+
+        **Public spoiler hygiene:** the reference server may omit **`locations`** and **`ai_guesses`**
+        unless **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH=true`** is set (dev/CI). Treat world-readable
+        manifests as non-secret; never ship pre-round golden truth to untrusted clients in production.
+      operationId: getCacheManifest
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Prior **ETag** from a successful **200** response
+      responses:
+        "200":
+          description: Manifest body (revalidate or first fetch)
+          headers:
+            ETag:
+              required: true
+              schema:
+                type: string
+              description: Weak entity tag for this canonical JSON payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CacheManifest"
+        "304":
+          description: Not modified — reuse cached body + metadata
+          headers:
+            ETag:
+              required: true
+              schema:
+                type: string
+
+  /api/v1/bundles/{bundle_id}:
+    get:
+      tags: [cache]
+      summary: Download versioned still bytes (IMP-081)
+      operationId: getBundleStill
+      parameters:
+        - name: bundle_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: JPEG still bytes
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Unknown bundle id
+
+  /api/v1/maps/{map_id}/guesses/record:
+    post:
+      tags: [telemetry]
+      summary: Record a non-ranked guess (non-authoritative telemetry)
+      operationId: postMapGuessRecord
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: map_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuessRecordIn"
+      responses:
+        "200":
+          description: Row stored (or idempotent replay)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuessRecordOut"
+        "401":
+          description: Missing or invalid token
+        "403":
+          description: features.guesses_record is false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+
+  /api/v1/ranked/rounds/start:
+    post:
+      tags: [ranked]
+      summary: Start a server-secret ranked round (IMP-090)
+      operationId: postRankedRoundStart
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RankedRoundStartIn"
+      responses:
+        "200":
+          description: Round id + short-lived round_ticket + redacted clue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankedRoundStartOut"
+        "401":
+          description: Missing or invalid token
+        "403":
+          description: features.ranked is false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+        "404":
+          description: Unknown map_id for ranked catalog
+
+  /api/v1/ranked/rounds/{round_id}/forfeit-ranked-integrity:
+    post:
+      tags: [ranked]
+      summary: Forfeit ranked verified placement before submit (IMP-091)
+      operationId: postRankedRoundForfeitIntegrity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: round_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RankedForfeitIn"
+      responses:
+        "200":
+          description: Round marked forfeited; round_ticket is no longer valid for verified submit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankedForfeitOut"
+        "401":
+          description: Missing session token
+        "403":
+          description: features.ranked off, or session does not own this round
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+        "404":
+          description: Unknown round_id
+        "409":
+          description: Round not open (already submitted or forfeited)
+
+  /api/v1/ranked/rounds/{round_id}/submit:
+    post:
+      tags: [ranked]
+      summary: Submit guess coordinates for server-verified score (IMP-090)
+      operationId: postRankedRoundSubmit
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: round_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RankedSubmitIn"
+      responses:
+        "200":
+          description: Server-computed distance and score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RankedSubmitOut"
+        "400":
+          description: Missing Idempotency-Key or ticket mismatch
+        "401":
+          description: Invalid round_ticket or session
+        "403":
+          description: features.ranked off, round_ticket session mismatch, or other forbidden state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+        "409":
+          description: Round already submitted, forfeited, or closed
+
+  /api/v1/pro/jobs:
+    post:
+      tags: [pro]
+      summary: Create PRO materialization job (stub control plane)
+      operationId: postProJob
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProJobCreateIn"
+      responses:
+        "200":
+          description: Job accepted (stub)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProJobCreateOut"
+        "403":
+          description: features.pro_jobs is false
+
+  /api/v1/pro/jobs/{job_id}:
+    get:
+      tags: [pro]
+      summary: Poll PRO job status (stub)
+      operationId: getProJob
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Status payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProJobStatusOut"
+        "403":
+          description: features.pro_jobs is false
+        "404":
+          description: Unknown job
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    FeatureDisabledError:
+      type: object
+      required: [error, feature]
+      properties:
+        error:
+          type: string
+          example: feature_disabled
+        feature:
+          type: string
+          example: community_lb_get
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          format: int32
+
+    LeaderboardRow:
+      type: object
+      required: [display_handle, player_role, score_points]
+      properties:
+        display_handle:
+          type: string
+          maxLength: 64
+        player_role:
+          type: string
+        score_points:
+          type: integer
+        distance_km:
+          type: number
+          format: float
+          nullable: true
+
+    LeaderboardPostIn:
+      type: object
+      required: [display_handle, player_role, score_points]
+      properties:
+        display_handle:
+          type: string
+          maxLength: 64
+        player_role:
+          type: string
+          maxLength: 32
+        score_points:
+          type: integer
+          minimum: 0
+          maximum: 1000000
+        distance_km:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 40000
+          nullable: true
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+    FeatureFlags:
+      type: object
+      description: Player-visible capability toggles; see `plans/2026-04-13-product-flags-v1.md`
+      required: [ranked, community_lb_get, community_lb_post, pro_jobs, guesses_record]
+      properties:
+        ranked:
+          type: boolean
+        community_lb_get:
+          type: boolean
+        community_lb_post:
+          type: boolean
+        pro_jobs:
+          type: boolean
+        guesses_record:
+          type: boolean
+
+    ConfigResponse:
+      type: object
+      required: [features]
+      properties:
+        features:
+          $ref: "#/components/schemas/FeatureFlags"
+        engine_version:
+          type: string
+          description: Optional client/engine compatibility hint (placeholder)
+        content_version:
+          type: string
+          description: Optional manifest / bundle generation hint (placeholder)
+
+    MapSummary:
+      type: object
+      description: S1c `GET /api/v1/maps` row (`IMP-072`)
+      required: [map_id, title]
+      properties:
+        map_id:
+          type: string
+        title:
+          type: string
+        engine_version:
+          type: string
+          nullable: true
+        content_version:
+          type: string
+          nullable: true
+
+    UsefulHintsTiers:
+      type: object
+      description: Pre-cached three-tier hints for SCAN (`docs/GAME-ENGINE.md` §9.1)
+      properties:
+        tier_1:
+          type: string
+        tier_2:
+          type: string
+        tier_3:
+          type: string
+
+    ManifestRoundLocation:
+      type: object
+      description: |
+        Default round / bundle slice for a published `map_id` (non-ranked local truth,
+        `IMP-080` / `IMP-081`). Clients pick the row for the active `map_id` (e.g. first match).
+      required: [map_id, location_id, truth_lat, truth_lon]
+      properties:
+        map_id:
+          type: string
+        location_id:
+          type: string
+        truth_lat:
+          type: number
+          format: double
+        truth_lon:
+          type: number
+          format: double
+        ruleset_version:
+          type: string
+          nullable: true
+        still_bundle_id:
+          type: string
+          nullable: true
+          description: Versioned id for `GET /api/v1/bundles/{bundle_id}` (IMP-081).
+        still_bundled_resource:
+          type: string
+          nullable: true
+          description: |
+            Compose multiplatform resource path (e.g. `files/3.jpg`) when the still ships in-app.
+        still_http_url:
+          type: string
+          nullable: true
+          description: Optional absolute URL for a lazy-fetched still (CDN); clients may ignore until wired.
+        useful_hints:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/UsefulHintsTiers"
+        play_budget_ms:
+          type: integer
+          format: int32
+          nullable: true
+          description: Cosmetic HUD budget only (`docs/GAME-ENGINE.md` §7.3)
+        ai_marker_phase_enabled:
+          type: boolean
+          default: true
+          description: When false, skip `AI_GUESS` per `docs/GAME-ENGINE.md` §8.2
+
+    AiGuessRow:
+      type: object
+      description: |
+        Fixture / precomputed AI placement for `map_id` + `location_id` (`IMP-082`, `AiGuessStore` stub).
+      required: [map_id, location_id, ai_lat, ai_lon]
+      properties:
+        map_id:
+          type: string
+        location_id:
+          type: string
+        ai_lat:
+          type: number
+          format: double
+        ai_lon:
+          type: number
+          format: double
+
+    GuessRecordIn:
+      type: object
+      required: [round_instance_id, location_id, guess_lat, guess_lon]
+      properties:
+        round_instance_id:
+          type: string
+        location_id:
+          type: string
+        guess_lat:
+          type: number
+          format: double
+        guess_lon:
+          type: number
+          format: double
+        client_distance_km:
+          type: number
+          format: double
+          nullable: true
+        ruleset_version:
+          type: string
+          nullable: true
+
+    GuessRecordOut:
+      type: object
+      required: [id, recorded]
+      properties:
+        id:
+          type: integer
+        recorded:
+          type: boolean
+
+    RankedRoundStartIn:
+      type: object
+      required: [map_id]
+      properties:
+        map_id:
+          type: string
+
+    RankedClueOut:
+      type: object
+      required: [map_id, location_id]
+      properties:
+        map_id:
+          type: string
+        location_id:
+          type: string
+        still_bundle_id:
+          type: string
+          nullable: true
+        still_bundled_resource:
+          type: string
+          nullable: true
+        useful_hints:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/UsefulHintsTiers"
+        play_budget_ms:
+          type: integer
+          nullable: true
+        ai_marker_phase_enabled:
+          type: boolean
+
+    RankedRoundStartOut:
+      type: object
+      required: [round_id, round_ticket, expires_in, clue]
+      properties:
+        round_id:
+          type: string
+        round_ticket:
+          type: string
+        expires_in:
+          type: integer
+        clue:
+          $ref: "#/components/schemas/RankedClueOut"
+
+    RankedSubmitIn:
+      type: object
+      required: [guess_lat, guess_lon, round_ticket]
+      properties:
+        guess_lat:
+          type: number
+          format: double
+        guess_lon:
+          type: number
+          format: double
+        round_ticket:
+          type: string
+
+    RankedSubmitOut:
+      type: object
+      required: [distance_km, score_points, verified]
+      properties:
+        distance_km:
+          type: number
+          format: double
+        score_points:
+          type: integer
+        verified:
+          type: boolean
+
+    RankedForfeitIn:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [peer_reveal, assists]
+          description: Audit label; same server transition for both values today
+
+    RankedForfeitOut:
+      type: object
+      required: [ok, status]
+      properties:
+        ok:
+          type: boolean
+        status:
+          type: string
+          example: forfeited
+
+    ProJobCreateIn:
+      type: object
+      required: [center_lat, center_lon]
+      properties:
+        center_lat:
+          type: number
+          format: double
+        center_lon:
+          type: number
+          format: double
+
+    ProJobCreateOut:
+      type: object
+      required: [job_id, status]
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+        inference_upstream_ok:
+          type: boolean
+          nullable: true
+          description: Result of optional GET {inference_worker_base_url}/health (IMP-092); null when URL unset
+
+    ProJobStatusOut:
+      type: object
+      required: [job_id, status]
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+        bundle_download_url:
+          type: string
+          nullable: true
+
+    CacheManifest:
+      type: object
+      description: Client hydration manifest (`IMP-080`, `rules/13`)
+      required: [content_version, maps]
+      properties:
+        content_version:
+          type: string
+          description: Monotonic or content-addressed revision for this manifest
+        engine_version:
+          type: string
+          nullable: true
+          description: Optional compatibility hint aligned with config / map rows
+        maps:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapSummary"
+        locations:
+          type: array
+          description: Optional per-map round fixtures (ground truth + still + assists metadata)
+          items:
+            $ref: "#/components/schemas/ManifestRoundLocation"
+        ai_guesses:
+          type: array
+          description: Optional precomputed AI marker coordinates keyed by map + location
+          items:
+            $ref: "#/components/schemas/AiGuessRow"

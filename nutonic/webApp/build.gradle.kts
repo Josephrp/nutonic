@@ -10,10 +10,10 @@ val rootDirPath = project.rootDir.path
 
 kotlin {
     js {
-        outputModuleName = "imageviewer"
+        outputModuleName = "nutonic"
         browser {
             commonWebpackConfig {
-                outputFileName = "imageviewer.js"
+                outputFileName = "nutonic.js"
             }
         }
         binaries.executable()
@@ -22,7 +22,7 @@ kotlin {
 
     @OptIn(ExperimentalWasmDsl::class)
     wasmJs {
-        outputModuleName = "imageviewer"
+        outputModuleName = "nutonic"
         browser {
             // TODO: uncomment when https://youtrack.jetbrains.com/issue/KT-68614 is fixed (it doesn't work with configuration cache)
 //            commonWebpackConfig {

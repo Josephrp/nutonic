@@ -1,5 +1,5 @@
 
-![](screenshots/imageviewer.png)
+![](screenshots/nutonic.png)
 
 ## Setting up your development environment
 

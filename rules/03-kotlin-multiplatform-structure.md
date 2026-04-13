@@ -46,7 +46,7 @@ If it affects **rules of the game**, **local score/XP computation** (non-ranked)
 
 
 
-- Migrate away from sample names (`imageviewer`, `example.imageviewer`) as features land; **new code** uses a single root package (e.g. `com.nutonic.*`) per team convention.
+- **Identifiers:** ship under **`com.nutonic.*`**; do not reintroduce template names such as `imageviewer` / `example.imageviewer` in Kotlin, resources, or web bundle names.
 
 - **`rootProject.name`** and application IDs should eventually match product, not the template name.
 

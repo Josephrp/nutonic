@@ -1,0 +1,9 @@
+# Git hooks: pip install pre-commit && pre-commit install
+# Run all hooks on demand: pre-commit run --all-files
+# Gitleaks is built on first use (requires Go in PATH). Docker alternative: hook id gitleaks-docker in gitleaks repo.
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

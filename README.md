@@ -39,6 +39,6 @@ Because when the world breaks,
 
 ## Developer documentation
 
-Implementation rules live under [`rules/README.md`](rules/README.md). **Screen background music** (one loop per primary route, **music on/off in the header on every shipped screen**, bundled assets) is specified in [`docs/SCREEN-MUSIC-SPEC.md`](docs/SCREEN-MUSIC-SPEC.md) and preference keys in [`docs/CLIENT-SETTINGS-SPEC.md`](docs/CLIENT-SETTINGS-SPEC.md) §6.7.
+How to contribute (environment, PM2 checks, CI): [`CONTRIBUTING.md`](CONTRIBUTING.md). Implementation rules live under [`rules/README.md`](rules/README.md). **Screen background music** (one loop per primary route, **music on/off in the header on every shipped screen**, bundled assets) is specified in [`docs/SCREEN-MUSIC-SPEC.md`](docs/SCREEN-MUSIC-SPEC.md) and preference keys in [`docs/CLIENT-SETTINGS-SPEC.md`](docs/CLIENT-SETTINGS-SPEC.md) §6.7.
 
 **Inference (not the game client):** [`inference/README.md`](inference/README.md) indexes **Street View pano**, **standard LFM-VL hints**, and **specialist satellite** LFM-VL (caption / VQA / grounding, `refs/satellite-vlm/` prompts, Gradio demo). Master plan: [`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`](plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md). Street View drill-down: [`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`](plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md). Orchestration: [`docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`](docs/SERVER-AND-INFERENCE-ARCHITECTURE.md).

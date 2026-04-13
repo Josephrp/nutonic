@@ -297,4 +297,5 @@ npm run pm2:test           # optional ad-hoc
 
 - **`03-kotlin-multiplatform-structure.md`** — where tests and shared code live.
 - **`05-networking-leaderboard.md`** — **local** default leaderboards, optional community API, ranked contracts (not covered by this file).
+- **`14-testing-validation-pm2-and-documentation.md`** — PM2-first testing for Kotlin, Kotlin/JS/Wasm, and Python; **mandatory log review** and fix-before-continue; **complete PM2 environment** per feature; pragmatic **tests vs code** order; **plans/** pinning and **rules/docs** updates when standards shift.
 - **`README.md`** (rules) — reading order for product and UX constraints.

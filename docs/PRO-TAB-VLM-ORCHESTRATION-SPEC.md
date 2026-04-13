@@ -134,7 +134,7 @@ sequenceDiagram
 
 - **Clamp** `latitude` ∈ [−90, 90], `longitude` ∈ [−180, 180]; **reject** NaN/Inf; **precision** ≤ 6 dp in logs (`rules/05`).  
 - **Rate limits** per **IP / device id / JWT sub** on `POST .../pro/jobs`; **caps** on `bbox_half_km`, bytes, bundle size (e.g. **≤ 8–12 MiB** gzip mobile), max concurrent jobs.  
-- **`POST .../pro/jobs`** → internal **`PRO_MATERIALIZATION_SERVICE_URL`** (HMAC/mTLS per `plans/2026-04-07-game-server-thin-orchestrator.md`); then optional **`TERRAMIND_TIM_URL`** / **`TERRAMIND_GENERATE_URL`** with **materialization-sized** inputs; **assemble** **`ProVisionBundle`** (§5); **no** `torch` in `server/`.
+- **`POST .../pro/jobs`** → internal **`PRO_MATERIALIZATION_SERVICE_URL`** (HMAC/mTLS per **`plans/2026-04-07-game-server-thin-orchestrator.md`** §0.1); then optional **`TERRAMIND_TIM_URL`** / **`TERRAMIND_GENERATE_URL`** using **handles** (URLs, checksums) produced by materialization—**not** by re-hosting Sentinel COGs or large NPZ streams inside the game process. **Normative:** the game server is **control plane** (JWT, job ids, **poll JSON**, **signed `bundle_download_url`** or **HTTP redirect** to object storage for **`ProVisionBundle`** bytes per §5); **heavy raster IO** stays in **`inference/pro_materialization_service/`** and TerraMind workers. **No** `torch` in `server/`.
 
 ### 4.2 Standalone PRO materialization service
 
@@ -324,7 +324,7 @@ That repo demonstrates **fine-tuning** LFM VLMs on **VRSBench** (VQA, grounding,
 - [ ] `OnDeviceVlmPort` **expect/actual** with Android **LEAP** parity to **`refs/VLMExample/`**; **Gradle / CI** packages **pinned** on-device model artifacts with the release.  
 - [ ] `ProOverlayRenderer` shared math for 0–1 bboxes.  
 - [ ] **PRO materialization service**: Mapbox + Sentinel + resize contracts; contract tests vs VLM + TiM matrix.  
-- [ ] Game server: orchestrate **P → TiM → bundle**; persist **`tim_modality_outputs`** to **`AiGuessStore`** / Dataset **only** for **`map_id`** clue pipelines (incl. **`Coordinates` → ai_lat/ai_lon** per **§1.1.1**); **PRO** path returns full **`tim_modality_outputs`** **without** writing PRO-only jobs into **`AiGuessStore`**; integration tests with canned lat/lon.  
+- [ ] Game server: **control-plane** orchestration **P → TiM → bundle** (JSON + **signed download URLs** / redirects per **§4.1**); **no** Sentinel/COG proxy through `server/`; persist **`tim_modality_outputs`** to **`AiGuessStore`** / Dataset **only** for **`map_id`** clue pipelines (incl. **`Coordinates` → ai_lat/ai_lon** per **§1.1.1**); **PRO** path returns full **`tim_modality_outputs`** **without** writing PRO-only jobs into **`AiGuessStore`**; integration tests with canned lat/lon.  
 - [ ] Attribution strings visible in UI footer on image card.  
 - [ ] **Ranked vs PRO:** integration test keeps **SCAN ranked** job IDs disjoint from **PRO** job IDs in the client shell.  
 - [ ] **Reduced motion** and **high contrast** paths for animations (`rules/08`, `docs/CLIENT-SETTINGS-SPEC.md` if applicable).
@@ -341,5 +341,6 @@ That repo demonstrates **fine-tuning** LFM VLMs on **VRSBench** (VQA, grounding,
 | 0.4 | 2026-04-12 | **`tim_modality_outputs`** replaces single **`tim_summary`** as normative; **all `tim_modalities`** schema-capped; **`Coordinates` → `ai_lat`/`ai_lon`** for **`AiGuessStore`** / **cached AI-guess** (`docs/GAME-ENGINE.md` §12.2); §9 **`tim_modalities`** request field |
 | 0.5 | 2026-04-12 | **§6.0** — on-device VLM weights **ship with build/publish** + CI alignment to `model_bundle_id`; **`refs/VLMExample/`** as normative **inference** port; **§6.1** clarifies bundled weights vs optional warm-load/delta |
 | 0.6 | 2026-04-12 | **§1.1.1** — explicit **PRO TiM `Coordinates` vs `AiGuessStore`** persistence boundary, implications, and checklist tightening; **§4.3** / **`tim_modality_outputs`** table clarify display vs catalog writes |
+| 0.7 | 2026-04-12 | **§4.1** — game server **control plane** only (signed **`bundle_download_url`** / redirect); **no** Sentinel/COG re-host through `server/`; **§13** checklist aligned (`plans/2026-04-07-game-server-thin-orchestrator.md` §0.1) |
 
 *End of document.*

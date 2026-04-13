@@ -8,6 +8,7 @@
  *   npm run pm2:test
  *
  * @see rules/11-vscode-testing-linting-and-ci.md
+ * @see rules/14-testing-validation-pm2-and-documentation.md
  */
 const path = require("path");
 

@@ -5,6 +5,7 @@ data/*
 !data/scripts/
 !data/scripts/**
 .cache
+.env
 
 # PM2 and local verification (Gradle, future server test runners)
 logs/

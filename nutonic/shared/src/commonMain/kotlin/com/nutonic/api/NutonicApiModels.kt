@@ -2,6 +2,7 @@ package com.nutonic.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 
 @Serializable
 data class HealthResponse(
@@ -64,6 +65,13 @@ data class UsefulHintsTiers(
 )
 
 @Serializable
+data class StreetviewHintItem(
+    val text: String,
+    @SerialName("viewpoint_id") val viewpointId: String? = null,
+    val rank: Int? = null,
+)
+
+@Serializable
 data class ManifestRoundLocation(
     @SerialName("map_id") val mapId: String,
     @SerialName("location_id") val locationId: String,
@@ -74,6 +82,9 @@ data class ManifestRoundLocation(
     @SerialName("still_bundled_resource") val stillBundledResource: String? = null,
     @SerialName("still_http_url") val stillHttpUrl: String? = null,
     @SerialName("useful_hints") val usefulHints: UsefulHintsTiers? = null,
+    @SerialName("streetview_hint_pack") val streetviewHintPack: List<StreetviewHintItem>? = null,
+    @SerialName("streetview_assist_narrative") val streetviewAssistNarrative: String? = null,
+    @SerialName("satellite_caption_sidecar") val satelliteCaptionSidecar: JsonObject? = null,
     @SerialName("play_budget_ms") val playBudgetMs: Int? = null,
     @SerialName("ai_marker_phase_enabled") val aiMarkerPhaseEnabled: Boolean = true,
 )
@@ -146,6 +157,8 @@ data class RankedClue(
     @SerialName("still_bundle_id") val stillBundleId: String? = null,
     @SerialName("still_bundled_resource") val stillBundledResource: String? = null,
     @SerialName("useful_hints") val usefulHints: UsefulHintsTiers? = null,
+    @SerialName("streetview_hint_pack") val streetviewHintPack: List<StreetviewHintItem>? = null,
+    @SerialName("streetview_assist_narrative") val streetviewAssistNarrative: String? = null,
     @SerialName("play_budget_ms") val playBudgetMs: Int? = null,
     @SerialName("ai_marker_phase_enabled") val aiMarkerPhaseEnabled: Boolean = true,
 )

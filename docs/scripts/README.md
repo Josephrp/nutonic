@@ -19,7 +19,7 @@
 | [SPEC-compile-useful-hint-tiers.md](SPEC-compile-useful-hint-tiers.md) | `data/scripts/compile_useful_hint_tiers.py` | **C1 — implemented** |
 | [SPEC-validate-hint-strings.md](SPEC-validate-hint-strings.md) | `data/scripts/validate_hint_strings.py` | **C2 — implemented** |
 | [SPEC-generate-useful-hints-llm.md](SPEC-generate-useful-hints-llm.md) | `data/scripts/generate_useful_hints_llm.py` | C3 (optional) |
-| [SPEC-batch-streetview-hints.md](SPEC-batch-streetview-hints.md) | `tools/batch_streetview_hints.py` | D |
+| [SPEC-batch-streetview-hints.md](SPEC-batch-streetview-hints.md) | `tools/batch_streetview_hints.py` | **D — implemented** (local stubs under `inference/*`) |
 | [SPEC-generate-ai-guess-fixture.md](SPEC-generate-ai-guess-fixture.md) | `data/scripts/generate_ai_guess_fixture.py` | **E — implemented** |
 | [SPEC-assemble-manifest.md](SPEC-assemble-manifest.md) | `data/scripts/assemble_manifest.py` | **F — implemented** |
 | [SPEC-assemble-ranked-clue-pack.md](SPEC-assemble-ranked-clue-pack.md) | `data/scripts/assemble_ranked_clue_pack.py` | **F — implemented** |
@@ -38,4 +38,4 @@
 
 ---
 
-*Index version: 2026-04-14d — `generate_ai_guess_fixture` landed*
+*Index version: 2026-04-14e — Street View batch (`tools/batch_streetview_hints.py` + inference stubs) landed*

@@ -599,6 +599,21 @@ components:
           type: string
           nullable: true
 
+    StreetviewHintItem:
+      type: object
+      required: [text]
+      description: Pre-cached Street View assist line (`docs/GAME-ENGINE.md` §9).
+      properties:
+        text:
+          type: string
+        viewpoint_id:
+          type: string
+          nullable: true
+        rank:
+          type: integer
+          format: int32
+          nullable: true
+
     ManifestRoundLocation:
       type: object
       description: |
@@ -636,6 +651,22 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/UsefulHintsTiers"
+        streetview_hint_pack:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/StreetviewHintItem"
+          description: Optional batch LFM-VL Street View captions (ranked forfeit policy applies).
+        streetview_assist_narrative:
+          type: string
+          nullable: true
+          description: Optional fused prose from batch narrative pass (coordinate-safe).
+        satellite_caption_sidecar:
+          type: object
+          nullable: true
+          description: |
+            Satellite LFM-VL specialist output; **never** merge unlabeled strings into `streetview_hint_pack`
+            (`docs/GAME-ENGINE.md` §5.2).
         play_budget_ms:
           type: integer
           format: int32
@@ -719,6 +750,14 @@ components:
           nullable: true
           allOf:
             - $ref: "#/components/schemas/UsefulHintsTiers"
+        streetview_hint_pack:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/StreetviewHintItem"
+        streetview_assist_narrative:
+          type: string
+          nullable: true
         play_budget_ms:
           type: integer
           nullable: true

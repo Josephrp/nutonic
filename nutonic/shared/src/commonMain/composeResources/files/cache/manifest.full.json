@@ -1,0 +1,74 @@
+{
+  "content_version": "nutonic.manifest.v2",
+  "engine_version": "0.1.0",
+  "maps": [
+    {
+      "map_id": "demo",
+      "title": "Demo mission",
+      "engine_version": "0.1.0",
+      "content_version": null
+    },
+    {
+      "map_id": "idempotency-map",
+      "title": "Lab · idempotency fixture",
+      "engine_version": "0.1.0",
+      "content_version": null
+    }
+  ],
+  "locations": [
+    {
+      "map_id": "demo",
+      "location_id": "demo-vienna-001",
+      "truth_lat": 48.2082,
+      "truth_lon": 16.3738,
+      "ruleset_version": "nutonic.ruleset.v1",
+      "still_bundle_id": "nutonic.bundle.v1.demo_still",
+      "still_bundled_resource": "files/3.jpg",
+      "still_http_url": null,
+      "useful_hints": {
+        "tier_1": "Western edge of the Eurasian landmass near Atlantic influence.",
+        "tier_2": "Alpine foothill capital on a major river north-east of high peaks.",
+        "tier_3": "Danube corridor; continental climate transition zone.",
+        "tier_4": "Eastern Alpine foreland and basin city layout.",
+        "tier_5": "Austria — central European country context.",
+        "tier_6": "Vienna-scale metro cues without coordinates (river-basin capital pattern)."
+      },
+      "play_budget_ms": 180000,
+      "ai_marker_phase_enabled": true
+    },
+    {
+      "map_id": "idempotency-map",
+      "location_id": "idempo-nyc-001",
+      "truth_lat": 40.7128,
+      "truth_lon": -74.006,
+      "ruleset_version": "nutonic.ruleset.v1",
+      "still_bundle_id": "nutonic.bundle.v1.demo_still",
+      "still_bundled_resource": "files/3.jpg",
+      "still_http_url": null,
+      "useful_hints": {
+        "tier_1": "Eastern North American coastal megacity region.",
+        "tier_2": "Compact island grid between two tidal rivers.",
+        "tier_3": "Atlantic seaboard humid subtropical / continental blend.",
+        "tier_4": "Dense urban estuary with bridge-linked boroughs.",
+        "tier_5": "United States — northeastern megalopolis corridor.",
+        "tier_6": "Iconic island-core coastal megacity pattern (no coordinate literals)."
+      },
+      "play_budget_ms": 180000,
+      "ai_marker_phase_enabled": true
+    }
+  ],
+  "ai_guesses": [
+    {
+      "map_id": "demo",
+      "location_id": "demo-vienna-001",
+      "ai_lat": 41.9028,
+      "ai_lon": 12.4964
+    },
+    {
+      "map_id": "idempotency-map",
+      "location_id": "idempo-nyc-001",
+      "ai_lat": 51.5074,
+      "ai_lon": -0.1278
+    }
+  ]
+}

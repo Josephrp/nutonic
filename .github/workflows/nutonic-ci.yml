@@ -5,21 +5,29 @@ name: nutonic — quality, tests, clients
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "nutonic/**"
-      - "server/**"
-      - "data/scripts/**"
-      - "docs/scripts/**"
-      - "docs/openapi.yaml"
-      - ".github/workflows/nutonic-ci.yml"
-      - "rules/**"
+#  push:
+#    paths:
+#      - "nutonic/**"
+#      - "server/**"
+#      - "data/scripts/**"
+#      - "docs/scripts/**"
+#      - "tools/**"
+#      - "inference/streetview_pano_service/**"
+#      - "inference/lfm_vl_hint_service/**"
+#      - "inference/lfm_vl_satellite_caption_service/**"
+#      - "docs/openapi.yaml"
+#      - ".github/workflows/nutonic-ci.yml"
+#      - "rules/**"
   pull_request:
     paths:
       - "nutonic/**"
       - "server/**"
       - "data/scripts/**"
       - "docs/scripts/**"
+      - "tools/**"
+      - "inference/streetview_pano_service/**"
+      - "inference/lfm_vl_hint_service/**"
+      - "inference/lfm_vl_satellite_caption_service/**"
       - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
       - "rules/**"
@@ -45,9 +53,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r data/scripts/requirements.txt pytest
-      - name: Pytest data/scripts
-        run: python -m pytest data/scripts/tests -q
+        run: pip install -r data/scripts/requirements.txt -r tools/requirements.txt pytest ./inference/streetview_pano_service ./inference/lfm_vl_hint_service ./inference/lfm_vl_satellite_caption_service
+      - name: Pytest data/scripts + tools + inference stubs
+        run: python -m pytest data/scripts/tests tools/tests inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests inference/lfm_vl_satellite_caption_service/tests -q
 
   server-unit-tests:
     name: Python game server (pytest)

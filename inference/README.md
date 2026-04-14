@@ -4,8 +4,8 @@ This directory hosts **deployables that are not the game server**. Kotlin client
 
 | Package | Role |
 |---------|------|
-| **`streetview_pano_service/`** | **Street View** pano sampling + still fetch (CPU-first, no PyTorch) for **batch / ops** pipelines. |
-| **`lfm_vl_hint_service/`** | **Standard** LFM-VL (Hub base checkpoint): multi-image in → **JSON suggestions** out; GPU / ZeroGPU on Hugging Face Spaces. |
+| **`streetview_pano_service/`** | **Street View** batch plane: **`GET /health`**, **`POST /v1/panos/sample`** (local **Pillow** stub frames — no Google keys). Production replaces sampling with real Street View Static / agreed provider. |
+| **`lfm_vl_hint_service/`** | **Street View captions:** **`POST /v1/suggestions/from_frames`** (+ **`POST /v1/narrative/fuse`**). **`LFM_VL_BACKEND`**: **`stub`** (CI default), **`transformers`** (official **Liquid** HF weights, `pip install -e ".[model]"`), or **`openai_compatible`** (vLLM/SGLang OpenAI API per [Liquid docs](https://docs.liquid.ai/lfm/models/lfm25-vl-450m)). |
 | **`lfm_vl_satellite_caption_service/`** | **Specialized** LFM-VL (your `refs/satellite-vlm/` finetune): satellite RGB → **caption / VQA / grounding JSON**; **Gradio demo** + FastAPI for the game server. |
 | **`pro_materialization_service/`** *(planned scaffold)* | **PRO tab**: lat/lon → **Mapbox** still + optional **Sentinel-2** via STAC, **downsampled** to sizes for on-device VLM (`vlm_image_set`) and TerraMind **TiM** / **`_generate`** inputs; called only from the **game server** (`docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §5.3). |
 | **`terramind_tim_local/`** | **Local TerraTorch TiM** forward + **capped** `tim_modality_outputs` JSON / JSONL + optional batch over catalog rows; **`ingest`** subcommand drives `data/scripts/generate_ai_guess_fixture.py` (`RUN_TERRATORCH_TIM=1` tests). |
@@ -26,6 +26,6 @@ Mixing all three in one giant process is **discouraged**; separate deployables k
 
 **TerraMind TiM (local batch):** `terramind_tim_local/` is the **repo-local** TerraTorch runner for **NDJSON → `generate_ai_guess_fixture`**. Broader **Gradio** demos may still live under **`demos/terramind_space/`** when that tree exists.
 
-**Status:** `streetview_pano_service/` now contains a minimal **FastAPI** stub (`IMP-110` scaffold). Remaining packages are still **planned** until their PR series land.
+**Status:** **`streetview_pano_service/`** and **`lfm_vl_hint_service/`** ship **FastAPI** contracts used by **`tools/batch_streetview_hints.py`** (local full runner, `pytest` in CI). **`lfm_vl_hint_service`** can run **real LFM-VL** via **Hugging Face Transformers** or an **OpenAI-compatible** upstream; default remains **stub** for fast CI. **`lfm_vl_satellite_caption_service/`** and **`pro_materialization_service/`** remain **planned** until their PR series land.
 
 **Game server wiring (IMP-092):** set **`NUTONIC_INFERENCE_WORKER_BASE_URL`** on the thin **`server/`** process to a worker origin (e.g. `http://127.0.0.1:7861` where pano service exposes **`GET /health`**). With **`FEATURE_PRO_JOBS=true`**, **`POST /api/v1/pro/jobs`** probes that URL via **`InferenceClient`** and returns **`inference_upstream_ok`** on the stub **`ProJobCreateOut`** payload.

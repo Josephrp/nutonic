@@ -78,6 +78,21 @@ def _load_useful_hints_dir(d: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _load_streetview_dir(d: Path | None) -> dict[str, dict[str, Any]]:
+    """Per ``location_id`` merged row from ``batch_streetview_hints`` JSON files."""
+    if d is None or not d.is_dir():
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for p in sorted(d.glob("*.json")):
+        obj = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(obj, dict):
+            continue
+        lid = obj.get("location_id")
+        if lid is not None:
+            out[str(lid)] = obj
+    return out
+
+
 def _load_ai_guesses(path: Path | None) -> list[dict[str, Any]]:
     if path is None or not path.is_file():
         return []
@@ -135,6 +150,7 @@ def assemble_manifest(
     repo_root: Path,
     still_index_path: Path,
     useful_hints_dir: Path,
+    streetview_dir: Path | None,
     ai_guesses_path: Path | None,
     tier_policy_path: Path,
     output_dir: Path,
@@ -149,7 +165,7 @@ def assemble_manifest(
     Raises ValueError on validation failures.
     """
     from catalog_lint import lint_catalog
-    from validate_hint_strings import HintPolicy, validate_hints
+    from validate_hint_strings import HintPolicy, validate_caption_text, validate_hints
 
     catalog_root = catalog_root.resolve()
     repo_root = repo_root.resolve()
@@ -176,6 +192,7 @@ def assemble_manifest(
 
     still_by_loc = _load_still_index(still_index_path)
     hints_by_loc = _load_useful_hints_dir(useful_hints_dir)
+    streetview_by_loc = _load_streetview_dir(streetview_dir.resolve() if streetview_dir else None)
     ai_rows = _load_ai_guesses(ai_guesses_path)
     hint_policy = HintPolicy.from_yaml_path(tier_policy_path)
 
@@ -225,6 +242,42 @@ def assemble_manifest(
             "play_budget_ms": int(loc["play_budget_ms"]) if loc.get("play_budget_ms") is not None else 180_000,
             "ai_marker_phase_enabled": bool(loc.get("ai_marker_phase_enabled", True)),
         }
+
+        sv_doc = streetview_by_loc.get(lid)
+        if isinstance(sv_doc, dict):
+            pack = sv_doc.get("streetview_hint_pack")
+            if pack is not None:
+                if not isinstance(pack, list):
+                    raise ValueError(f"{lid}: streetview_hint_pack must be a list")
+                for j, item in enumerate(pack):
+                    if not isinstance(item, dict):
+                        raise ValueError(f"{lid}: streetview_hint_pack[{j}] must be an object")
+                    txt = str(item.get("text", "")).strip()
+                    if not txt:
+                        raise ValueError(f"{lid}: streetview_hint_pack[{j}].text empty")
+                    if not skip_hint_validate:
+                        viol = validate_caption_text(txt, max_len=480, path=f"{lid}.streetview_hint_pack[{j}].text")
+                        if viol:
+                            raise ValueError(
+                                f"validate_caption_text failed for {lid} pack[{j}]: "
+                                + "; ".join(v.format_line() for v in viol)
+                            )
+                row["streetview_hint_pack"] = pack
+            narr = sv_doc.get("streetview_assist_narrative")
+            if narr is not None and str(narr).strip():
+                ns = str(narr).strip()
+                if not skip_hint_validate:
+                    viol = validate_caption_text(ns, max_len=900, path=f"{lid}.streetview_assist_narrative")
+                    if viol:
+                        raise ValueError(
+                            f"validate_caption_text failed for {lid} narrative: "
+                            + "; ".join(v.format_line() for v in viol)
+                        )
+                row["streetview_assist_narrative"] = ns
+            sc = sv_doc.get("satellite_caption_sidecar")
+            if isinstance(sc, dict):
+                row["satellite_caption_sidecar"] = sc
+
         locations_out.append(row)
 
     locations_out.sort(key=lambda r: (r["map_id"], r["location_id"]))
@@ -270,6 +323,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="Directory of per-location useful_hints *.json (from compile_useful_hint_tiers)",
     )
+    p.add_argument(
+        "--streetview-dir",
+        type=Path,
+        default=None,
+        help="Optional directory of batch_streetview_hints per-location *.json (streetview_hint_pack)",
+    )
     p.add_argument("--ai-guesses", type=Path, default=None, help="Optional ai_guesses.json envelope")
     p.add_argument("--tier-policy", type=Path, default=_SCRIPTS / "tier_policy.default.yaml")
     p.add_argument("--output-dir", type=Path, required=True, help="Writes manifest.full.json and manifest.public.json")
@@ -299,6 +358,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_root=args.repo_root.resolve(),
             still_index_path=still_index.resolve(),
             useful_hints_dir=hints_dir.resolve(),
+            streetview_dir=args.streetview_dir.resolve() if args.streetview_dir else None,
             ai_guesses_path=args.ai_guesses.resolve() if args.ai_guesses else None,
             tier_policy_path=args.tier_policy.resolve(),
             output_dir=out_dir,

@@ -26,6 +26,7 @@ def test_assemble_manifest_fixture_full_and_public() -> None:
         repo_root=repo_root,
         still_index_path=still_index,
         useful_hints_dir=hints,
+        streetview_dir=None,
         ai_guesses_path=ai,
         tier_policy_path=policy,
         output_dir=catalog,
@@ -60,6 +61,37 @@ def test_assemble_manifest_fixture_full_and_public() -> None:
     assert "truth_lat" not in json.dumps(ranked)
     assert len(ranked["ai_guesses"]) == 1
     assert ranked["ai_guesses"][0]["map_id"] == "asm_fix_a"
+
+
+def test_assemble_manifest_merges_streetview_pack() -> None:
+    catalog = FIXTURE / "catalog"
+    still_index = FIXTURE / "still_index.json"
+    hints = FIXTURE / "useful_hints"
+    sv = FIXTURE / "streetview"
+    ai = FIXTURE / "ai_guesses.json"
+    policy = Path(__file__).resolve().parents[1] / "tier_policy.default.yaml"
+    repo_root = Path(__file__).resolve().parents[3]
+    full_doc, _pub = assemble_manifest(
+        catalog_root=catalog,
+        repo_root=repo_root,
+        still_index_path=still_index,
+        useful_hints_dir=hints,
+        streetview_dir=sv,
+        ai_guesses_path=ai,
+        tier_policy_path=policy,
+        output_dir=catalog,
+        content_version=None,
+        engine_version="0.9.0-test",
+        expose_public_round_truth=False,
+        skip_catalog_lint=False,
+        skip_hint_validate=False,
+    )
+    loc_a = next(x for x in full_doc["locations"] if x["location_id"] == "asm_fix_a")
+    assert len(loc_a["streetview_hint_pack"]) == 2
+    assert loc_a["streetview_assist_narrative"].startswith("Street-level")
+    ranked = build_ranked_pack(full_doc, {"asm_fix_a": True, "asm_fix_b": False})
+    assert ranked["clues"][0].get("streetview_hint_pack") is not None
+    assert ranked["clues"][0]["streetview_assist_narrative"].startswith("Street-level")
 
 
 def test_assemble_manifest_cli_writes_files(tmp_path: Path) -> None:

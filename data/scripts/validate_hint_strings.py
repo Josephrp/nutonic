@@ -13,6 +13,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Sequence
 from typing import Any, Mapping
 
 import yaml
@@ -276,6 +277,39 @@ def validate_hints(obj: Any, policy: HintPolicy | None = None) -> list[Violation
                     )
                 )
 
+    return violations
+
+
+def validate_caption_text(
+    text: str,
+    *,
+    max_len: int = 400,
+    banned_substrings: Sequence[str] | None = None,
+    path: str = "caption",
+    coordinate_literal_check: bool = True,
+) -> list[Violation]:
+    """
+    Validate a single Street View caption / narrative string (no tier schema).
+
+    Used by ``tools/batch_streetview_hints`` before writing ``streetview_hint_pack``.
+    """
+    violations: list[Violation] = []
+    if len(text) > max_len:
+        violations.append(
+            Violation(
+                code="length_cap",
+                message=f"Caption length {len(text)} exceeds max {max_len}.",
+                path=path,
+            )
+        )
+    if coordinate_literal_check:
+        cv = _coordinate_violation(text, path)
+        if cv:
+            violations.append(cv)
+    banned = list(banned_substrings or [])
+    bv = _banned_hit(text, banned, path)
+    if bv:
+        violations.append(bv)
     return violations
 
 

@@ -77,6 +77,10 @@ def build_ranked_pack(manifest: dict[str, Any], ranked_by_map: dict[str, bool]) 
             "still_bundle_id": loc.get("still_bundle_id"),
             "useful_hints": loc.get("useful_hints"),
         }
+        if loc.get("streetview_hint_pack") is not None:
+            clue["streetview_hint_pack"] = loc.get("streetview_hint_pack")
+        if loc.get("streetview_assist_narrative") is not None:
+            clue["streetview_assist_narrative"] = loc.get("streetview_assist_narrative")
         clues.append(clue)
 
     clues.sort(key=lambda c: (c["map_id"], c["location_id"]))

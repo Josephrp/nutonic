@@ -55,7 +55,11 @@ class ContentCacheRepository(
         }
     }
 
-    suspend fun cachedDocument(): CacheManifestDocument? = store.loadEnvelope()?.document
+    suspend fun cachedDocument(): CacheManifestDocument? {
+        val shipped = readShippedFullManifest()
+        val env = store.loadEnvelope() ?: return shipped
+        return mergeShippedRoundTruth(env.document, shipped)
+    }
 
     suspend fun cachedMapsOrNull(): List<MapSummary>? = cachedDocument()?.maps
 

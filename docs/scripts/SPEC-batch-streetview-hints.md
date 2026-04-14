@@ -1,7 +1,7 @@
 # Script specification: `batch_streetview_hints.py`
 
 **Path:** `tools/batch_streetview_hints.py`  
-**Status:** Planned (**Phase D**).  
+**Status:** **Implemented** (**Phase D**) — **`inference/streetview_pano_service`** (`POST /v1/panos/sample`, synthetic JPEG frames) + **`inference/lfm_vl_hint_service`** (`POST /v1/suggestions/from_frames`, optional `POST /v1/narrative/fuse`). LFM backend: **`LFM_VL_BACKEND=stub`** (CI default), **`transformers`** (official **Liquid** HF `AutoModelForImageTextToText`, see [Liquid LFM2.5-VL-450M](https://docs.liquid.ai/lfm/models/lfm25-vl-450m)), or **`openai_compatible`** (vLLM/SGLang OpenAI `/v1/chat/completions`).  
 **Plan:** [`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`](../../plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md), [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) §5.0.
 
 ---
@@ -136,4 +136,4 @@ python tools/batch_streetview_hints.py
 
 ---
 
-*Spec version: 2026-04-14d — POI limit, K screenshots/POI, LFM-VL captions, optional LFM LLM narrative pass*
+*Spec version: 2026-04-14e — **Implemented** local runner (`tools/` + `inference/*` stubs); optional satellite / GPU backends unchanged*

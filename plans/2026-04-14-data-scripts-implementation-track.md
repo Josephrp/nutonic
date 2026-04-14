@@ -49,7 +49,7 @@ flowchart TD
   subgraph P5[P5 Optional]
     LLM[generate_useful_hints_llm.py]
   end
-  subgraph P6[P6 Street View]
+  subgraph P6[P6 Street View — landed]
     BV[batch_streetview_hints.py]
   end
   subgraph P7[P7 AI guess]
@@ -228,22 +228,24 @@ flowchart TD
 
 ---
 
-## 8. Track P6 — `tools/batch_streetview_hints.py`
+## 8. Track P6 — `tools/batch_streetview_hints.py` (**landed 2026-04-14** — local full runner)
 
 **Spec:** [SPEC-batch-streetview-hints.md](../docs/scripts/SPEC-batch-streetview-hints.md)
 
 | Item | Detail |
 |------|--------|
-| **P6.1** | HTTP client with timeouts; read **`--pano-service-url`** / **`--lfm-service-url`**. |
-| **P6.2** | Wire **`POST /v1/suggestions/from_frames`** response → `streetview_hint_pack`; run caption subset through **validator** rules. Implement **S0–S2**: **`--poi-limit`**, **`--sv-screenshots-per-location`**, chunking via **`--lfm-max-frames-per-request`**. |
-| **P6.3** | **`--skip-streetview-hints`** no-op for CI. |
-| **P6.4** | Optional **`--satellite-caption-service-url`** + **`--still-index`** from **P3** → call **`lfm_vl_satellite_caption_service`**; write **separate** provenance-labeled fields for manifest assembly (never mix unlabeled with SV pack). |
-| **P6.5** | Default **omit** `useful_hints` text from LFM request body (see spec §3.1 — anchoring footgun); gate behind **`--inject-useful-hint-tone`** if ever needed. |
-| **P6.6** | Optional **S3** narrative: **`--enable-narrative-pass`** + text backend; emit **`streetview_assist_narrative`**; validate; pin model in **`model_pins`**. |
-| **Tests** | Integration tests **skipped** unless `RUN_STREETVIEW_BATCH=1`; unit test with `responses`/`httpx` mocking. |
-| **Acceptance** | Manual smoke: 1 POI against local Docker services per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`. |
+| **P6.1** | **Landed** — `httpx` client, timeouts, **`--pano-service-url`** / **`--lfm-vl-url`** (alias **`--lfm-service-url`**), startup **GET …/health** on both bases (exit **9** on hard connectivity failure). |
+| **P6.2** | **Landed** — **`POST /v1/panos/sample`** → frames; **`POST /v1/suggestions/from_frames`** → `streetview_hint_pack`; **`validate_caption_text`** (`data/scripts/validate_hint_strings.py`) on each line. **S0–S2**: **`--poi-limit`**, **`--location-ids`**, **`--location-ids-file`**, **`--shuffle-seed`**, **`--sv-screenshots-per-location`**, **`--lfm-max-frames-per-request`** chunk merge. |
+| **P6.3** | **Landed** — **`--skip-streetview-hints`** exits **0** without network. |
+| **P6.4** | **Partial** — batch posts optional satellite **`POST …/v1/infer`** when **`--satellite-caption-service-url`** + **`--still-index`** resolve a still file; **separate** `satellite_caption_sidecar` object. **`lfm_vl_satellite_caption_service`** package not added yet (404 tolerated). |
+| **P6.5** | **Landed** — **`useful_hints`** omitted from LFM JSON unless **`--inject-useful-hint-tone`**. |
+| **P6.6** | **Landed (stub)** — **`--enable-narrative-pass`** + **`--narrative-service-url`** → **`POST /v1/narrative/fuse`** on **`lfm_vl_hint_service`** (text-only stub); validated narrative string or **null**. |
+| **Tests** | **Landed** — default CI: **`tools/tests/test_batch_streetview_hints.py`** (`httpx.MockTransport`) + **`inference/*/tests`**. Optional **`RUN_STREETVIEW_BATCH=1`** remains for live Google/GPU runs when wired. |
+| **Acceptance** | **Local:** two terminals — `uvicorn streetview_pano_service.main:app --port 7861` + `uvicorn lfm_vl_hint_service.main:app --port 7862` — then `python tools/batch_streetview_hints.py --catalog-root data/catalog --lfm-vl-url http://127.0.0.1:7862 --pano-service-url http://127.0.0.1:7861` after **`catalog_import`**. Outputs under **`data/cache/<version>/streetview/*.json`** + **`reports/streetview_failures.json`**. |
 
-**Dependency:** **IMP-110**/**IMP-111** services usable; until then track P6 remains **optional** / stubbed. **Soft dependency on P3** when satellite caption hop is enabled (still bytes + sha256 from `render_mapbox_still`).
+**Inference (CPU pano, optional GPU LFM):** **`inference/streetview_pano_service`** — **`POST /v1/panos/sample`** (Pillow JPEG decoys until Google Static lands). **`inference/lfm_vl_hint_service`** — **`POST /v1/suggestions/from_frames`** + **`POST /v1/narrative/fuse`** with **`LFM_VL_BACKEND`**: **`stub`** (default), **`transformers`** (official **Liquid** Hugging Face LFM-VL weights), or **`openai_compatible`** (OpenAI API to vLLM/SGLang per Liquid deployment docs).
+
+**Follow-up:** **`assemble_manifest`** merge of `data/cache/.../streetview/*.json` into manifest rows (**P8.1a** “optional streetview”) remains a separate PR when OpenAPI/Kotlin **`streetview_hint_pack`** is finalized.
 
 ---
 
@@ -371,6 +373,8 @@ flowchart TD
 | 0.1 | 2026-04-14 | Initial implementation track for all **`docs/scripts/SPEC-*.md`** scripts |
 | 0.2 | 2026-04-14 | **P3.4** still sidecar for LFM satellite + SV alignment; **P6.4–P6.5** batch hops + prompt footgun; **P7.3** TerraMind TiM coordinate import |
 | 0.3 | 2026-04-14 | **P6.2** / **P6.6**: POI limit + **K** SV frames + optional narrative LLM pass per **`SPEC-batch-streetview-hints.md`** §1.1 |
+| 0.4 | 2026-04-14 | **P6 landed:** `tools/batch_streetview_hints.py` + pano **`/v1/panos/sample`** + LFM stub **`/v1/suggestions/from_frames`** + **`validate_caption_text`**; CI runs **`tools/tests`** and **`inference/*/tests`**. |
+| 0.5 | 2026-04-14 | **`lfm_vl_hint_service`:** real **Liquid LFM-VL** via **`LFM_VL_BACKEND=transformers`** (HF `AutoModelForImageTextToText`) or **`openai_compatible`** (OpenAI `/v1/chat/completions` for vLLM/SGLang); default **stub** unchanged for CI. |
 
 ---
 

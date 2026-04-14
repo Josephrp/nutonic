@@ -1,5 +1,6 @@
 # Plan: Street View pano plane + LFM-VL hint inference (separate from game server)
 
+> **Shipped client cache (where this service fits):** CI batch outputs feed **`streetview_hint_pack`** in manifests / ranked clue slices — see **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5 Phase **D** and §4 OpenAPI follow-up.  
 > **Master plan (model policy + satellite service):** **`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`** — **standard** LFM-VL for Street View hints, **specialized** satellite captioning Space (`inference/lfm_vl_satellite_caption_service/`) with **`refs/satellite-vlm/`** prompts and a **Gradio demo**. This file remains the **A → B** Street View drill-down.
 
 **Date:** 2026-04-07  

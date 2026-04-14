@@ -1,7 +1,7 @@
 # NU:TONIC — Prioritized implementation task backlog
 
 **Date:** 2026-04-13  
-**Status:** Actionable backlog derived from verified guidance in `plans/2026-04-13-claims-verification-baseline.md`, normative phases in `plans/2026-04-07-complete-implementation-architecture.md` §9, `plans/2026-04-07-game-server-thin-orchestrator.md` §8, and repo gaps in `plans/2026-04-13-repo-state-gap-analysis.md`.
+**Status:** Actionable backlog derived from verified guidance in `plans/2026-04-13-claims-verification-baseline.md`, normative phases in `plans/2026-04-07-complete-implementation-architecture.md` §9, `plans/2026-04-07-game-server-thin-orchestrator.md` §8, and repo gaps in `plans/2026-04-13-repo-state-gap-analysis.md`. **Normative shipped content (stills, per-map hints, narrative embed, ranked clue packs):** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md) — use it for **IMP-081**/**082**/**083** script phases and OpenAPI follow-ups (`streetview_hint_pack`).
 
 **How to use:** Execute **waves** in order unless tasks explicitly allow parallel tracks (**∥**). Each task has acceptance criteria suitable for PR boundaries.
 
@@ -26,9 +26,9 @@
 
 ### 0.1 Repo verification (2026-04-13 reassessment)
 
-Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v0.8** and `plans/2026-04-13-claims-verification-baseline.md` **v0.7**.
+Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v0.9** and `plans/2026-04-13-claims-verification-baseline.md` **v0.8**.
 
-| ID band | Status vs repo (high level) — **verified 2026-04-13** |
+| ID band | Status vs repo (high level) — **verified 2026-04-14** |
 |---------|------------------------------|
 | **IMP-000 / IMP-001** | **`docs/map-engines.md`** and **`plans/2026-04-13-product-flags-v1.md`** present; server **`GET /api/v1/config`** → `features` (defaults: **`feature_ranked`** / **`feature_pro_jobs`** **false** until routes ship; **`feature_community_lb_post`** **false** unless enabled). |
 | **IMP-010–012** | **`server/`**, **`docs/openapi.yaml`**, **`server/docs/TOPOLOGY.md`**, Dockerfile **7860**, no **`torch`** — **landed**. **`GET /api/v1/cache/manifest`**: ETag, comma **`If-None-Match`**, default **redaction** of **`locations`** / **`ai_guesses`** (**`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH`** for full fixture tests). |
@@ -40,12 +40,12 @@ Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v0.8** and `
 | **IMP-072** | **Client:** **manifest-first** SCAN catalog via **`scanHubRefreshCatalog`** when **`ContentCacheRepository.refreshManifest()`** yields map rows; else **`GET /api/v1/maps`**. **Server:** static **`PUBLISHED_MAPS`** (DB-backed index still future). **Verdict:** client **S1c catalog path** **landed** alongside **IMP-080**; normative “full **S1c**” still allows **DB-backed** catalog later. |
 | **IMP-073** | **MapViewport** + gameplay route — **landed** (plumbing). |
 | **IMP-080** | **Landed (core):** **`ContentCacheRepository`**, platform **`ManifestBlobStore`**, **`ContentCacheRepositoryTest`**, OpenAPI + FastAPI manifest. **Partial:** **80.1** richer “missing bundle / still asset” fallback UX (`docs/GAME-ENGINE.md` §9) vs compose-resource **`files/3.jpg`** only. |
-| **IMP-081** | **Open:** no shipped **`bundles/...`** artifact + versioned download path per wave table; stills remain **resources** + manifest **string** refs. |
-| **IMP-082** | **Partial:** server fixtures + client **`AiGuessStore`** when manifest includes **`ai_guesses`** (requires **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH=true`** or cached full envelope). **No** Parquet / HF sync (**S6** still future). |
-| **IMP-083** | **Partial:** **`NutonicApp`** wires **`contentCacheRepository`** + **`LocalNonRankedLeaderboardRepository`** into **`WorldMapGameplayDetail`**; **submit** sets **`roundInstanceId`** and persists **local** row. **Open:** backlog **acceptance** “E2E non-ranked round on device/desktop” — **`WorldMapGameplayUiTest`** is **UI smoke** only (no persisted-row assertion); optional **`POST .../guesses/record`**; full **`docs/GAME-ENGINE.md` §10** state machine; optional **`refreshManifest()`** on gameplay entry (currently **`cachedDocument()`** only). |
+| **IMP-081** | **Open** (unchanged vs code): **versioned** still bytes + registry beyond demo **`nutonic.bundle.v1.demo_still`**. **Plan:** **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5 Phases **B**/**F** (Mapbox render script → `composeResources` + bundle index + optional **`assemble_manifest`** → server catalog sync). |
+| **IMP-082** | **Partial:** server fixtures + client **`AiGuessStore`** when manifest includes **`ai_guesses`** (requires **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH=true`** or cached full envelope). **Plan:** embed **`ai_guesses`** (+ **`locations`** for non-ranked) via **shipped** `manifest.full.json` / Gradle copy per **shipped-cache plan** §5 **E**/**F**; **S6** Parquet/HF still future. |
+| **IMP-083** | **Partial:** **`NutonicApp`** wires **`contentCacheRepository`** + **`LocalNonRankedLeaderboardRepository`** into **`WorldMapGameplayDetail`**; **submit** sets **`roundInstanceId`** and persists **local** row. **Open:** backlog **acceptance** “E2E non-ranked round on device/desktop” — **`WorldMapGameplayUiTest`** is **UI smoke** only (no persisted-row assertion); optional **`POST .../guesses/record`**; full **`docs/GAME-ENGINE.md` §10** state machine; optional **`refreshManifest()`** on gameplay entry (currently **`cachedDocument()`** only). **Plan:** **fail-closed** UX + embedded full local slice (**shipped-cache plan** §7) removes redacted-HTTP **footgun**. |
 | **IMP-084** | **Partial:** final results surface + local summary + RANK navigation. **Open:** **Success overlay** product HUD (**C6**), game-specific **share** hooks (**C7**); gallery **Share** is unrelated. |
 | **IMP-060** | **Landed** as before. **Optional:** refresh-token table — **not** implemented. |
-| **IMP-060+** | **Still open:** **IMP-090** ranked, **IMP-092**, **`inference/*`**. **Closed vs earlier text:** “manifest depth” is **no longer** a blanket blocker — server + client manifest **landed**; **bundle** + **ranked** work remains. |
+| **IMP-060+** | **Still open:** **IMP-090** ranked, **IMP-092**, full **`inference/*`** beyond **streetview stub**. **Closed vs earlier text:** “manifest depth” is **no longer** a blanket blocker — server + client manifest **landed**; **scripted embed + bundle registry** (**shipped-cache plan**) + **ranked** polish remains. |
 
 ---
 
@@ -121,11 +121,11 @@ Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v0.8** and `
 
 | ID | Task | Subtasks | Deps | Acceptance | Refs |
 |----|------|----------|------|------------|------|
-| **IMP-080** | **`ContentCacheRepository`** + manifest fetch (`ETag` / `content_version`) + local persist (`rules/13`). | **2026-04-13 verify:** **Landed** — client + server + **`ContentCacheRepositoryTest`** + redacted public manifest. **Open:** **80.1** deeper missing-asset / bundle-miss UX. | IMP-072 | Contract tests for manifest parse + cache (**present**). | Complete plan §9 **S3**; `rules/13` |
-| **IMP-081** | Ship **one canned bundle** (Mapbox still + metadata) for dev — no HF Jobs required. | **2026-04-13 verify:** **Not started** as a **versioned bundle** download — stills load from **compose resources** via manifest **`still_bundled_resource`** string. | IMP-080 | Client renders still + map; round loads offline-capable. | `docs/GAME-ENGINE.md` §9 |
-| **IMP-082** | **S1b** (can parallelize partially) — Dataset sync **stub**: local Parquet or single fixture row for **`AiGuessStore`** keyed by `map_id` + `location_id`. | **2026-04-13 verify:** **Partial** — server **`MANIFEST_AI_GUESSES`** + client **`AiGuessStore`** when manifest exposes rows; **no** Parquet/HF driver. | IMP-080 | For fixture round, `ai_lat`/`ai_lon` resolves after human submit (when manifest not redacted or cache warm). | Complete plan §9 **S1b** |
-| **IMP-083** | **S4** — Engine: human phase → **AI_GUESS_PLACED** from cache; client scoring + **local** leaderboard write. | **2026-04-13 verify:** **Partial** — wiring + **local** **`appendRow`** on lock-in + **`roundInstanceId`**; **no** dedicated **E2E** test meeting wave acceptance; optional telemetry **`POST`** absent. | IMP-082, IMP-073 | E2E non-ranked round on device/desktop. | Complete plan §9 **S4**; `docs/GAME-ENGINE.md` §12–13 |
-| **IMP-084** | **C6** + **C7** — HUD, success/final results, share hook stubs. | **2026-04-13 verify:** **Partial** — gameplay HUD exists; **final results** + local summary + RANK; **Success overlay** still checklist-level; **share** stubs for scorecard not done. | IMP-083 | Matches trust: non-ranked numbers from `commonMain`. | Complete plan §9 **C6**, **C7** |
+| **IMP-080** | **`ContentCacheRepository`** + manifest fetch (`ETag` / `content_version`) + local persist (`rules/13`). | **2026-04-13 verify:** **Landed** — client + server + **`ContentCacheRepositoryTest`** + redacted public manifest. **Open:** **80.1** deeper missing-asset / bundle-miss UX. **Plan:** seed from embedded **`manifest.full.json`** (**`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §7). | IMP-072 | Contract tests for manifest parse + cache (**present**). | Complete plan §9 **S3**; `rules/13`; **shipped-cache plan** §7 |
+| **IMP-081** | Ship **one canned bundle** (Mapbox still + metadata) for dev — no HF Jobs required. | **2026-04-14 verify:** **Not started** as **scripted** multi-map registry — demo **`GET /api/v1/bundles/...`** exists; stills remain **compose resources** + **`still_bundled_resource`**. **Plan:** **shipped-cache plan** §5 Phases **B**/**F**. | IMP-080 | Client renders still + map; round loads offline-capable. | `docs/GAME-ENGINE.md` §9; **shipped-cache plan** §5 |
+| **IMP-082** | **S1b** (can parallelize partially) — Dataset sync **stub**: local Parquet or single fixture row for **`AiGuessStore`** keyed by `map_id` + `location_id`. | **2026-04-14 verify:** **Partial** — server **`MANIFEST_AI_GUESSES`** + client **`AiGuessStore`** when manifest exposes rows; **no** Parquet/HF driver; **embed** path per **shipped-cache plan** §5 **E**/**F** is near-term. | IMP-080 | For fixture round, `ai_lat`/`ai_lon` resolves after human submit (when manifest not redacted or cache warm). | Complete plan §9 **S1b**; **shipped-cache plan** §5 **E** |
+| **IMP-083** | **S4** — Engine: human phase → **AI_GUESS_PLACED** from cache; client scoring + **local** leaderboard write. | **2026-04-14 verify:** **Partial** — wiring + **local** **`appendRow`** on lock-in + **`roundInstanceId`**; **no** dedicated **E2E** test meeting wave acceptance; optional telemetry **`POST`** absent. **Plan:** **shipped-cache plan** §7 (fail-closed UX, stable ranked **`Idempotency-Key`**). | IMP-082, IMP-073 | E2E non-ranked round on device/desktop. | Complete plan §9 **S4**; `docs/GAME-ENGINE.md` §12–13; **shipped-cache plan** §7 |
+| **IMP-084** | **C6** + **C7** — HUD, success/final results, share hook stubs. | **2026-04-13 verify:** **Partial** — gameplay HUD exists; **final results** + local summary + RANK; **Success overlay** still checklist-level; **share** stubs for scorecard not done. | IMP-083 | Matches trust: non-ranked numbers from `commonMain`. | Complete plan §9 **C6**, **C7**; **shipped-cache plan** §5 **G** |
 
 ---
 
@@ -133,7 +133,7 @@ Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v0.8** and `
 
 | ID | Task | Subtasks | Deps | Acceptance | Refs |
 |----|------|----------|------|------------|------|
-| **IMP-090** | **P2** — Ranked `start` / `submit`; `scoring/haversine.py`; ticket store; **no** server play timer fields. | 90.1 Idempotency keys. 90.2 OpenAPI bump. | IMP-060, IMP-011, IMP-083 | `test_ranked_flow.py` with mocked inference URLs. **IMP-083** is the spine-first gate: non-ranked E2E green before ranked merges unless **IMP-001** explicitly waives. | Thin orchestrator §1.3, §8 P2; `docs/RANKED-MODE.md` |
+| **IMP-090** | **P2** — Ranked `start` / `submit`; `scoring/haversine.py`; ticket store; **no** server play timer fields. | 90.1 Idempotency keys. 90.2 OpenAPI bump. **Plan:** client **`RankedCluePackRepository`** + on-disk clue slice (no golden) per **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §1/§7. | IMP-060, IMP-011, IMP-083 | `test_ranked_flow.py` with mocked inference URLs. **IMP-083** is the spine-first gate: non-ranked E2E green before ranked merges unless **IMP-001** explicitly waives. | Thin orchestrator §1.3, §8 P2; `docs/RANKED-MODE.md`; **shipped-cache plan** §1 |
 | **IMP-091** | Optional **forfeit-*** routes per ranked spec. | | IMP-090 | State machine tests. | Thin orchestrator §1.8; `docs/RANKED-MODE.md` §4 |
 | **IMP-092** | **`InferenceClient`** with timeouts, HMAC headers toward stub upstreams (**P4**). | 92.1 Circuit breaker optional. | IMP-010, IMP-090 | Matches orchestrator **P2 → P4** ordering. Mocked upstreams in CI; ranked submit never awaits hint Spaces. | Thin orchestrator §5, §8 P4 |
 
@@ -154,8 +154,8 @@ Execute sub-plans in **recommended** order (each is its own PR series):
 
 | ID | Task | Subtasks | Deps | Acceptance | Refs |
 |----|------|----------|------|------------|------|
-| **IMP-110** | `inference/streetview_pano_service` MVP per streetview plan P0–P1. | | IMP-010 | Docker build; health + one pano path. **Does not** require **IMP-092** / ranked. | `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` |
-| **IMP-111** | `inference/lfm_vl_hint_service` per LFM-VL master plan. | | IMP-110 (optional ordering) | GPU/ZeroGPU Space boots; JSON contract tests. | `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md` |
+| **IMP-110** | `inference/streetview_pano_service` MVP per streetview plan P0–P1. | **Note:** repo **stub** exists today — MVP replaces placeholder routes. **Batch consumer:** **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5 Phase **D**. | IMP-010 | Docker build; health + one pano path. **Does not** require **IMP-092** / ranked. | `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`; **shipped-cache plan** §5 **D** |
+| **IMP-111** | `inference/lfm_vl_hint_service` per LFM-VL master plan. | | IMP-110 (optional ordering) | GPU/ZeroGPU Space boots; JSON contract tests. | `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`; **shipped-cache plan** §5 **D** |
 | **IMP-112** | `inference/lfm_vl_satellite_caption_service` (optional Intel / EO). | | IMP-111 | Caption JSON matches OpenAPI internal stub. | Same master plan |
 | **IMP-113** | **`inference/pro_materialization_service`** per PRO materialization plan P0–P1 (Mapbox-only branch first). | | IMP-010 | `RGB_mapbox` end-to-end; no torch in container if policy holds. **Does not** require **IMP-092** / ranked. | `plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md` |
 | **IMP-114** | **P7** — `server` `POST .../pro/jobs` control plane + poll (**feature-flagged**). | 114.1 Prefer **`InferenceClient`** (**IMP-092**) for worker calls when **IMP-092** exists; until then, **`httpx`** in `routes_pro` with the same timeouts/HMAC policy is acceptable. | IMP-113, IMP-011, IMP-030, IMP-060, IMP-001 | **Does not** require ranked (**IMP-090**). Job status JSON only; signed URL pattern documented; PRO routes gated per **IMP-001**. | Thin orchestrator §8 P7; `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` |
@@ -168,7 +168,7 @@ Execute sub-plans in **recommended** order (each is its own PR series):
 
 | ID | Task | Subtasks | Deps | Acceptance | Refs |
 |----|------|----------|------|------------|------|
-| **IMP-120** | HF Jobs drivers + Parquet schema for manifests / `tim_modality_outputs` summaries. | 120.1 Retention policy documented. | IMP-080, IMP-082 | Server sync job pulls revision; client unchanged contract. | `plans/2026-04-07-gradio-terramind-backend.md` §2; complete plan §9 **S6** |
+| **IMP-120** | HF Jobs drivers + Parquet schema for manifests / `tim_modality_outputs` summaries. | 120.1 Retention policy documented. **Near-term:** **`assemble_manifest`** / embed path in **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5 **F** before full Hub sync. | IMP-080, IMP-082 | Server sync job pulls revision; client unchanged contract. | `plans/2026-04-07-gradio-terramind-backend.md` §2; complete plan §9 **S6**; **shipped-cache plan** §5 **F** |
 
 ---
 
@@ -221,3 +221,4 @@ IMP-000 / IMP-001
 | 0.4 | 2026-04-14 | **§0.1** reassessment: **IMP-070** landed; **IMP-071** / **IMP-072** **partial**; **IMP-040–050** row split (C2 shells vs BGM asset loops); cross-refs gap analysis **v0.5** / claims **v0.5**; **IMP-071** wave table note |
 | 0.5 | 2026-04-14 | **§0.1:** **IMP-060** community **`LeaderboardStore`** / SQLite **landed**; **`IMP-060+`** row narrowed to ranked / inference / manifest; **IMP-072** row clarifies manifest still gates full **S1c**; cross-refs gap + claims **v0.6**; **W3** **IMP-060** wave row annotated **Landed** |
 | 0.6 | 2026-04-13 | **§0.1 completeness pass:** cross-ref gap **v0.8** / claims **v0.7**; **IMP-072**/**080**/**082**/**083**/**084** rows rewritten from repo verification; **W5** wave table annotations; **`IMP-060+`** clarified (manifest landed; bundle + ranked still open) |
+| 0.7 | 2026-04-14 | **Shipped cache plan** (`2026-04-14-shipped-cache-narrative-hint-pipeline.md`): intro + **§0.1** cross-check bump to gap **v0.9** / claims **v0.8**; **IMP-081**/**082**/**083**/**060+** rows + **W5** (**IMP-080**–**084**) **Refs** / subtasks aligned to script+embed pipeline |

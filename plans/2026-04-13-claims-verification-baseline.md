@@ -20,7 +20,8 @@
 **Third pass:** 2026-04-14 — **IMP-070** / partial **IMP-071** / **IMP-072** (static maps) + **CI** `server/` pytest reflected in §3 (gap analysis **v0.5**).  
 **Fourth pass:** 2026-04-14 — **IMP-060** SQLite **`LeaderboardStore`** (gap analysis **v0.6**).  
 **Fifth pass:** 2026-04-14 — gap **v0.7** / **v0.8** prep: manifest route, redaction, gameplay + SCAN wiring (**IMP-080** / **IMP-083** partial).  
-**Sixth pass:** 2026-04-13 — backlog **§0.1** table re-verified vs `nutonic/` + `server/`; gap analysis **v0.8**; this memo **v0.7**.
+**Sixth pass:** 2026-04-13 — backlog **§0.1** table re-verified vs `nutonic/` + `server/`; gap analysis **v0.8**; this memo **v0.7**.  
+**Seventh pass:** 2026-04-14 — gap analysis **v0.9** ( **`inference/streetview_pano_service/`** stub noted); **shipped-cache / narrative / hint pipeline** plan added — [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md); this memo **v0.8**.
 
 ---
 
@@ -94,7 +95,7 @@
 |---------|--------------|
 | Evidence | `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §0.1 script-first, §0.2 topology; `inference/README.md` (services are optional batch/PRO; game server `httpx` only); phased tables defer **S5**/**S6** and orchestrator **P4+** after manifests (`plans/2026-04-07-complete-implementation-architecture.md` §9). |
 
-**Repo reality:** `inference/` contains only `README.md` (contractual anchor) — aligns with “not started,” consistent with deferral after spine.
+**Repo reality:** `inference/` contains **`README.md`** plus **`streetview_pano_service/`** **stub** (FastAPI health + placeholder metadata route); **`lfm_vl_hint_service/`** etc. still **absent**. **Normative** batch → bundle → KMP embed sequencing: **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** (Phase **D**). Deferral after spine remains **correct** for **full IMP-110+**.
 
 ---
 
@@ -141,11 +142,11 @@
 |-----|--------|
 | ~~No `server/` tree~~ | **Resolved** for thin reference slice — see §2.4 reassessment. |
 | §9 **S1c** prose used unversioned `/api/maps` | **Corrected** in `plans/2026-04-07-complete-implementation-architecture.md` §9 — implement paths only from **`docs/openapi.yaml`**. |
-| `inference/*` packages absent | Inference plans are preparatory until spine + contracts exist (**unchanged**). |
+| `inference/*` **full** workers | **`lfm_vl_hint_service/`** etc. still **absent**; **`streetview_pano_service/`** is a **stub** only — **IMP-110** remains open. **Normative batch + embed** sequencing: **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`**. |
 | ~~KMP still template identity~~ | **Largely resolved** — `com.nutonic` + `nutonic` root name; residual template UX (legacy gallery) is optional debt. |
 | ~~**KMP ↔ server wire-up**~~ | **Largely resolved** — **`NutonicApiClient`** in `shared` (**Ktor** + **`kotlinx.serialization`** DTOs aligned to **`docs/openapi.yaml`**); **SCAN** / **RANK** call **GET maps**, **GET/POST leaderboard**, **GET config**, **auth token** paths (**IMP-070**). **Partial** **IMP-071**: shared hub **`map_id`**, **Final results → RANK** + saveable route **`rankFocusMapId`** / **`#`** fragment (not yet production “no hardcoded rows” / full C4). |
 | ~~**Community `LeaderboardStore` only in-memory**~~ | **Resolved** — **`IMP-060`**: **`SqliteLeaderboardStore`** + idempotency table, env-configurable URL, **`pytest`** file persistence + **`TestClient`** hermetic in-memory default. |
-| **`MapViewport` / gameplay spine** | **Updated (2026-04-13)** — **`MapViewport`** interactive + **`WorldMapGameplayDetail`** wired; **local** non-ranked **`appendRow`** on submit (**`IMP-083`** **partial**). **Remaining:** **IMP-081** bundle bytes, **IMP-083** **E2E** acceptance + optional telemetry **`POST`**, **IMP-084** polish, full **`docs/GAME-ENGINE.md` §10** state machine. |
+| **`MapViewport` / gameplay spine** | **Updated (2026-04-14)** — **`MapViewport`** interactive + **`WorldMapGameplayDetail`** wired; **local** non-ranked **`appendRow`** on submit (**`IMP-083`** **partial**). **Remaining:** **IMP-081** scripted bundle registry + **embedded** `manifest.full.json` (**`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`**), **IMP-083** **E2E** + optional telemetry **`POST`**, **IMP-084** polish, full **`docs/GAME-ENGINE.md` §10** state machine, **ranked clue-pack** merge (**§7** shipped-cache plan). |
 | ~~**CI scope**~~ | **Resolved** for **`server/`** — **`nutonic-ci.yml`** runs **`pytest`** when `server/**` (or related paths) change; PM2 local verification remains manual (`docs/PM2_LOCAL_VERIFICATION.md`). |
 
 ---
@@ -161,4 +162,5 @@
 | 0.5 | 2026-04-14 | §3: **KMP ↔ server** and **CI** gaps closed per **gap analysis v0.5**; **IMP-071** recorded as **partial**; **MapViewport** / spine gap unchanged |
 | 0.6 | 2026-04-14 | **Fourth pass** header; §2.4 repo reality: **`GET /api/v1/maps` → 200** + **IMP-060** SQLite **`LeaderboardStore`**; §3 new resolved gap row; aligns with gap analysis **v0.6** |
 | 0.7 | 2026-04-13 | **Sixth pass** header; §2.4 repo reality extended (**cache/manifest**, redaction, client wiring); §3 spine gap narrowed; aligns with gap analysis **v0.8** + backlog **§0.1** refresh |
+| 0.8 | 2026-04-14 | **Seventh pass** header; §3 **`inference/*`** row: **streetview** stub nuance + **shipped-cache plan** link; §3 spine gap row: **embed** manifest / ranked clue pack; aligns with gap **v0.9** + backlog **§0.1** **0.7** |
 

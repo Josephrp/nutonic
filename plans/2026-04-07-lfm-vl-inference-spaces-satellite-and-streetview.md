@@ -7,6 +7,8 @@
 
 **Client invariant (unchanged):** Apps call **only** the game server OpenAPI; **no** Hub tokens on device; **no** direct calls to Spaces from KMP.
 
+**Local batch + datasets (2026-04-14):** Offline production of **`streetview_hint_pack`** and other cached SCAN rows runs **locally** first on **`data/downloads/geoguessr_poi_12`** (smoke) then **`geoguessr_poi_120`**, using the **smallest** LFM-VL checkpoint for contract validation — see **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5.0 and §5 Phase **D**. **`useful_hints` three-tier strings** are **not** owned by this LFM plan; they come from **programmatic proximity + templates** (**shipped-cache plan** §5 Phase **C**).
+
 ---
 
 ## 0. Executive summary

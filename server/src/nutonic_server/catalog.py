@@ -37,7 +37,10 @@ MANIFEST_LOCATIONS: list[ManifestLocationOut] = [
         useful_hints=UsefulHintsOut(
             tier_1="Western edge of the Eurasian landmass near Atlantic influence.",
             tier_2="Alpine foothill capital on a major river north-east of high peaks.",
-            tier_3="Austria · Vienna metro region.",
+            tier_3="Danube corridor; continental climate transition zone.",
+            tier_4="Eastern Alpine foreland and basin city layout.",
+            tier_5="Austria — central European country context.",
+            tier_6="Vienna-scale metro cues without coordinates (river-basin capital pattern).",
         ),
         play_budget_ms=180_000,
         ai_marker_phase_enabled=True,
@@ -53,7 +56,10 @@ MANIFEST_LOCATIONS: list[ManifestLocationOut] = [
         useful_hints=UsefulHintsOut(
             tier_1="Eastern North American coastal megacity region.",
             tier_2="Compact island grid between two tidal rivers.",
-            tier_3="USA · New York City.",
+            tier_3="Atlantic seaboard humid subtropical / continental blend.",
+            tier_4="Dense urban estuary with bridge-linked boroughs.",
+            tier_5="United States — northeastern megalopolis corridor.",
+            tier_6="Iconic island-core coastal megacity pattern (no coordinate literals).",
         ),
         play_budget_ms=180_000,
         ai_marker_phase_enabled=True,

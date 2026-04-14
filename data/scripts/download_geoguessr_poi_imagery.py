@@ -45,6 +45,8 @@ import requests
 from datasets import load_dataset
 from pystac_client import Client
 
+from geo_nutonic import haversine_km
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 try:
@@ -54,17 +56,6 @@ try:
     load_dotenv()
 except ImportError:
     pass
-
-
-def haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
-    """Great-circle distance in km; (lon, lat) order matches src/geo_utils.haversine."""
-    r_km = 6371.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlamb = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlamb / 2) ** 2
-    c = 2 * math.asin(min(1.0, math.sqrt(a)))
-    return r_km * c
 
 
 def pairwise_min_distance_km(points: list[dict[str, Any]]) -> float | None:

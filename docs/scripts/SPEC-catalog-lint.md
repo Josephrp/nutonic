@@ -1,7 +1,7 @@
 # Script specification: `catalog_lint.py`
 
 **Path:** `data/scripts/catalog_lint.py`  
-**Status:** Planned.  
+**Status:** **Implemented** (v1 — checks §2; optional `--json-errors` for one JSON line per violation on stderr).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase A; CI gate in §8.
 
 ---
@@ -25,7 +25,7 @@ Validate **`data/catalog/`** for structural integrity **before** expensive phase
 ## 3. CLI
 
 ```text
-python data/scripts/catalog_lint.py [--catalog-root data/catalog] [--verbose]
+python data/scripts/catalog_lint.py [--catalog-root data/catalog] [--verbose] [--json-errors]
 ```
 
 ---

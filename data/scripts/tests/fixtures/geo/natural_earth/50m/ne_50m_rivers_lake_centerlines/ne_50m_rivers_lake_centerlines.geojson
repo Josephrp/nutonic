@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "name": "ne_50m_rivers_lake_centerlines",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Fixture River"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [20.1, 10.2],
+          [20.35, 10.55],
+          [20.5, 10.75]
+        ]
+      }
+    }
+  ]
+}

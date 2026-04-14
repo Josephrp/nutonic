@@ -1,0 +1,47 @@
+# TerraMind TiM with **S2L2A** as the primary encoder input (12×224×224, TerraMind band order).
+# Pull real stacks with inputs.s2.mode=stac (requires: pip install -e ".[s2]").
+#
+# Input modalities (config.modalities): passed to BACKBONE_REGISTRY as encoder inputs.
+# TiM output modalities (tim_modalities): TerraTorch spellings, e.g. LULC, NDVI, location (not "Coordinates").
+
+model_id: terramind_v1_tiny_tim
+pretrained: true
+modalities:
+  - S2L2A
+tim_modalities:
+  - LULC
+  - location
+merge_method: mean
+
+device: cpu
+
+inputs:
+  s2_mode: random
+  batch_size: 1
+  s2:
+    # STAC example (uncomment + set coords/time when using s2_mode: stac in batch rows or here):
+    # mode is controlled by inputs.s2_mode / by_modality / batch row s2_mode
+    # lat: 48.8584
+    # lon: 2.2945
+    # datetime: "2024-01-01/2024-06-30"
+    half_km: 14.0
+    patch_hw: 224
+    max_cloud: 40
+    stac_url: https://earth-search.aws.element84.com/v1
+    collection: sentinel-2-l2a
+    # reflectance_saturation_hint: 1.5
+    # scale_to_dn_if_under: 10000
+
+serialization:
+  tensor_sample_limit: 0
+  encoder_tensor_sample_limit: 0
+  include_encoder_trace: true
+  encoder_trace_mode: last
+  # product | full — "full" emits every TiM sampler key (no silent drops).
+  tim_outputs: product
+  include_tim_raw_keys: false
+
+export:
+  map_id: s2_smoke_map
+  location_id: s2_smoke_loc
+  include_ai_guess_row: true

@@ -1,0 +1,12 @@
+{
+  "poi_id": "poi_test_0",
+  "latitude": 10.5,
+  "longitude": 20.25,
+  "bbox_wgs84": [20.0, 10.0, 21.0, 11.0],
+  "bbox_km_half": 2.5,
+  "hf_row_meta": {
+    "country_iso_alpha2": "ZZ",
+    "address": "Fixture Alpha"
+  },
+  "mapbox": { "path": "", "skipped": true }
+}

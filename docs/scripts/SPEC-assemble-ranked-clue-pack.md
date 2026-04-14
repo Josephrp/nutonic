@@ -1,7 +1,7 @@
 # Script specification: `assemble_ranked_clue_pack.py`
 
 **Path:** `data/scripts/assemble_ranked_clue_pack.py`  
-**Status:** Planned (**Phase F**).  
+**Status:** **Phase F — implemented** (`ranked_clue_pack.json` + per-`map_id` slices under `ranked_clues/`).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) §1, §7.
 
 ---

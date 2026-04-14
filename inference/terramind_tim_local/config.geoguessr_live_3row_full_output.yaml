@@ -1,0 +1,107 @@
+# =============================================================================
+# NU:TONIC — TerraMind TiM **live batch** (GeoGuessr POI downloads in-repo)
+# =============================================================================
+#
+# Run from the **repository root** (so ``paths.repo_root`` + relative JPEG
+# paths resolve, and STAC defaults match the POI download script):
+#
+#   pip install -e "./inference/terramind_tim_local[s2]"
+#   python -m nutonic_terramind_tim_local run ^
+#     --config inference/terramind_tim_local/config.geoguessr_live_3row_full_output.yaml ^
+#     --output-dir data/downloads/tim_geoguessr_live_run
+#
+# Data sources (this repo):
+#   - RGB: Mapbox static PNGs under ``data/downloads/geoguessr_poi_12`` and
+#     ``data/downloads/geoguessr_poi_120`` (same layout as ``download_geoguessr_poi_imagery.py``).
+#   - S2L2A: STAC pull (Earth Search) at each POI’s lat/lon and datetime window
+#     recorded in ``geoguessr_poi_manifest.json`` / ``poi.json`` — requires network
+#     + optional ``[s2]`` extras (rasterio, pystac-client).
+#
+# Output:
+#   - ``serialization.tim_outputs: full`` — every TiM sampler key in ``tim_modality_outputs``.
+#   - ``include_tim_raw_keys: true`` — ``engine.tim_raw_keys``.
+#   - ``encoder_trace_mode: all`` — stats for every encoder block output tensor.
+#
+# ---------------------------------------------------------------------------
+# Input / output modality reference (TerraTorch spellings)
+# ---------------------------------------------------------------------------
+# ``modalities`` (encoder inputs):  RGB, S2L2A, … — passed as tensors to TiM.
+# ``tim_modalities`` (TiM heads):   LULC, NDVI, location (→ internal coords), …
+# Do **not** use the string ``Coordinates`` in YAML; use ``location``.
+# =============================================================================
+
+content_version: nutonic.tim_local.geoguessr_live.v1
+
+paths:
+  # Resolved relative to **current working directory** when not absolute.
+  repo_root: .
+
+model_id: terramind_v1_tiny_tim
+pretrained: true
+merge_method: mean
+
+# Dual real-ish inputs: street-view–style RGB from disk + S2 from STAC at POI coords.
+modalities:
+  - RGB
+  - S2L2A
+
+# TiM outputs requested from the sampler (order matters for chained runs in TerraTorch).
+tim_modalities:
+  - LULC
+  - NDVI
+  - location
+
+device: cpu
+
+inputs:
+  batch_size: 1
+  mode: jpeg
+  s2_mode: stac
+  datetime: "2026-01-10/2026-04-10"
+  s2:
+    stac_url: https://earth-search.aws.element84.com/v1
+    collection: sentinel-2-l2a
+    half_km: 14.0
+    patch_hw: 224
+    max_cloud: 80
+    max_items: 30
+
+serialization:
+  tensor_sample_limit: 0
+  encoder_tensor_sample_limit: 0
+  include_encoder_trace: true
+  encoder_trace_mode: all
+  tim_outputs: full
+  include_tim_raw_keys: true
+
+export:
+  include_ai_guess_row: true
+
+# Three real POIs: two from ``geoguessr_poi_12``, one from ``geoguessr_poi_120``.
+batch:
+  - map_id: poi_0000
+    location_id: poi_0000
+    rgb_mode: jpeg
+    rgb_jpeg: data/downloads/geoguessr_poi_12/poi_0000/mapbox/satellite-v9_138.91407_-34.24093_z12.0.png
+    lat: -34.240926
+    lon: 138.914068
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0001
+    location_id: poi_0001
+    rgb_mode: jpeg
+    rgb_jpeg: data/downloads/geoguessr_poi_12/poi_0001/mapbox/satellite-v9_-27.32894_38.67589_z12.0.png
+    lat: 38.6758949
+    lon: -27.3289406
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0067
+    location_id: poi_0067
+    rgb_mode: jpeg
+    rgb_jpeg: data/downloads/geoguessr_poi_120/poi_0067/mapbox/satellite-v9_115.59959_-8.74140_z12.0.png
+    lat: -8.7414001
+    lon: 115.5995859
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac

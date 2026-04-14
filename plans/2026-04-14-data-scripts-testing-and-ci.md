@@ -15,15 +15,18 @@ data/scripts/tests/
   test_validate_hint_strings.py
   test_catalog_import_poi.py
   test_catalog_lint.py
+  test_render_mapbox_still.py
   test_build_poi_geo_context.py
   test_compile_useful_hint_tiers.py
   test_assemble_manifest.py
   test_assemble_ranked_clue_pack.py
+  test_generate_ai_guess_fixture.py
   fixtures/
     poi_mini/                 # 2 POIs, layout A + B
     geo/                      # clipped NE-compatible GeoJSON or small GPKG
     hints_valid.json
     hints_bad_coords.json
+    maps/reuse_stub.png           # tiny PNG for render_mapbox_still reuse-only tests
     catalog_ok/
     catalog_broken/
 ```

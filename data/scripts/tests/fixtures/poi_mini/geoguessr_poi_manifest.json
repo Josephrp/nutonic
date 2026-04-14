@@ -1,0 +1,18 @@
+{
+  "dataset": "fixture",
+  "num_points": 2,
+  "points": [
+    {
+      "poi_id": "poi_test_0",
+      "latitude": 10.5,
+      "longitude": 20.25,
+      "mapbox": { "path": "", "skipped": true }
+    },
+    {
+      "poi_id": "poi_test_1",
+      "latitude": -5.0,
+      "longitude": -10.0,
+      "mapbox": { "path": "", "skipped": true }
+    }
+  ]
+}

@@ -10,7 +10,7 @@
 
 **Optionally** rephrase or enrich **`useful_hints`** using a **small** LLM (text-only API or local runner) from **structured, non-spoiler fact JSON** only. This script **does not** replace **`compile_useful_hint_tiers`** for the default ship path; it is a **post-pass** or an **A/B polish** gated by flags.
 
-**TerraTorch / LFM-VL vs this script:** `data/scripts/*` stays **torch-free** per shipped-cache plan (`refs/` usage table). **Do not** import TerraTorch or load Hub weights in-process here. If product uses **LFM-VL** for tier polish, call it via an **HTTP adapter** (same pattern as `tools/batch_streetview_hints.py` → `lfm_vl_hint_service`) or **Ollama** / **OpenAI-compatible** endpoints — record pins in `model_pins.json`.
+**TerraTorch / LFM-VL vs this script:** `data/scripts/*` stays **torch-free** per shipped-cache plan (`refs/` usage table). **Do not** import TerraTorch or load Hub weights **in this script process**. **LFM-VL / text LM** polish is always via **HTTP**: the URL may be a **`inference/lfm_vl_hint_service`**-style FastAPI app, a **[vLLM](https://docs.vllm.ai/)** OpenAI-compatible server, **Ollama**, or another gateway — each of those **may** use **`transformers` + torch** or vLLM internally (`inference/README.md` §Runtime backends). Record pins in `model_pins.json`.
 
 ---
 
@@ -62,10 +62,11 @@ Implement **one** active backend per run:
 
 | Backend | `--backend` | Env / auth | Use when |
 |---------|-------------|------------|----------|
+| **vLLM (OpenAI API)** | `vllm` | Base URL to **`vllm serve`**, API key if enabled | Local or datacenter when the text/VLM server is vLLM-backed |
 | **Ollama** | `ollama` | `OLLAMA_HOST`, model tag | Local dev |
 | **OpenAI-compatible** | `openai` | `OPENAI_API_KEY`, base URL | Cloud LLM |
 | **HF Inference / router** | `hf` | `HF_TOKEN` | Hosted text model |
-| **LFM-VL HTTP** | `lfm_vl_http` | `LFM_VL_HINT_SERVICE_URL`, `INFERENCE_SERVICE_TOKEN` | **Text-only** path: send **no images**; user message is JSON facts + instruction to output tier JSON only |
+| **LFM-VL HTTP** | `lfm_vl_http` | `LFM_VL_HINT_SERVICE_URL`, `INFERENCE_SERVICE_TOKEN` | **Text-only** path: send **no images**; user message is JSON facts + instruction to output tier JSON only (service may use **torch** or vLLM internally) |
 
 Each backend returns **raw text** → parse JSON → **`UsefulHintsTiers`** Pydantic model → validator.
 
@@ -97,7 +98,7 @@ python data/scripts/generate_useful_hints_llm.py
   --geo-context-dir data/cache/<v>/geo_context
   [--useful-hints-dir data/cache/<v>/useful_hints]
   [--content-version <v>]
-  [--backend ollama|openai|hf|lfm_vl_http]
+  [--backend vllm|ollama|openai|hf|lfm_vl_http]
   [--model-profile tiny]
   [--enable-llm-polish]
   [--facts-only-prompt]
@@ -122,7 +123,7 @@ Always run **`validate_hint_strings`** (library or subprocess) on every candidat
 
 - No image inputs (Street View + VLM live under [SPEC-batch-streetview-hints.md](SPEC-batch-streetview-hints.md)).
 - No training / fine-tuning.
-- No in-process **TerraTorch** / **torch** in `data/scripts/`.
+- No in-process **TerraTorch** / **torch** inside **`data/scripts/generate_useful_hints_llm.py`** (remote workers may use them).
 
 ---
 
@@ -134,4 +135,4 @@ Always run **`validate_hint_strings`** (library or subprocess) on every candidat
 
 ---
 
-*Spec version: 2026-04-14c — full operator spec*
+*Spec version: 2026-04-14d — vLLM + remote torch backends*

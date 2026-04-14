@@ -58,6 +58,9 @@ data class UsefulHintsTiers(
     @SerialName("tier_1") val tier1: String? = null,
     @SerialName("tier_2") val tier2: String? = null,
     @SerialName("tier_3") val tier3: String? = null,
+    @SerialName("tier_4") val tier4: String? = null,
+    @SerialName("tier_5") val tier5: String? = null,
+    @SerialName("tier_6") val tier6: String? = null,
 )
 
 @Serializable

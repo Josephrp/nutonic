@@ -1,7 +1,7 @@
 # Script specification: `build_poi_geo_context.py`
 
 **Path:** `data/scripts/build_poi_geo_context.py`  
-**Status:** Planned (**Phase C0**).  
+**Status:** **Landed** (**Phase C0** — 2026-04-14).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) §5 Phase C.
 
 ---
@@ -18,12 +18,14 @@ For each catalog location, compute **offline** geographic **context** used to co
 
 | Input | Description |
 |-------|-------------|
-| **`--catalog-root`** | `data/catalog/locations/*.yaml` |
-| **`--geo-root`** | `data/geo` (Natural Earth shapefiles / geopackage) |
-| **`--poi-root`** | Optional; used only if extra fields must be re-read from original `poi.json` |
+| **`--catalog-root`** | `data/catalog/locations/*.yaml` (default `data/catalog`) |
+| **`--geo-root`** | Root containing **`natural_earth/50m/<extract>/<extract>.shp`** (after `fetch_geo_baselines`). If omitted, **`NE_FIXTURE_ROOT`** env is used when set; else **`data/geo`**. |
+| **`--content-version`** | Cache segment (default **`dev`** or **`NUTONIC_CONTENT_VERSION`**) |
+| **`--output-dir`** | Explicit **`geo_context/`** output directory; default **`data/cache/<content-version>/geo_context`** |
+| **`--poi-root`** | Optional (not implemented in v1); reserved if extra fields must be re-read from original `poi.json` |
 | **`--r-max-km`** | Default **200** |
 | **`--r-scale-k`** | Multiplier on `bbox_km_half`: **`R = min(R_max, k * bbox_km_half)`**; default **k=3** |
-| **`--fallback-country-iso`** | Use `country_iso` from catalog when point-in-polygon misses ocean / antimeridian edge cases |
+| **`country_iso` in location YAML** | When point-in-polygon misses **admin0**, match **`ISO_A2`** (then nearest centroid among ties) |
 
 ---
 
@@ -43,7 +45,28 @@ One file per location, e.g. **`data/cache/<content_version>/geo_context/<locatio
   "nearest_lake": { "name": null, "distance_km": null },
   "coast_distance_km": 8.2,
   "feature_distances": [],
-  "sources": { "natural_earth_version": "5.1.2", "layers": ["admin_0", "admin_1", "rivers", "lakes", "coastline"] }
+  "hint_compile_facts": {
+    "schema_version": "nutonic.hint_compile_facts.v1",
+    "continent": "Asia",
+    "hemisphere": "Southern",
+    "latitude_band": "low_latitudes_tropical_subtropical",
+    "admin0_name": "Indonesia",
+    "admin1_name": "Bali",
+    "nearest_river_label": "…",
+    "nearest_lake_label": "…",
+    "river_proximity": "near",
+    "lake_proximity": "immediate",
+    "coast_proximity": "near_coast",
+    "marine_framing": "…",
+    "hydro_framing": "…",
+    "hydro_framing_short": "…"
+  },
+  "sources": {
+    "natural_earth_version": "5.1.2",
+    "layers": ["admin_0", "admin_1", "rivers", "lakes", "coastline"],
+    "projected_crs": "EPSG:32634",
+    "search_radius_m": 7500.0
+  }
 }
 ```
 
@@ -61,9 +84,11 @@ One file per location, e.g. **`data/cache/<content_version>/geo_context/<locatio
 
 ## 4. Implementation constraints
 
-- **Libraries:** `geopandas`, `shapely`, `pyproj` (see `data/scripts/requirements.txt` when implemented).
-- **CRS:** Use a **projected CRS** per POI for distance queries (e.g. UTM zone from centroid, or EPSG:3857 with acceptance of error at poles — document choice).
-- **Performance:** Pre-spatial-index rivers/lakes for bbox subset around each POI buffer polygon.
+- **Libraries:** `geopandas`, `shapely`, `pyproj` (see `data/scripts/requirements.txt`).
+- **Vector discovery:** Each NE extract is **`{geo-root}/natural_earth/50m/<extract_name>/<extract_name>.shp`** or **`.geojson`** (same names as `fetch_geo_baselines.ne_50m_artifacts()`).
+- **CRS:** **UTM** from WGS84 lon/lat (`EPSG:326xx` / `327xx`); **EPSG:3857** when `|lat| > 84`.
+- **Attributes:** Read columns via **label index** (not `getattr` on pandas **Series** for a column named `name`, which clashes with **`Series.name`**).
+- **Performance:** v1 filters rivers/lakes by **search buffer** `intersects` then falls back to global nearest; full-scale **sindex** refinement is optional follow-up.
 
 ---
 

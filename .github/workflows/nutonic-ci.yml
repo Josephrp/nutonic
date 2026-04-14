@@ -9,6 +9,8 @@ on:
     paths:
       - "nutonic/**"
       - "server/**"
+      - "data/scripts/**"
+      - "docs/scripts/**"
       - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
       - "rules/**"
@@ -16,6 +18,8 @@ on:
     paths:
       - "nutonic/**"
       - "server/**"
+      - "data/scripts/**"
+      - "docs/scripts/**"
       - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
       - "rules/**"
@@ -29,9 +33,28 @@ defaults:
     working-directory: nutonic
 
 jobs:
+  data-scripts-unit-tests:
+    name: Data scripts (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r data/scripts/requirements.txt pytest
+      - name: Pytest data/scripts
+        run: python -m pytest data/scripts/tests -q
+
   server-unit-tests:
     name: Python game server (pytest)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

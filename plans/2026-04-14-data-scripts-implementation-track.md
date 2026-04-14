@@ -163,15 +163,15 @@ flowchart TD
 
 ## 5. Track P3 — `render_mapbox_still.py`
 
-**Spec:** [SPEC-render-mapbox-still.md](../docs/scripts/SPEC-render-mapbox-still.md) — **IMP-081**
+**Spec:** [SPEC-render-mapbox-still.md](../docs/scripts/SPEC-render-mapbox-still.md) — **IMP-081** — **landed 2026-04-14** (reuse + gated network + `still_index.json`).
 
 | Work unit | Detail |
 |-----------|-------------------------|
 | **P3.1** | **`--reuse-only`:** copy from `still_source.bundled_relative`, optional Pillow resize to policy width/height, export JPEG to temp output dir. |
-| **P3.2** | **`still_sha256`** sidecar JSON next to output image. |
-| **P3.3** | Optional network render behind `--allow-network` + `MAPBOX_ACCESS_TOKEN` (retry/backoff). |
+| **P3.2** | **`still_sha256`** sidecar JSON per location under `--meta-dir/stills/` plus aggregate **`still_index.json`**. |
+| **P3.3** | Network render behind **`--allow-network`** + `MAPBOX_ACCESS_TOKEN` / `MAPBOX_TOKEN` (retry/backoff); default **no** HTTP. |
 | **P3.4** | Sidecar / index fields **`width_px`**, **`height_px`**, **`center_*`**, **`zoom`** per [SPEC-render-mapbox-still.md](../docs/scripts/SPEC-render-mapbox-still.md) so **P6 satellite caption** and **QA** can detect center drift vs Street View sampling. |
-| **Tests** | Reuse-only with tiny PNG fixture; assert JPEG output dimensions and non-zero file size. |
+| **Tests** | `test_render_mapbox_still.py`: reuse-only with `fixtures/maps/reuse_stub.png`; gated-network / missing-token cases. |
 | **Acceptance** | Produces at least one **`nutonic.bundle.v1.*`** compatible blob matching `server` bundle loader expectations (coordinate with `bundles.py` registry extension in same or follow-up PR). |
 
 ---
@@ -179,6 +179,8 @@ flowchart TD
 ## 6. Track P4 — Useful hints (deterministic)
 
 **Specs:** [SPEC-validate-hint-strings.md](../docs/scripts/SPEC-validate-hint-strings.md), [SPEC-build-poi-geo-context.md](../docs/scripts/SPEC-build-poi-geo-context.md), [SPEC-compile-useful-hint-tiers.md](../docs/scripts/SPEC-compile-useful-hint-tiers.md)
+
+**Product (2026-04-14):** default **six** monotonic **`tier_1`…`tier_6`** strings — **no coordinate literals in any tier** (including strongest). OpenAPI + Kotlin accept optional **`tier_4`–`tier_6`**; legacy three-tier payloads remain valid.
 
 ### P4a — `validate_hint_strings.py` (land **first**)
 
@@ -195,7 +197,7 @@ flowchart TD
 |------|--------|
 | **P4b.1** | Load NE layers from `NE_FIXTURE_ROOT` in CI or `data/geo` locally; build GeoDataFrame spatial index. |
 | **P4b.2** | Implement **R** radius query; nearest river/lake; coast distance; admin0/1 containment. |
-| **P4b.3** | Write **`geo_context/<location_id>.json`** per [SPEC-build-poi-geo-context.md](../docs/scripts/SPEC-build-poi-geo-context.md) schema. |
+| **P4b.3** | Write **`geo_context/<location_id>.json`** per [SPEC-build-poi-geo-context.md](../docs/scripts/SPEC-build-poi-geo-context.md) schema. **2026-04-14:** emits **`hint_compile_facts`** (ordinal buckets + framing strings for compile). |
 | **Tests** | Synthetic point inside known fixture polygon; assert `admin0_name` / `nearest_river` keys stable. |
 | **Acceptance** | Run on **`geoguessr_poi_12`** end-to-end in < 2 minutes on typical laptop with fixture geo. |
 
@@ -203,10 +205,10 @@ flowchart TD
 
 | Item | Detail |
 |------|--------|
-| **P4c.1** | Default **`tier_policy.yaml`** with templates + max lengths + `easy_hints: false`. |
-| **P4c.2** | After compile, call **`validate_hints`**; fail on violations. |
-| **Tests** | One `context.json` → expected `tier_*` substrings (admin0, river name). |
-| **Acceptance** | **`geoguessr_poi_12`** produces 12 `useful_hints/*.json` files, all pass validator. |
+| **P4c.1** | Default **`tier_policy.default.yaml`** — **`tier_count: 6`**, templates, max lengths, `easy_hints: false`. |
+| **P4c.2** | After compile, call **`validate_hints`** with same policy; exit **8** on violations. |
+| **Tests** | `test_compile_useful_hint_tiers.py`: fixture geo_context → six non-empty tiers + validator pass. |
+| **Acceptance** | **`geoguessr_poi_12`** produces 12 `useful_hints/*.json` files (when geo_context exists), all pass validator. **Landed 2026-04-14.** |
 
 ---
 
@@ -251,11 +253,11 @@ flowchart TD
 
 | Item | Detail |
 |------|--------|
-| **P7.1** | Implement **`decoy_offset`** + **`fixed_table`** modes first; **`random_seeded`** last. |
-| **P7.2** | Output **`ai_guesses.json`** array. |
-| **P7.3** | Implement **`terramind_tim_jsonl`** / **`terramind_tim_dir`** importers: read **`tim_modality_outputs.Coordinates`** (full lat/lon) per `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`; **`--prefer-tim`** default true; exit codes **12–13** on schema/precedence failures. |
-| **Tests** | `decoy_offset`: distance from truth within configured delta ± tolerance using `geo_nutonic`. TiM: golden fixture JSONL → expected `ai_lat`/`ai_lon`. |
-| **Acceptance** | Generated rows joinable to catalog `map_id` / `location_id` keys. |
+| **P7.1** | Implement **`decoy_offset`** + **`fixed_table`** modes first; **`random_seeded`** last. **2026-04-14:** **Landed** — `geo_nutonic.destination_point_km` + modes. |
+| **P7.2** | Output **`ai_guesses.json`** array. **Landed** — envelope `{"ai_guesses":[…]}` for **`assemble_manifest`**. |
+| **P7.3** | Implement **`terramind_tim_jsonl`** / **`terramind_tim_dir`** importers: read **`tim_modality_outputs.Coordinates`** (full lat/lon) per `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`; **`--prefer-tim`** default true; exit codes **12–13** on schema/precedence failures. **Landed** — **`coordinates_wgs84`** / `lat`+`lon` / top-level `ai_lat`+`ai_lon`; overlay on decoy/fixed/random. |
+| **Tests** | `decoy_offset`: distance from truth within configured delta ± tolerance using `geo_nutonic`. TiM: golden fixture JSONL → expected `ai_lat`/`ai_lon`. **Landed:** **`test_generate_ai_guess_fixture.py`**, **`fixtures/tim_export/`**. |
+| **Acceptance** | Generated rows joinable to catalog `map_id` / `location_id` keys. **Landed** for fixture catalog. |
 
 **Dependency:** P2 catalog exists. TiM JSON fixtures may live under `data/scripts/tests/fixtures/tim_export/`.
 

@@ -10,10 +10,10 @@
 
 Offline batch driver with a **fixed multi-stage pipeline** (see §1.1). In short: **select a configurable set of POIs** → for each POI, **capture a configurable number of Street View screenshots** (static / pano-derived frames per sampling policy) → send those images to **LFM-VL** for **per-batch or per-viewpoint captioning** → optionally run a **final text-only LFM (LLM) pass** to fuse captions into a short **narrative** string for chrome / INTEL-style copy (still validated; **no** second vision forward required).
 
-Internal HTTP services:
+Internal HTTP services (URLs are **contracts**; backends are swappable):
 
 1. **`inference/streetview_pano_service`** — returns **`frames[]`** (image bytes + `pano_id`, headings, attribution); frame count is **operator-configurable** and must match what LFM-VL expects (bounded `max_suggestions` / token budget).
-2. **`inference/lfm_vl_hint_service`** — **`POST /v1/suggestions/from_frames`**: all screenshots for that POI in **one** request (or chunked batches if **`--lfm-max-frames-per-request`** is exceeded — merge `suggestions[]` deterministically by `viewpoint_id` order).
+2. **VLM captioning** — **`POST /v1/suggestions/from_frames`** (or adapter-mapped equivalent): all screenshots for that POI in **one** request (or chunked batches if **`--lfm-max-frames-per-request`** is exceeded — merge `suggestions[]` deterministically by `viewpoint_id` order). The process behind **`--lfm-vl-url`** may be **`lfm_vl_hint_service`** (**`transformers` + PyTorch**), a **vLLM** deployment exposing an OpenAI-compatible chat/completions API with a thin shim, or another approved worker — see `inference/README.md` §Runtime backends.
 
 Primary ship field remains **`streetview_hint_pack`** (see **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §4).
 

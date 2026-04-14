@@ -4,6 +4,12 @@ stitch
 data/*
 !data/scripts/
 !data/scripts/**
+data/scripts/tests/_scratch_raster/
+!data/catalog/
+!data/catalog/**
+!data/geo/
+data/geo/*
+!data/geo/README.md
 .cache
 .env
 

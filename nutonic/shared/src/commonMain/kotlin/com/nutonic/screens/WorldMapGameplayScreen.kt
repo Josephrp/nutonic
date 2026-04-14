@@ -967,10 +967,19 @@ private fun AssistDock(
                 expanded = usefulHintsExpanded,
                 onExpandedChange = onUsefulHintsExpandedChange,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    (1..3).forEach { tier ->
-                        OutlinedButton(onClick = { onRevealHintTier(tier) }, modifier = Modifier.weight(1f)) {
-                            Text("Tier $tier")
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (1..3).forEach { tier ->
+                            OutlinedButton(onClick = { onRevealHintTier(tier) }, modifier = Modifier.weight(1f)) {
+                                Text("Tier $tier")
+                            }
+                        }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        (4..6).forEach { tier ->
+                            OutlinedButton(onClick = { onRevealHintTier(tier) }, modifier = Modifier.weight(1f)) {
+                                Text("Tier $tier")
+                            }
                         }
                     }
                 }
@@ -1177,18 +1186,28 @@ private fun BasemapMode.next(): BasemapMode =
 private fun usefulHintForTier(
     tier: Int,
     hints: UsefulHintsTiers?,
-): String =
-    when (tier) {
-        1 ->
-            hints?.tier1
-                ?: "Tier 1: Western edge of the Eurasian landmass near Atlantic influence."
-        2 ->
-            hints?.tier2
-                ?: "Tier 2: Distinctive blue urban architecture with steep mountain-backed layout."
-        else ->
-            hints?.tier3
-                ?: "Tier 3: Morocco, Rif region, around Chefchaouen."
+): String {
+    val fromManifest =
+        when (tier) {
+            1 -> hints?.tier1
+            2 -> hints?.tier2
+            3 -> hints?.tier3
+            4 -> hints?.tier4
+            5 -> hints?.tier5
+            6 -> hints?.tier6
+            else -> null
+        }
+    if (!fromManifest.isNullOrBlank()) return fromManifest
+    return when (tier) {
+        1 -> "Tier 1: Western edge of the Eurasian landmass near Atlantic influence."
+        2 -> "Tier 2: Distinctive blue urban architecture with steep mountain-backed layout."
+        3 -> "Tier 3: Morocco, Rif region, around Chefchaouen."
+        4 -> "Tier 4: Subnational physiographic and hydro cues (no coordinates)."
+        5 -> "Tier 5: Country-scale framing only."
+        6 -> "Tier 6: Strongest scripted assist — still coordinate-free."
+        else -> "Tier: no manifest text for this band."
     }
+}
 
 private fun scoreFromDistanceKm(distanceKm: Double): Int =
     (5_000.0 - (distanceKm * 2.8)).coerceAtLeast(0.0).roundToInt()

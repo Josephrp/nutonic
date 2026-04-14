@@ -578,7 +578,10 @@ components:
 
     UsefulHintsTiers:
       type: object
-      description: Pre-cached three-tier hints for SCAN (`docs/GAME-ENGINE.md` §9.1)
+      description: |
+        Pre-cached SCAN useful hints: **up to six** monotonic specificity bands
+        (`docs/GAME-ENGINE.md` §9.1). **No tier may contain coordinate literals** (including tier_6).
+        Older payloads may ship only `tier_1`–`tier_3`; clients treat absent optional tiers as null.
       properties:
         tier_1:
           type: string
@@ -586,6 +589,15 @@ components:
           type: string
         tier_3:
           type: string
+        tier_4:
+          type: string
+          nullable: true
+        tier_5:
+          type: string
+          nullable: true
+        tier_6:
+          type: string
+          nullable: true
 
     ManifestRoundLocation:
       type: object

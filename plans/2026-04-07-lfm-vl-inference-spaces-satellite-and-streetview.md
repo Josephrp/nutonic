@@ -93,6 +93,18 @@ refs/
 | `LFM_VL_MODEL_ID` | `LiquidAI/LFM2.5-VL-450M` |
 | `LFM_VL_REVISION` | `main` or commit SHA |
 
+### 3.4 Serving backends (normative)
+
+The **HTTP contract** (`POST /v1/suggestions/from_frames`, Pydantic-validated JSON) is stable; **how** the model runs is an implementation choice per deploy:
+
+| Backend | When to use |
+|---------|-------------|
+| **vLLM** | Production or lab when the **LFM-VL** (or chosen VLM) checkpoint is **supported** by vLLM; expose OpenAI-compatible routes and add a **thin adapter** in-repo if the path differs from §3.2. |
+| **`transformers` + PyTorch** | Default **HF Space / Docker** pattern: in-process load + `generate` (or equivalent) behind FastAPI. |
+| **TerraTorch** | **Not** the default stack for **LFM-VL** Street View captioning — reserve for **TerraMind EO** workers (`demos/terramind_space/`, dedicated TiM URLs). |
+
+Satellite specialist service (**§4**) follows the same **vLLM vs torch** split where applicable; grounding JSON validation stays server-side.
+
 ---
 
 ## 4. Specialized LFM-VL — `lfm_vl_satellite_caption_service`
@@ -289,5 +301,6 @@ strategy:
 | Ver | Date | Notes |
 |-----|------|-------|
 | 0.1 | 2026-04-07 | Initial: standard LFM-VL hints + specialist satellite Space + Gradio demo + game orchestration |
+| 0.2 | 2026-04-14 | **§3.4** / `inference/README.md`: vLLM vs **`transformers`+PyTorch** vs TerraTorch (EO) as allowed serving backends behind stable HTTP contracts |
 
 *End of document.*

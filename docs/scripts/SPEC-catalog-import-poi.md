@@ -1,7 +1,7 @@
 # Script specification: `catalog_import_poi.py`
 
 **Path:** `data/scripts/catalog_import_poi.py`  
-**Status:** Planned.  
+**Status:** **Implemented** (v1 — Layout A/B, `maps.yaml` merge, `--maps-file` overrides, `render_policy` fallback when still missing).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase A.
 
 ---

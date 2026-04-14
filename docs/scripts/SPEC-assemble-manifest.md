@@ -1,7 +1,7 @@
 # Script specification: `assemble_manifest.py`
 
 **Path:** `data/scripts/assemble_manifest.py`  
-**Status:** Planned (**Phase F**).  
+**Status:** **Phase F — implemented** (canonical JSON + public redaction + `catalog_lint` / `validate_hints` gates).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase F.
 
 ---
@@ -72,7 +72,15 @@ Must conform to **`docs/openapi.yaml`** `CacheManifest` (and Kotlin `CacheManife
 ## 5. CLI
 
 ```text
-python data/scripts/assemble_manifest.py [--content-version …] [--output-dir data/cache/…] [--expose-round-truth]
+python data/scripts/assemble_manifest.py \
+  --output-dir data/cache/<version> \
+  --still-index <path/to/still_index.json> \
+  --useful-hints-dir data/cache/<version>/useful_hints \
+  [--catalog-root data/catalog] [--repo-root <repo>] \
+  [--ai-guesses data/cache/<version>/ai_guesses.json] \
+  [--content-version …] [--engine-version …] \
+  [--expose-public-round-truth] \
+  [--skip-catalog-lint] [--skip-hint-validate]
 ```
 
 ---

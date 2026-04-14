@@ -38,6 +38,9 @@ class UsefulHintsOut(BaseModel):
     tier_1: str | None = None
     tier_2: str | None = None
     tier_3: str | None = None
+    tier_4: str | None = None
+    tier_5: str | None = None
+    tier_6: str | None = None
 
 
 class ManifestLocationOut(BaseModel):

@@ -29,7 +29,7 @@ Everything below is **versioned** with at least **`content_version`** (manifest)
 |-------|-------------|-----------|------------------|
 | **L0 — Catalog** | `map_id`, `title`, `engine_version`, optional `mission_id` links | Curated YAML/JSON + lint | SCAN hub, manifest `maps[]` |
 | **L1 — Reference still** | Downsampled static map image (PNG/JPEG/WebP) | Script: Mapbox Static Images (keys in CI secret), width/height policy per `docs/GAME-ENGINE.md` §9 | `still_bundle_id` + `GET /api/v1/bundles/...` and/or `still_bundled_resource` under `nutonic/shared/src/.../composeResources/` |
-| **L2 — Coordinate useful hints** | `useful_hints.tier_1..3`: continent → regional landmark/hydro → country; **no lat/lon literals**, length caps | **Scripts** (deterministic gazetteer: reverse geocode → admin polygons / Natural Earth–class tables) **or** LLM with **validator** (see §6) | `ManifestRoundLocation` / `RankedClue` |
+| **L2 — Coordinate useful hints** | `useful_hints.tier_1..N` (default **N=6**): monotonic bands from continental → marine/hydro → subnational → country-scale synthesis; **no lat/lon literals in any tier (including strongest)**; length caps | **`build_poi_geo_context`** → **`hint_compile_facts`** → **`compile_useful_hint_tiers`** (+ optional LLM polish) + **`validate_hint_strings`** | `ManifestRoundLocation` / `RankedClue` (OpenAPI optional **`tier_4`–`tier_6`**) |
 | **L3 — Street View hint pack** | Ordered text entries + viewpoint metadata; **decoy viewpoints** per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` | **Batch job**: `streetview_pano_service` → images → `lfm_vl_hint_service` → JSON | Optional assist panel; **ranked forfeit** if revealed before submit |
 | **L4 — Narrative (authorial)** | `prompts/` Markdown + YAML front matter: slots (`mission_select`, `map_select`, `map_overlay`, …) per `docs/NARRATIVE-AND-PROMPTS.md` §7 | Authors + CI lint | Gradle-serialized **PromptBundle** in compose resources |
 | **L5 — Narrative / chrome (generated)** | Mission one-liners, debrief templates, INTEL flavor | **Composable prompts**: `prompts/llm/*.md` with `{{vars}}`; HF Job or local `openai`-compatible runner in CI | Same bundle or sidecar JSON merged by `content_version` |
@@ -95,7 +95,7 @@ nutonic/shared/src/commonMain/composeResources/files/
 
 ## 4. OpenAPI, server, and Kotlin model extensions (planned work)
 
-**Today:** `UsefulHintsTiers`, `ManifestRoundLocation`, `RankedClue`, `CacheManifestDocument` cover stills + three-tier strings + AI rows; **no** `streetview_hint_pack` on wire or in Kotlin.
+**Today:** `UsefulHintsTiers`, `ManifestRoundLocation`, `RankedClue`, `CacheManifestDocument` cover stills + **up to six** useful-hint strings + AI rows; **no** `streetview_hint_pack` on wire or in Kotlin.
 
 **Plan:**
 
@@ -135,7 +135,7 @@ Phases are **ordered**; later phases depend on stable IDs from earlier ones.
 
 | `refs/` path | Role for **NU:TONIC `data/scripts/`** | Discipline |
 |---------------|----------------------------------------|------------|
-| **`refs/terramind-geogen-main/src/geo_utils.py`** | **Reference** for **haversine in km** and **(lon, lat)** point order when comparing distances, scoring parity notes, or **unit tests** that reimplement haversine in **pure Python / NumPy** | **Do not** `import torch` or add TerraTorch to `data/scripts/` — keep the data plane **lightweight**; mirror math only. |
+| **`refs/terramind-geogen-main/src/geo_utils.py`** | **Reference** for **haversine in km** and **(lon, lat)** point order when comparing distances, scoring parity notes, or **unit tests** that reimplement haversine in **pure Python / NumPy** | **Do not** `import torch` or add TerraTorch to `data/scripts/` — keep the data plane **lightweight**; mirror math only. **VLMs / TerraMind** run in **`inference/*`**, **`tools/`**, or Jobs using **vLLM** and/or **`transformers`+PyTorch** and/or **TerraTorch** per `inference/README.md`. |
 | **`refs/terramind-geogen-main/scripts/plot_error_heatmap.py`** | **Optional QA:** after playtests, bin **hint difficulty** or **distance error** by lat/lon (same CSV patterns as eval pipelines) | Offline analytics only. |
 | **`data/scripts/download_geoguessr_poi_imagery.py`** | **Canonical** patterns: HF `datasets` load, **STAC** + Mapbox fetch, **`haversine_km`** (already matches geogen **lon,lat** convention in file docstring) | New ingest scripts **load as module** or share a small **`data/scripts/geo_nutonic.py`** extracted from duplicated logic. |
 | **`refs/satellite-vlm/README.md`** (and related JSON eval shapes) | **Optional** strict JSON / schema habits for **LFM-VL caption** outputs (Street View pack entries) | Not required for **useful_hints** tiers. |
@@ -178,17 +178,20 @@ Phases are **ordered**; later phases depend on stable IDs from earlier ones.
 
 | Tier | Rule (default) | Example pattern |
 |------|----------------|-----------------|
-| **tier_1** | Continent + very coarse land/ocean framing; **no** country name unless product wants looser easy mode | “Indonesian archipelago · tropical maritime Southeast Asia” |
-| **tier_2** | **One** primary geographic signal from C0: **nearest named river/lake** within R **or** “~D km from coastline” bucket **or** admin-1 physiographic label | “Interior **Bali** sea-adjacent district; nearest major linear water: **X**” (names from NE only) |
-| **tier_3** | **Admin-0** common name (NE) or ISO name from `hf_row_meta`; may echo **non-spoiler** address fragments if schema allows (strip street numbers) | “Indonesia” |
+| **tier_1** | Continent + hemisphere + latitude **band** (ordinal, not numeric lat/lon) | “Indonesian archipelago · tropical maritime Southeast Asia” |
+| **tier_2** | **Marine / coastline framing** from C0 buckets (still **no** numeric coordinates) | Ordinal “very coastal / inland / deep interior” phrasing |
+| **tier_3** | **Hydrology synthesis** — named river/lake labels from NE + proximity **enum** (immediate / near / regional / distant) | “Named linear water …; standing water …” |
+| **tier_4** | **Subnational** emphasis (admin-1 name when resolved) | “First-order admin context: **Bali** …” |
+| **tier_5** | **Admin-0** country label | “Indonesia” |
+| **tier_6** | **Strongest scripted assist** — may combine admin1 + admin0 + compact hydro recap; **still no coordinate literals** | “Interior district pattern within **Indonesia**; hydro: …” |
 
-**Hard bans:** no digit sequences matching **lat/lon**; no **street address** precision in tier_1/2 unless explicitly allowed; max length per `docs/GAME-ENGINE.md` §9.1.
+**Hard bans:** no digit sequences matching **lat/lon** in **any** tier; no **street address** precision in early tiers unless explicitly allowed; max length per `docs/GAME-ENGINE.md` §9.1.
 
 #### C2 — Validation (always on)
 
 | Script / task | Input | Output |
 |---------------|-------|--------|
-| **`data/scripts/validate_hint_strings.py`** | `tier_1..3` + optional `facts_used` JSON | exit non-zero on coordinate regex hits, length caps, empty tiers when `assist_level != none`, **tier monotonicity** checks (tier_3 not looser than tier_2 heuristically) |
+| **`data/scripts/validate_hint_strings.py`** | `tier_1..N` + optional `facts_used` JSON | exit non-zero on coordinate regex hits on **any** tier, length caps, empty tiers when `assist_level != none`, optional **`enforce_max_tier_contains_admin0`** |
 
 #### C3 — Optional LLM polish (local, smallest model)
 
@@ -243,7 +246,7 @@ They receive:
 - **Distances** only as **binned** labels (e.g. `coastal_lt_25km`, `inland_gt_100km`) in the prompt text;
 - **Style tokens** from `prompts/index.md`.
 
-**Output contract:** JSON schema, e.g. `{ "tier_1": "...", "tier_2": "...", "tier_3": "..." }` with `maxLength` per tier. **Validator** (Phase C) is mandatory on CI merge to `main`.
+**Output contract:** JSON schema, e.g. `{ "tier_1": "...", … "tier_6": "..." }` with `maxLength` per tier (OpenAPI optional **`tier_4`–`tier_6`** for backward compatibility). **Validator** (Phase C) is mandatory on CI merge to `main`.
 
 **Street View captions:** Separate prompt file per **viewpoint** with **image attachments** only; model returns `{ "caption": "...", "confidence": 0-1 }`; strip coordinates from model output via validator.
 

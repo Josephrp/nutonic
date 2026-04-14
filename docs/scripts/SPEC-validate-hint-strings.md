@@ -1,7 +1,7 @@
 # Script specification: `validate_hint_strings.py`
 
 **Path:** `data/scripts/validate_hint_strings.py`  
-**Status:** Planned (**Phase C2**); **mandatory gate** in CI.  
+**Status:** **Implemented** (**Phase C2**); **mandatory gate** in CI for hint-producing scripts.  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) §8.
 
 ---
@@ -26,10 +26,10 @@ Optional **`facts_used`** JSON for audit: ensures referenced feature names appea
 
 ## 3. Rules (normative)
 
-1. **Coordinate regex:** reject patterns resembling decimal degrees (e.g. `-?\d{1,3}\.\d{4,}` paired with comma-separated second coordinate). Tune false positives (years, scores) via allowlist in policy YAML.
-2. **Length:** per-tier max from policy or CLI flags.
-3. **Empty tiers:** if `assist_level != none`, all three tiers must be non-empty strings (after strip).
-4. **Monotonicity heuristic:** tier_3 must not be **geographically broader** than tier_2 (optional NLP-free check: e.g. tier_3 admin-0 name must appear in `facts_used.admin0_name` or alias table).
+1. **Coordinate regex:** reject patterns resembling decimal degrees (e.g. `-?\d{1,3}\.\d{4,}` paired with comma-separated second coordinate). Applies to **every** shipped tier (**`tier_1`–`tier_N`**, including the strongest). Tune false positives via policy YAML.
+2. **Length:** per-tier max from policy (`max_length.tier_*` or legacy `max_len_tier_*` for the first three bands).
+3. **`tier_count`:** policy key (default **6**, max **12**). When `assist_level != none`, **`tier_1` … `tier_{tier_count}`** must all be **present as keys** and **non-empty** strings (after strip).
+4. **Optional admin0 check:** when **`enforce_max_tier_contains_admin0`** is true, **`tier_{tier_count}`** must contain **`facts_used.admin0_name`** (case-insensitive substring).
 5. **Profanity / banned tokens:** configurable list.
 
 ---
@@ -37,7 +37,7 @@ Optional **`facts_used`** JSON for audit: ensures referenced feature names appea
 ## 4. Output
 
 - **stdout:** `OK` or pretty-printed violation list.
-- **Machine-readable:** optional `--json-out violations.json` for CI artifacts.
+- **Machine-readable:** optional `--json-out violations.json` for CI artifacts (JSON array of `{code,message,path}`).
 
 ---
 
@@ -74,4 +74,13 @@ python data/scripts/validate_hint_strings.py --scan-dir data/cache/v1/useful_hin
 
 ---
 
-*Spec version: 2026-04-14*
+*Spec version: 2026-04-14 (rev. 2 — `tier_count` / six tiers / strongest-tier coordinate ban)*
+
+---
+
+## 9. Document history
+
+| Version | Date | Notes |
+|---------|------|-------|
+| 0.1 | 2026-04-14 | Initial |
+| 0.2 | 2026-04-14 | **`tier_count`** (default 6); **`enforce_max_tier_contains_admin0`**; coordinate checks apply to **all** tiers |

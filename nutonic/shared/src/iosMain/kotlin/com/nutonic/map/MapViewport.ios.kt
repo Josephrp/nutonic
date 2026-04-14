@@ -20,7 +20,6 @@ import platform.MapKit.MKMapViewDelegateProtocol
 import platform.MapKit.MKPointAnnotation
 import platform.UIKit.UITapGestureRecognizer
 import platform.darwin.NSObject
-import kotlin.math.abs
 import kotlin.math.ln
 import kotlin.math.pow
 
@@ -181,7 +180,8 @@ private fun mkAnnotation(
 private class IosMapViewportDelegate(
     private val viewportBounds: () -> ViewportBounds?,
     private val onCameraChange: (MapCameraState) -> Unit,
-) : NSObject(), MKMapViewDelegateProtocol {
+) : NSObject(),
+    MKMapViewDelegateProtocol {
     private var lastEmitted: MapCameraState? = null
 
     override fun mapViewDidChangeVisibleRegion(mapView: MKMapView) {

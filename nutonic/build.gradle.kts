@@ -84,6 +84,7 @@ tasks.register("quality") {
         dependsOn(sub.tasks.named("ktlintCheck"))
         dependsOn(sub.tasks.named("detekt"))
     }
+    dependsOn(project(":shared").tasks.named("validateCatalog"))
 }
 
 tasks.register("formatKotlin") {

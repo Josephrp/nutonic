@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TokenResponse(BaseModel):
@@ -43,8 +43,18 @@ class UsefulHintsOut(BaseModel):
     tier_6: str | None = None
 
 
+class StreetviewHintItemOut(BaseModel):
+    """Pre-cached Street View assist line (no golden WGS84); matches ``docs/openapi.yaml``."""
+
+    text: str
+    viewpoint_id: str | None = None
+    rank: int | None = None
+
+
 class ManifestLocationOut(BaseModel):
     """Published round slice for non-ranked play (IMP-080 / IMP-081)."""
+
+    model_config = ConfigDict(extra="ignore")
 
     map_id: str
     location_id: str
@@ -58,6 +68,8 @@ class ManifestLocationOut(BaseModel):
     still_bundled_resource: str | None = None
     still_http_url: str | None = None
     useful_hints: UsefulHintsOut | None = None
+    streetview_hint_pack: list[StreetviewHintItemOut] | None = None
+    streetview_assist_narrative: str | None = None
     play_budget_ms: int | None = None
     ai_marker_phase_enabled: bool = True
 
@@ -97,6 +109,8 @@ class RankedClueOut(BaseModel):
     still_bundle_id: str | None = None
     still_bundled_resource: str | None = None
     useful_hints: UsefulHintsOut | None = None
+    streetview_hint_pack: list[StreetviewHintItemOut] | None = None
+    streetview_assist_narrative: str | None = None
     play_budget_ms: int | None = None
     ai_marker_phase_enabled: bool = True
 

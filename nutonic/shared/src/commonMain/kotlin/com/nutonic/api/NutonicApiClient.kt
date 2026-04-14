@@ -90,7 +90,7 @@ class NutonicApiClient(
     /** IMP-081: fetch versioned still bytes (`GET /api/v1/bundles/{bundle_id}`). */
     suspend fun getBundleStill(bundleId: String): ApiResult<ByteArray> =
         try {
-            val url = "${originTrimmed}/api/v1/bundles/${encodePathSegment(bundleId)}"
+            val url = "$originTrimmed/api/v1/bundles/${encodePathSegment(bundleId)}"
             val response: HttpResponse = http.get(url)
             when {
                 response.status.isSuccess() -> ApiResult.Ok(response.body())

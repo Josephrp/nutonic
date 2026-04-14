@@ -1,7 +1,7 @@
 # Script specification: `generate_useful_hints_llm.py`
 
 **Path:** `data/scripts/generate_useful_hints_llm.py`  
-**Status:** Planned (**optional Phase C3**).  
+**Status:** **CLI landed (dry-run default)** — `--enable-llm-polish` + `--no-dry-run` reserved for HTTP backends per §5 (torch stays out of this process).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) §5.0 smallest-model policy.
 
 ---

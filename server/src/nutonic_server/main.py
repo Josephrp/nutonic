@@ -14,12 +14,7 @@ from starlette.responses import Response
 
 from nutonic_server.bundles import resolve_bundle_bytes
 from nutonic_server.inference_client import InferenceClient
-from nutonic_server.catalog import (
-    MANIFEST_AI_GUESSES,
-    MANIFEST_LOCATIONS,
-    PUBLISHED_MAPS,
-    manifest_location_for_map,
-)
+import nutonic_server.catalog as game_catalog
 from nutonic_server.deps import (
     get_settings,
     require_community_lb_get,
@@ -56,6 +51,7 @@ from nutonic_server.schemas import (
 from nutonic_server.settings import Settings, load_settings
 
 settings = load_settings()
+game_catalog.configure_catalog_from_manifest_path(settings.manifest_full_path)
 _leaderboard_store = create_leaderboard_store(settings)
 _ranked_store = create_ranked_store(settings.ranked_database_url)
 _guess_telemetry_store = create_guess_telemetry_store(settings.guess_telemetry_database_url)
@@ -122,11 +118,11 @@ def get_bundle(bundle_id: str) -> Response:
 def _manifest_payload_and_etag(settings: Settings) -> tuple[dict[str, object], str]:
     expose = settings.expose_manifest_round_truth
     body = CacheManifestOut(
-        content_version="nutonic.manifest.v2",
-        engine_version="0.1.0",
-        maps=list(PUBLISHED_MAPS),
-        locations=list(MANIFEST_LOCATIONS) if expose else [],
-        ai_guesses=list(MANIFEST_AI_GUESSES) if expose else [],
+        content_version=game_catalog.CATALOG_MANIFEST_CONTENT_VERSION,
+        engine_version=game_catalog.CATALOG_MANIFEST_ENGINE_VERSION,
+        maps=list(game_catalog.PUBLISHED_MAPS),
+        locations=list(game_catalog.MANIFEST_LOCATIONS) if expose else [],
+        ai_guesses=list(game_catalog.MANIFEST_AI_GUESSES) if expose else [],
     )
     dumped = body.model_dump()
     canonical = json.dumps(dumped, sort_keys=True, separators=(",", ":"))
@@ -163,7 +159,7 @@ def get_cache_manifest(
 @app.get("/api/v1/maps", tags=["maps"], response_model=list[MapSummaryOut])
 def list_maps() -> list[MapSummaryOut]:
     """S1c minimal catalog (IMP-072): same rows as ``GET /api/v1/cache/manifest`` until DB-backed catalog lands."""
-    return list(PUBLISHED_MAPS)
+    return list(game_catalog.PUBLISHED_MAPS)
 
 
 @app.get(
@@ -243,7 +239,7 @@ def ranked_round_start(
     s: Annotated[Settings, Depends(get_settings)],
 ) -> RankedRoundStartOut:
     """Server-held secret round for ranked play (IMP-090)."""
-    loc = manifest_location_for_map(body.map_id.strip())
+    loc = game_catalog.manifest_location_for_map(body.map_id.strip())
     if loc is None:
         raise HTTPException(status_code=404, detail="Unknown map_id for ranked catalog")
     session_id = str(claims.get("session_id") or "")
@@ -263,6 +259,8 @@ def ranked_round_start(
         still_bundle_id=loc.still_bundle_id,
         still_bundled_resource=loc.still_bundled_resource,
         useful_hints=loc.useful_hints,
+        streetview_hint_pack=loc.streetview_hint_pack,
+        streetview_assist_narrative=loc.streetview_assist_narrative,
         play_budget_ms=loc.play_budget_ms,
         ai_marker_phase_enabled=loc.ai_marker_phase_enabled,
     )

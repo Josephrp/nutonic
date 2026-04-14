@@ -38,7 +38,9 @@ def _handler(request: httpx.Request) -> httpx.Response:
                 },
             )
         return httpx.Response(200, json={"status": "ok"})
-    if request.method == "POST" and p.endswith("/v1/panos/sample"):
+    if request.method == "POST" and (
+        p.endswith("/v1/panos/sample") or p.rstrip("/").endswith("/api/v1/panos/sample")
+    ):
         body = json.loads(request.content.decode())
         n = int(body["count"])
         rid = body["request_id"]

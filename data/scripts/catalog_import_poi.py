@@ -142,6 +142,21 @@ def _location_yaml_dict(row: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     return out
 
 
+def _apply_ranked_split_half(map_rows: list[dict[str, Any]]) -> None:
+    """Stable ~50/50 split for ``maps.yaml`` ``ranked_pool`` (first ``n//2`` ids false, rest true).
+
+    Lexical sort on ``map_id`` keeps runs reproducible across machines. Odd ``n`` yields one extra
+    ``ranked_pool: true`` row (for example 11 maps → 5 non-ranked pool + 6 ranked pool).
+    """
+    if not map_rows:
+        return
+    rows = sorted(map_rows, key=lambda m: str(m.get("map_id", "")))
+    n = len(rows)
+    cut = n // 2
+    for i, m in enumerate(rows):
+        m["ranked_pool"] = i >= cut
+
+
 def _default_map_row(location_id: str, row: dict[str, Any]) -> dict[str, Any]:
     hf = row.get("hf_row_meta") or {}
     addr = hf.get("address")
@@ -222,6 +237,7 @@ def plan_import(
     *,
     force: bool,
     map_overrides: dict[str, dict[str, Any]],
+    ranked_split: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     """Returns (location_dicts, merged_maps_for_maps_yaml, warnings)."""
     jobs = collect_import_jobs(poi_root)
@@ -260,6 +276,9 @@ def plan_import(
         locations.append(loc)
         map_rows.append(mrow)
 
+    if ranked_split == "half":
+        _apply_ranked_split_half(map_rows)
+
     existing_maps, cv = _load_existing_maps_index(catalog_root)
     by_id = {str(m.get("map_id")): dict(m) for m in existing_maps if m.get("map_id")}
     for m in map_rows:
@@ -278,13 +297,19 @@ def run_import(
     force: bool,
     maps_file: Path | None,
     content_version: str | None,
+    ranked_split: str | None = None,
 ) -> int:
     poi_root = poi_root.resolve()
     catalog_root = catalog_root.resolve()
     overrides = _load_map_overrides(maps_file)
     try:
         locations, merged_maps, warnings = plan_import(
-            poi_root, repo_root, catalog_root, force=force, map_overrides=overrides
+            poi_root,
+            repo_root,
+            catalog_root,
+            force=force,
+            map_overrides=overrides,
+            ranked_split=ranked_split,
         )
     except CatalogImportError as e:
         print(f"catalog_import_poi: {e}", file=sys.stderr)
@@ -334,7 +359,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--force", action="store_true", help="Overwrite existing location YAML files")
     p.add_argument("--maps-file", type=Path, default=None, help="YAML with map_overrides / overrides by map_id")
     p.add_argument("--content-version", type=str, default=None, help="Write content_version into maps.yaml")
+    p.add_argument(
+        "--ranked-split",
+        choices=("none", "half"),
+        default="none",
+        help="half: after import, set ranked_pool false for first n//2 map_ids (sorted), true for the rest",
+    )
     args = p.parse_args(argv)
+    rs = None if args.ranked_split == "none" else args.ranked_split
     return run_import(
         args.poi_root,
         args.repo_root,
@@ -343,6 +375,7 @@ def main(argv: list[str] | None = None) -> int:
         force=args.force,
         maps_file=args.maps_file,
         content_version=args.content_version,
+        ranked_split=rs,
     )
 
 

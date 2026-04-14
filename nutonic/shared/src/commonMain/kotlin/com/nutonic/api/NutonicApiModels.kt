@@ -163,6 +163,14 @@ data class RankedClue(
     @SerialName("ai_marker_phase_enabled") val aiMarkerPhaseEnabled: Boolean = true,
 )
 
+/** Envelope for on-disk ranked clue slices (`data/scripts/assemble_ranked_clue_pack.py`). */
+@Serializable
+data class RankedCluePackDocument(
+    @SerialName("schema_version") val schemaVersion: String,
+    val clues: List<RankedClue> = emptyList(),
+    @SerialName("ai_guesses") val aiGuesses: List<AiGuessRow> = emptyList(),
+)
+
 @Serializable
 data class RankedRoundStartOut(
     @SerialName("round_id") val roundId: String,

@@ -45,6 +45,10 @@ import requests
 from datasets import load_dataset
 from pystac_client import Client
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
 from geo_nutonic import haversine_km
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

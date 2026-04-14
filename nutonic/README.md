@@ -35,7 +35,7 @@ Choose a run configuration for an appropriate target in IDE and run it.
 > Web support is in [Alpha](https://kotlinlang.org/docs/components-stability.html). It may be changed at any time. You can use it in scenarios before production.
 > We would appreciate your feedback in [GitHub](https://github.com/JetBrains/compose-multiplatform/issues).
 
-`./gradlew :webApp:wasmJsRun`
+`./gradlew :webApp:jsBrowserDevelopmentRun`
 
 ### Running Android application
 

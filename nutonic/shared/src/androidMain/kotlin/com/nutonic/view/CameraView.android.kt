@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.concurrent.futures.await
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.google.android.gms.location.CurrentLocationRequest
@@ -39,8 +40,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 import kotlin.math.absoluteValue
 
 private val executor = Executors.newSingleThreadExecutor()
@@ -104,14 +103,7 @@ private fun CameraWithGrantedPermission(
     }
 
     LaunchedEffect(isFrontCamera) {
-        cameraProvider =
-            suspendCoroutine<ProcessCameraProvider> { continuation ->
-                ProcessCameraProvider.getInstance(context).also { cameraProvider ->
-                    cameraProvider.addListener({
-                        continuation.resume(cameraProvider.get())
-                    }, executor)
-                }
-            }
+        cameraProvider = ProcessCameraProvider.getInstance(context).await()
         cameraProvider?.unbindAll()
         cameraProvider?.bindToLifecycle(
             lifecycleOwner,

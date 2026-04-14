@@ -3,8 +3,8 @@ package com.nutonic.cache
 import com.nutonic.api.ApiResult
 import com.nutonic.api.CacheManifestDocument
 import com.nutonic.api.ManifestFetchOutcome
-import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.MapSummary
+import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.stubUserMessageForStatus
 
 /**

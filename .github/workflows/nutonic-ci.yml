@@ -216,18 +216,10 @@ jobs:
       - name: JS browser production bundle
         run: ./gradlew --no-configuration-cache :webApp:jsBrowserProductionWebpack
 
-      - name: Wasm browser production bundle
-        run: ./gradlew --no-configuration-cache :webApp:wasmJsBrowserProductionWebpack
-
       - uses: actions/upload-artifact@v4
         with:
           name: web-js-productionExecutable
           path: webApp/build/dist/js/productionExecutable/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-wasm-productionExecutable
-          path: webApp/build/dist/wasmJs/productionExecutable/
 
   ios-framework:
     name: iOS shared framework (simulator)

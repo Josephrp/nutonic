@@ -122,6 +122,28 @@ def test_import_bundled_still_when_png_present(tmp_path):
         shutil.rmtree(scratch, ignore_errors=True)
 
 
+def test_ranked_split_half_assigns_pools(tmp_path):
+    catalog = tmp_path / "catalog"
+    assert (
+        run_import(
+            FIXTURE_POI_MINI,
+            REPO_ROOT,
+            catalog,
+            dry_run=False,
+            force=True,
+            maps_file=None,
+            content_version="split",
+            ranked_split="half",
+        )
+        == 0
+    )
+    maps = yaml.safe_load((catalog / "maps.yaml").read_text(encoding="utf-8"))
+    by_id = {m["map_id"]: m for m in maps["maps"]}
+    # Sorted: poi_test_0, poi_test_1 — first half (n//2=1) ranked_pool False, second True
+    assert by_id["poi_test_0"]["ranked_pool"] is False
+    assert by_id["poi_test_1"]["ranked_pool"] is True
+
+
 def test_maps_file_overrides(tmp_path):
     overrides = tmp_path / "ov.yaml"
     overrides.write_text(
@@ -153,4 +175,4 @@ def test_plan_import_duplicate_source_ids(tmp_path):
     bad_manifest = {"points": [{"poi_id": "x", "latitude": 0, "longitude": 0, "mapbox": {"path": "", "skipped": True}}] * 2}
     (dup_root / "geoguessr_poi_manifest.json").write_text(json.dumps(bad_manifest), encoding="utf-8")
     with pytest.raises(CatalogImportError, match="Duplicate"):
-        plan_import(dup_root, REPO_ROOT, tmp_path / "cat", force=True, map_overrides={})
+        plan_import(dup_root, REPO_ROOT, tmp_path / "cat", force=True, map_overrides={}, ranked_split=None)

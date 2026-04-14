@@ -18,7 +18,7 @@ kotlin {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
     namespace = "com.nutonic"
     buildFeatures {
         buildConfig = true
@@ -38,6 +38,10 @@ android {
     }
     kotlin {
         jvmToolchain(17)
+    }
+    lint {
+        // Machine-specific `local.properties` (gitignored) triggers false positives on Windows paths.
+        disable += "PropertyEscape"
     }
 }
 

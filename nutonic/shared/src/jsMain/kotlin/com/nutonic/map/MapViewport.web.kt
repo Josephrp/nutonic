@@ -66,7 +66,10 @@ actual fun MapViewport(
         }
     }
 
-    fun onZoomAt(centroid: Offset, zoomFactor: Float) {
+    fun onZoomAt(
+        centroid: Offset,
+        zoomFactor: Float,
+    ) {
         if (viewportSize.width <= 0 || viewportSize.height <= 0) {
             return
         }
@@ -241,7 +244,10 @@ private class WebMercatorProjection(
         return Offset(x.toFloat(), y.toFloat())
     }
 
-    fun worldToLatLon(worldX: Float, worldY: Float): LatLon {
+    fun worldToLatLon(
+        worldX: Float,
+        worldY: Float,
+    ): LatLon {
         val wrappedX = worldX.wrap(worldSize)
         val clampedY = worldY.toDouble().coerceIn(0.0, worldSize)
         val longitude = wrappedX / worldSize * 360.0 - 180.0
@@ -266,7 +272,11 @@ private class WebMercatorProjection(
         return worldToLatLon(worldX, worldY)
     }
 
-    private fun shortestWrappedDelta(x: Float, centerX: Float, span: Float): Float {
+    private fun shortestWrappedDelta(
+        x: Float,
+        centerX: Float,
+        span: Float,
+    ): Float {
         var delta = x - centerX
         if (delta > span / 2f) {
             delta -= span

@@ -5,8 +5,7 @@ import com.nutonic.api.ManifestRoundLocation
 import com.nutonic.map.LatLon
 
 /** First published round row for a map id (solo default). */
-fun CacheManifestDocument.locationForMap(mapId: String): ManifestRoundLocation? =
-    locations.firstOrNull { it.mapId == mapId }
+fun CacheManifestDocument.locationForMap(mapId: String): ManifestRoundLocation? = locations.firstOrNull { it.mapId == mapId }
 
 /**
  * Resolves precomputed AI coordinates from manifest `ai_guesses` (`IMP-082`).

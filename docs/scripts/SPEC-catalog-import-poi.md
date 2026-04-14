@@ -19,7 +19,8 @@ Ingest POI trees produced by **`download_geoguessr_poi_imagery.py`** (or compati
 | **`--poi-root`** | Default **`data/downloads/geoguessr_poi_12`**. May point to **`data/downloads/geoguessr_poi_120`**. |
 | **Layout A** | **`geoguessr_poi_manifest.json`** at root of `poi-root` listing points (12-set). |
 | **Layout B** | Glob **`poi_*/poi.json`** (120-set). |
-| **`--maps-file`** | Optional override for `data/catalog/maps.yaml` merge rules (titles, `ranked_eligible`, `mission_id`). |
+| **`--maps-file`** | Optional override for `data/catalog/maps.yaml` merge rules (titles, `ranked_pool`, `mission_id`). |
+| **`--ranked-split`** | `none` (default) or **`half`**: stable ~50/50 **`ranked_pool`** assignment by sorted `map_id` (first `n//2` false, remainder `true`). See `data/catalog/README.md`. |
 
 ---
 

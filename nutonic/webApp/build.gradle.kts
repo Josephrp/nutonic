@@ -1,5 +1,3 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
@@ -20,25 +18,6 @@ kotlin {
         useEsModules()
     }
 
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs {
-        outputModuleName = "nutonic"
-        browser {
-            // TODO: uncomment when https://youtrack.jetbrains.com/issue/KT-68614 is fixed (it doesn't work with configuration cache)
-//            commonWebpackConfig {
-//                devServer = (devServer ?: KotlinWebpackConfig.DevServer()).apply {
-//                    static = (static ?: mutableListOf()).apply {
-//                        // Serve sources to debug inside browser
-//                        add(rootDirPath)
-//                        add(rootDirPath + "/shared/")
-//                        add(rootDirPath + "/webApp/")
-//                    }
-//                }
-//            }
-        }
-        binaries.executable()
-    }
-
     sourceSets {
         val webMain by creating {
             dependsOn(commonMain.get())
@@ -53,9 +32,6 @@ kotlin {
             }
         }
         val jsMain by getting {
-            dependsOn(webMain)
-        }
-        val wasmJsMain by getting {
             dependsOn(webMain)
         }
     }

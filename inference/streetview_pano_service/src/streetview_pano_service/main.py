@@ -38,10 +38,21 @@ def pano_metadata(lat: float, lon: float) -> dict[str, object]:
     return {"lat": lat, "lon": lon, "status": "stub", "pano_id": None}
 
 
-@app.post("/v1/panos/sample", response_model=PanosSampleResponse)
-def panos_sample(req: PanosSampleRequest) -> PanosSampleResponse:
+def _panos_sample_impl(req: PanosSampleRequest) -> PanosSampleResponse:
     """
     Returns JPEG ``frames[]``: **Google Street View Static** when ``STREETVIEW_PROVIDER=google``
     (or ``auto`` with ``GOOGLE_MAPS_API_KEY``), else **Pillow** synthetic stubs.
     """
     return sample_panos(req)
+
+
+@app.post("/api/v1/panos/sample", response_model=PanosSampleResponse)
+def panos_sample_api_v1(req: PanosSampleRequest) -> PanosSampleResponse:
+    """Preferred path (aligned with ``/api/v1/*`` game server routes)."""
+    return _panos_sample_impl(req)
+
+
+@app.post("/v1/panos/sample", response_model=PanosSampleResponse)
+def panos_sample_legacy_v1(req: PanosSampleRequest) -> PanosSampleResponse:
+    """Legacy alias; prefer ``POST /api/v1/panos/sample`` for new operators."""
+    return _panos_sample_impl(req)

@@ -42,8 +42,7 @@ class LocalNonRankedLeaderboardRepository(
         saveEnvelope(LocalNonRankedLeaderboardEnvelope(current))
     }
 
-    suspend fun rowsForMap(mapId: String): List<LocalNonRankedLeaderboardRow> =
-        loadEnvelope().rows.filter { it.mapId == mapId }
+    suspend fun rowsForMap(mapId: String): List<LocalNonRankedLeaderboardRow> = loadEnvelope().rows.filter { it.mapId == mapId }
 
     suspend fun latestForMap(mapId: String): LocalNonRankedLeaderboardRow? = rowsForMap(mapId).firstOrNull()
 

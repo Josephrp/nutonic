@@ -54,8 +54,16 @@ complexity:
     excludes:
       - "**/test/**"
       - "**/androidTest/**"
+      - "**/desktopTest/**"
+      - "**/commonTest/**"
       - "**/*Test.kt"
       - "**/*Tests.kt"
+      # Large @Composable trees are normal; keep a sane threshold elsewhere.
+      - "**/screens/**"
+      - "**/NutonicMainShell.kt"
+  ComplexCondition:
+    active: true
+    threshold: 8
   LongParameterList:
     active: true
     functionThreshold: 12
@@ -68,6 +76,9 @@ complexity:
     active: true
     threshold: 35
     ignoreSingleWhenExpression: true
+    excludes:
+      - "**/screens/**"
+      - "**/NutonicMainShell.kt"
   TooManyFunctions:
     active: true
     thresholdInFiles: 30
@@ -82,8 +93,8 @@ complexity:
 naming:
   FunctionNaming:
     active: true
-    ignoreAnnotated:
-      - Composable
+    # detekt 1.23.x FunctionNaming has no ignoreAnnotated; allow Compose PascalCase + test snake_case.
+    functionPattern: "[a-zA-Z][a-zA-Z0-9_]*"
   # KMP uses `Foo.common.kt` / `platform.android.kt` with types not matching file stem; not Java-style one-class-per-file.
   MatchingDeclarationName:
     active: false
@@ -100,4 +111,7 @@ empty-blocks:
 
 performance:
   SpreadOperator:
+    active: false
+  # Compose / declarative UI often uses small numeric ranges; gain is negligible vs noise.
+  ForEachOnRange:
     active: false

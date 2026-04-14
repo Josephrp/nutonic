@@ -1,9 +1,9 @@
 package com.nutonic.cache
 
-import com.nutonic.api.CacheManifestDocument
-import com.nutonic.api.MapSummary
-import com.nutonic.api.ManifestRoundLocation
 import com.nutonic.api.AiGuessRow
+import com.nutonic.api.CacheManifestDocument
+import com.nutonic.api.ManifestRoundLocation
+import com.nutonic.api.MapSummary
 import com.nutonic.api.UsefulHintsTiers
 import kotlin.test.Test
 import kotlin.test.assertEquals

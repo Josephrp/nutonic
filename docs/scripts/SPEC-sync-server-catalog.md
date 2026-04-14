@@ -1,7 +1,7 @@
 # Script specification: `sync_server_catalog.py`
 
 **Path:** `data/scripts/sync_server_catalog.py`  
-**Status:** Planned (**Phase F** bridge to **IMP-120**).  
+**Status:** **Phase F — implemented** (`codegen` default; `--write` updates `server/src/nutonic_server/catalog_generated.py`).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase F.
 
 ---

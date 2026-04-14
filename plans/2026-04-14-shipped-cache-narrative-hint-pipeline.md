@@ -93,15 +93,15 @@ nutonic/shared/src/commonMain/composeResources/files/
 
 ---
 
-## 4. OpenAPI, server, and Kotlin model extensions (planned work)
+## 4. OpenAPI, server, and Kotlin model extensions
 
-**Today:** `UsefulHintsTiers`, `ManifestRoundLocation`, `RankedClue`, `CacheManifestDocument` cover stills + **up to six** useful-hint strings + AI rows; **no** `streetview_hint_pack` on wire or in Kotlin.
+**Landed (2026-04-14):** `docs/openapi.yaml`, Kotlin **`ManifestRoundLocation`** / **`RankedClue`**, FastAPI **`ManifestLocationOut`** / **`RankedClueOut`**, and **`data/scripts/assemble_manifest.py`** all carry optional **`streetview_hint_pack`** (+ optional **`streetview_assist_narrative`**) with caption validation. **`POST /api/v1/ranked/rounds/start`** echoes catalog **`streetview_*`** fields on **`RankedClueOut`** (no golden coordinates).
 
-**Plan:**
+**Remaining / polish:**
 
-1. Extend **`docs/openapi.yaml`** with optional **`streetview_hint_pack`** on `ManifestRoundLocation` and `RankedClueOut` (array of `{ "text": string, "viewpoint_id": string?, "rank": int? }` or equivalent — finalize schema with caps).
-2. Bump **`CacheManifestDocument`** / server redaction: **public** manifest omits `locations`, `ai_guesses` (unchanged); **shipped app** uses **embedded** `manifest.full.json` or **ranked_clue_pack.json** + compose resources, **not** the public HTTP manifest, for offline completeness.
-3. **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH`** remains for **lab** and **contract tests** only; **store** builds use **embedded full local manifest** for non-ranked and **embedded ranked clue pack** for ranked.
+1. **Shipped compose validation (landed):** **`:shared:validateCatalog`** runs **`data/scripts/validate_shipped_compose_resources.py`** against embedded **`manifest.full.json`** and resolves **`still_bundled_resource`** paths under **`nutonic/shared/.../composeResources/`** (see [`docs/scripts/SPEC-catalog-lint.md`](../docs/scripts/SPEC-catalog-lint.md) §5). **`data/scripts/sync_server_catalog.py`** (**`--write`**) emits **`server/src/nutonic_server/catalog_generated.py`** from that manifest for static server hydration — see [`docs/scripts/SPEC-sync-server-catalog.md`](../docs/scripts/SPEC-sync-server-catalog.md). **Still ahead:** **`sync_server_catalog --mode sql`** (**IMP-120**) and any **full bundle registry / bytes pipeline** polish beyond manifest + still paths (**IMP-081** nuances in gap analysis).
+2. **Public** manifest redaction unchanged (**`locations`** / **`ai_guesses`** empty by default); **shipped** **`composeResources/files/cache/manifest.full.json`** + **`mergeShippedRoundTruth`** and **`files/ranked/ranked_clue_pack.json`** + client **`mergeRankedClueWithPack`** keep SCAN/ranked assists coherent when the wire slice is thin.
+3. **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH`** remains for **lab** and **contract tests** only.
 
 ---
 
@@ -257,9 +257,9 @@ They receive:
 | Task | Description |
 |------|-------------|
 | **Embed default manifest** | Ship `manifest.full.json` (or protobuf) under compose resources for **first-run offline**; `ContentCacheRepository` seeds from disk if HTTP fails — satisfies “every local map fully cached.” |
-| **Ranked clue resolver** | New `RankedCluePackRepository` (`commonMain`): `(mapId, locationId) -> RankedClueSlice` from `files/ranked/ranked_clue_pack.json`; merge with `RankedRoundStartOut.clue` for ticket-only fields. |
-| **Remove dangerous fallbacks** | Replace `groundTruthForMap` / `fallbackAiLatLon` hardcoding in `WorldMapGameplayScreen.kt` with **fail-closed** UX when pack incomplete (show “content unavailable” per `rules/08` uplink pattern). |
-| **Street View assist UI** | When `streetview_hint_pack` present, render collapsible list; wire **forfeit** call before expand in ranked (`docs/RANKED-MODE.md` §6). |
+| **Ranked clue resolver** | **Partial (2026-04-14):** `readShippedRankedCluePack` + **`mergeRankedClueWithPack`** merge **`files/ranked/ranked_clue_pack.json`** into `POST …/ranked/rounds/start` clues (API values win when set). A dedicated `RankedCluePackRepository` DI layer remains optional polish. |
+| **Remove dangerous fallbacks** | **Landed:** `WorldMapGameplayScreen.kt` no longer fabricates Vienna/NYC truth or AI coordinates; non-ranked rounds **fail closed** when no manifest row exists; **`readShippedFullManifest`** seeds gameplay when **`ContentCacheRepository`** is absent (tests / offline stub). |
+| **Street View assist UI** | **Landed (SCAN dock):** `AssistDock` lists **`streetview_hint_pack`** lines + optional narrative from **`ManifestRoundLocation`** / ranked clue merge; ranked **forfeit** gating unchanged (`docs/RANKED-MODE.md` §6). |
 | **Idempotency fix** | Stable `Idempotency-Key` for ranked submit (separate small PR, prerequisite for ranked E2E). |
 
 **Web / WASM:** Large binary caps — consider **splitting** `ranked_clue_pack` by `map_id` lazy fetch from same origin or gzip; document in `docs/map-engines.md` annex.
@@ -300,6 +300,8 @@ They receive:
 | 0.5 | 2026-04-14 | Link **`plans/2026-04-14-data-scripts-implementation-track.md`** + **testing-and-ci** supplement |
 | 0.6 | 2026-04-14 | Phase **D**: explicit LFM hint route + optional **satellite caption** hop from Mapbox stills; Phase **E**: TerraMind **`Coordinates`** as primary **`ai_lat`/`ai_lon`** source; cross-modal centering footgun |
 | 0.7 | 2026-04-14 | Phase **D** row: configurable POI count + **K** SV screenshots per POI + optional **LFM LLM** narrative pass (`streetview_assist_narrative`) per **`SPEC-batch-streetview-hints.md`** §1.1 |
+| 0.8 | 2026-04-14 | **§4 / §7:** `streetview_hint_pack` **landed** on OpenAPI, Kotlin, server ranked clues, **`assemble_manifest`**, bundled **`ranked_clue_pack.json`** merge, **AssistDock** wiring, **fail-closed** non-ranked gameplay. |
+| 0.9 | 2026-04-14 | **§4:** **`:shared:validateCatalog`** + **`validate_shipped_compose_resources.py`** and **`sync_server_catalog.py`** (**codegen**) documented as **landed**; **IMP-120** SQL sync called out as remaining. |
 
 ---
 

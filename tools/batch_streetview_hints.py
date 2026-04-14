@@ -122,7 +122,7 @@ def _pano_sample(
     lon: float,
     count: int,
 ) -> dict[str, Any]:
-    url = urljoin(_normalize_base(pano_base), "v1/panos/sample")
+    base = _normalize_base(pano_base)
     body = {
         "request_id": str(uuid.uuid4()),
         "center": {"lat": lat, "lon": lon},
@@ -132,9 +132,15 @@ def _pano_sample(
         "image_width": 640,
         "image_height": 640,
     }
-    r = client.post(url, json=body)
-    r.raise_for_status()
-    return r.json()
+    primary = urljoin(base, "api/v1/panos/sample")
+    legacy = urljoin(base, "v1/panos/sample")
+    r1 = client.post(primary, json=body)
+    if r1.status_code != 404:
+        r1.raise_for_status()
+        return r1.json()
+    r2 = client.post(legacy, json=body)
+    r2.raise_for_status()
+    return r2.json()
 
 
 def _lfm_suggestions(
@@ -250,7 +256,7 @@ def _pano_model_pin(pano_health: dict[str, Any]) -> dict[str, Any]:
     gcfg = str(pano_health.get("google_configured", "no"))
     uses_real_google = prov == "google" or (prov == "auto" and gcfg == "yes")
     pin: dict[str, Any] = {
-        "api": "v1/panos/sample",
+        "api": "api/v1/panos/sample",
         "streetview_provider": prov,
         "google_configured": gcfg,
         "stub_jpeg": not uses_real_google,

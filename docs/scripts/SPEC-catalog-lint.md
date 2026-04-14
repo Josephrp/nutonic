@@ -41,7 +41,7 @@ python data/scripts/catalog_lint.py [--catalog-root data/catalog] [--verbose] [-
 
 ## 5. Related — Gradle `:shared:validateCatalog`
 
-**Not this script:** Gradle task validates that **`still_bundled_resource`** paths referenced by packaged catalog subset exist under **`nutonic/shared/.../composeResources`**. That task **must** invoke or duplicate path checks consistent with §2.3 here.
+**Implemented:** `:shared:validateCatalog` runs **`data/scripts/validate_shipped_compose_resources.py`** against **`composeResources/files/cache/manifest.full.json`**, resolving each **`still_bundled_resource`** under the **`composeResources/`** root (e.g. `files/3.jpg` → `composeResources/files/3.jpg`; path traversal rejected). The root **`quality`** task depends on it.
 
 ---
 

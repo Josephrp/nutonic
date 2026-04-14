@@ -60,12 +60,12 @@ data/scripts/tests/
 
 ```yaml
 pip install -r data/scripts/requirements.txt -r tools/requirements.txt pytest \
-  ./inference/streetview_pano_service ./inference/lfm_vl_hint_service
+  ./inference/streetview_pano_service ./inference/lfm_vl_hint_service ./inference/lfm_vl_satellite_caption_service
 python -m pytest data/scripts/tests tools/tests \
-  inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests -q
+  inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests inference/lfm_vl_satellite_caption_service/tests -q
 ```
 
-Path filters include **`tools/**`** and **`inference/streetview_pano_service/**`**, **`inference/lfm_vl_hint_service/**`**.
+Path filters include **`tools/**`** and **`inference/streetview_pano_service/**`**, **`inference/lfm_vl_hint_service/**`**, **`inference/lfm_vl_satellite_caption_service/**`**.
 
 **Markers:** `@pytest.mark.integration` for slow/network tests (optional for future live Street View runs).
 
@@ -80,7 +80,7 @@ python data/scripts/fetch_geo_baselines.py --output-dir data/geo    # once, opti
 python data/scripts/catalog_import_poi.py --poi-root data/downloads/geoguessr_poi_12
 python data/scripts/catalog_lint.py
 pip install -r tools/requirements.txt
-pip install ./inference/streetview_pano_service ./inference/lfm_vl_hint_service
+pip install ./inference/streetview_pano_service ./inference/lfm_vl_hint_service ./inference/lfm_vl_satellite_caption_service
 pytest data/scripts/tests tools/tests inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests -q
 ```
 

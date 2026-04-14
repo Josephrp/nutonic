@@ -101,10 +101,11 @@ actual fun MapViewport(
         selfGuess?.let {
             Marker(
                 state = MarkerState(it.coordinate.toLatLng()),
-                title = when (it.state) {
-                    MapGuessState.PROVISIONAL -> "Your provisional guess"
-                    MapGuessState.LOCKED -> "Your locked guess"
-                },
+                title =
+                    when (it.state) {
+                        MapGuessState.PROVISIONAL -> "Your provisional guess"
+                        MapGuessState.LOCKED -> "Your locked guess"
+                    },
                 icon = BitmapDescriptorFactory.defaultMarker(it.state.toMarkerHue()),
             )
         }
@@ -150,5 +151,3 @@ private fun CameraPosition.isApproximately(other: CameraPosition): Boolean =
     abs(target.latitude - other.target.latitude) < 0.00001 &&
         abs(target.longitude - other.target.longitude) < 0.00001 &&
         abs(zoom - other.zoom) < 0.02
-
-

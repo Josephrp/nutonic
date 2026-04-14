@@ -38,13 +38,13 @@ import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
 import com.nutonic.api.MapSummary
 import com.nutonic.api.NutonicApiClient
+import com.nutonic.api.RankedRoundStartIn
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.cache.ManifestSyncResult
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
 import com.nutonic.model.PictureData
 import com.nutonic.navigation.NutonicRoute
 import com.nutonic.navigation.ShellDetail
-import com.nutonic.api.RankedRoundStartIn
 import com.nutonic.screens.CommunityLeaderboardPanel
 import com.nutonic.screens.GameRolePicker
 import com.nutonic.screens.RankedPlaySession
@@ -70,14 +70,20 @@ fun NutonicMainShell(
     localNonRankedLeaderboardRepository: LocalNonRankedLeaderboardRepository? = null,
 ) {
     var root by rememberSaveable { mutableStateOf(AppRoot.Shell) }
+
     /** Shared `map_id` for SCAN hub pick, RANK community panel, and results → RANK deep link (`IMP-071`). */
     var mapContextId by rememberSaveable { mutableStateOf("demo") }
+
     /** Title from catalog row when known (SCAN list); cleared when map id is edited elsewhere (e.g. RANK text field). */
     var mapContextTitle by rememberSaveable { mutableStateOf<String?>(null) }
+
     /** Server-ranked round from `POST /api/v1/ranked/rounds/start`; cleared on non-ranked play or back (W6). */
     var rankedPlaySession by remember { mutableStateOf<RankedPlaySession?>(null) }
 
-    fun setMapContext(id: String, title: String?) {
+    fun setMapContext(
+        id: String,
+        title: String?,
+    ) {
         mapContextId = id
         mapContextTitle = title
     }
@@ -761,6 +767,3 @@ private fun NutonicBottomBar(
         }
     }
 }
-
-
-

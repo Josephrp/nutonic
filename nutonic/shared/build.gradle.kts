@@ -1,5 +1,4 @@
-import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
-
+import java.io.File
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
@@ -18,8 +17,6 @@ kotlin {
         browser()
         useEsModules()
     }
-    @OptIn(ExperimentalWasmDsl::class)
-    wasmJs { browser() }
 
     listOf(
         iosX64(),
@@ -50,9 +47,9 @@ kotlin {
             implementation(compose.components.resources)
             implementation("org.jetbrains.compose.material:material-icons-core:1.6.11")
             implementation("org.jetbrains.compose.material:material-icons-extended:1.6.11")
-            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+            implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
             implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.5.0")
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
             implementation("io.ktor:ktor-client-core:$ktorVersion")
             implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
@@ -60,21 +57,23 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlin("test"))
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
             implementation("io.ktor:ktor-client-mock:$ktorVersion")
         }
 
         androidMain.dependencies {
             implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
-            api("androidx.activity:activity-compose:1.8.2")
-            api("androidx.appcompat:appcompat:1.6.1")
-            api("androidx.core:core-ktx:1.12.0")
-            implementation("androidx.camera:camera-camera2:1.3.1")
-            implementation("androidx.camera:camera-lifecycle:1.3.1")
-            implementation("androidx.camera:camera-view:1.3.1")
+            api("androidx.activity:activity-compose:1.13.0")
+            api("androidx.appcompat:appcompat:1.7.1")
+            api("androidx.core:core-ktx:1.18.0")
+            implementation("androidx.camera:camera-camera2:1.6.0")
+            implementation("androidx.camera:camera-lifecycle:1.6.0")
+            implementation("androidx.camera:camera-view:1.6.0")
+            implementation("androidx.concurrent:concurrent-futures-ktx:1.2.0")
+            implementation("com.google.guava:guava:33.3.1-android")
             implementation("com.google.accompanist:accompanist-permissions:0.29.2-rc")
-            implementation("com.google.android.gms:play-services-maps:18.2.0")
-            implementation("com.google.android.gms:play-services-location:21.1.0")
+            implementation("com.google.android.gms:play-services-maps:20.0.0")
+            implementation("com.google.android.gms:play-services-location:21.3.0")
             implementation("com.google.maps.android:maps-compose:2.11.2")
         }
 
@@ -84,16 +83,12 @@ kotlin {
             }
         }
 
-        val webMain by getting {
+        val jsMain by getting {
             dependencies {
                 implementation("io.ktor:ktor-client-js:$ktorVersion")
                 implementation(npm("uuid", "^9.0.1"))
             }
         }
-
-        val jsMain by getting
-
-        val wasmJsMain by getting
 
         val desktopMain by getting
         desktopMain.dependencies {
@@ -110,7 +105,7 @@ kotlin {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
     namespace = "com.nutonic.shared"
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
@@ -131,4 +126,23 @@ compose.resources {
     // Stable package: avoids parent-package import ambiguity with `package com.nutonic` sources.
     packageOfResClass = "com.nutonic.resources"
     publicResClass = true
+}
+
+tasks.register<Exec>("validateCatalog") {
+    group = "verification"
+    description =
+        "Validates shipped manifest still_bundled_resource paths under composeResources (SPEC-catalog-lint)."
+    val repoRoot = rootProject.projectDir.resolve("..").canonicalFile
+    workingDir = repoRoot
+    val manifestFile =
+        File(repoRoot, "nutonic/shared/src/commonMain/composeResources/files/cache/manifest.full.json")
+    val composeResourcesRoot = File(repoRoot, "nutonic/shared/src/commonMain/composeResources")
+    commandLine(
+        "python",
+        "data/scripts/validate_shipped_compose_resources.py",
+        "--manifest",
+        manifestFile.absolutePath,
+        "--compose-resources-root",
+        composeResourcesRoot.absolutePath,
+    )
 }

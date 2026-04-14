@@ -237,7 +237,7 @@ flowchart TD
 | **P6.1** | **Landed** — `httpx` client, timeouts, **`--pano-service-url`** / **`--lfm-vl-url`** (alias **`--lfm-service-url`**), startup **GET …/health** on both bases (exit **9** on hard connectivity failure). |
 | **P6.2** | **Landed** — **`POST /v1/panos/sample`** → frames; **`POST /v1/suggestions/from_frames`** → `streetview_hint_pack`; **`validate_caption_text`** (`data/scripts/validate_hint_strings.py`) on each line. **S0–S2**: **`--poi-limit`**, **`--location-ids`**, **`--location-ids-file`**, **`--shuffle-seed`**, **`--sv-screenshots-per-location`**, **`--lfm-max-frames-per-request`** chunk merge. |
 | **P6.3** | **Landed** — **`--skip-streetview-hints`** exits **0** without network. |
-| **P6.4** | **Partial** — batch posts optional satellite **`POST …/v1/infer`** when **`--satellite-caption-service-url`** + **`--still-index`** resolve a still file; **separate** `satellite_caption_sidecar` object. **`lfm_vl_satellite_caption_service`** package not added yet (404 tolerated). |
+| **P6.4** | **Landed (partial)** — batch posts optional satellite **`POST …/v1/infer`** when **`--satellite-caption-service-url`** + **`--still-index`** resolve a still file; **separate** `satellite_caption_sidecar` object. **`inference/lfm_vl_satellite_caption_service/`** is **present** with pytest in CI; service URL may be absent in local smoke (404 tolerated). |
 | **P6.5** | **Landed** — **`useful_hints`** omitted from LFM JSON unless **`--inject-useful-hint-tone`**. |
 | **P6.6** | **Landed (stub)** — **`--enable-narrative-pass`** + **`--narrative-service-url`** → **`POST /v1/narrative/fuse`** on **`lfm_vl_hint_service`** (text-only stub); validated narrative string or **null**. |
 | **Tests** | **Landed** — default CI: **`tools/tests/test_batch_streetview_hints.py`** (`httpx.MockTransport`) + **`inference/*/tests`**. Optional **`RUN_STREETVIEW_BATCH=1`** remains for live Google/GPU runs when wired. |
@@ -245,7 +245,7 @@ flowchart TD
 
 **Inference (CPU pano, optional GPU LFM):** **`inference/streetview_pano_service`** — **`POST /v1/panos/sample`** (Pillow JPEG decoys until Google Static lands). **`inference/lfm_vl_hint_service`** — **`POST /v1/suggestions/from_frames`** + **`POST /v1/narrative/fuse`** with **`LFM_VL_BACKEND`**: **`stub`** (default), **`transformers`** (official **Liquid** Hugging Face LFM-VL weights), or **`openai_compatible`** (OpenAI API to vLLM/SGLang per Liquid deployment docs).
 
-**Follow-up:** **`assemble_manifest`** merge of `data/cache/.../streetview/*.json` into manifest rows (**P8.1a** “optional streetview”) remains a separate PR when OpenAPI/Kotlin **`streetview_hint_pack`** is finalized.
+**P8.1a streetview merge:** **`assemble_manifest`** merges optional `data/cache/.../streetview/*.json` into **`ManifestRoundLocation`** rows; OpenAPI/Kotlin **`streetview_hint_pack`** is **landed** (see **`docs/scripts/SPEC-assemble-manifest.md`** §2.1).
 
 ---
 
@@ -321,14 +321,14 @@ flowchart TD
 
 ---
 
-## 13. Gradle `:shared:validateCatalog` (parallel track)
+## 13. Gradle `:shared:validateCatalog` (**landed**)
 
 **Spec pointer:** [SPEC-catalog-lint.md](../docs/scripts/SPEC-catalog-lint.md) §5
 
 | Item | Detail |
 |------|--------|
-| **G.1** | Gradle task reads packaged catalog subset or `manifest.full.json` in resources. |
-| **G.2** | Fails build if `still_bundled_resource` path missing under `composeResources`. |
+| **G.1** | **Landed** — `:shared:validateCatalog` runs **`data/scripts/validate_shipped_compose_resources.py`** on **`composeResources/files/cache/manifest.full.json`** (`nutonic/shared/build.gradle.kts`); root **`quality`** depends on it. |
+| **G.2** | **Landed** — fails the build if a manifest **`still_bundled_resource`** does not resolve under **`composeResources/`** (path traversal rejected). |
 
 **Dependency:** P8.1 produces manifest that Gradle can consume, **or** interim hand-maintained manifest for pilot.
 
@@ -375,6 +375,8 @@ flowchart TD
 | 0.3 | 2026-04-14 | **P6.2** / **P6.6**: POI limit + **K** SV frames + optional narrative LLM pass per **`SPEC-batch-streetview-hints.md`** §1.1 |
 | 0.4 | 2026-04-14 | **P6 landed:** `tools/batch_streetview_hints.py` + pano **`/v1/panos/sample`** + LFM stub **`/v1/suggestions/from_frames`** + **`validate_caption_text`**; CI runs **`tools/tests`** and **`inference/*/tests`**. |
 | 0.5 | 2026-04-14 | **`lfm_vl_hint_service`:** real **Liquid LFM-VL** via **`LFM_VL_BACKEND=transformers`** (HF `AutoModelForImageTextToText`) or **`openai_compatible`** (OpenAI `/v1/chat/completions` for vLLM/SGLang); default **stub** unchanged for CI. |
+| 0.6 | 2026-04-14 | **P6.4** satellite caption service **landed** in repo/CI; **P8.1a** streetview **`assemble_manifest`** merge + OpenAPI parity **landed**; stale “follow-up when OpenAPI adds SV” row **removed**. |
+| 0.7 | 2026-04-14 | **§13:** **`validateCatalog`** + **`validate_shipped_compose_resources.py`** documented as **landed** (was “parallel track”). |
 
 ---
 

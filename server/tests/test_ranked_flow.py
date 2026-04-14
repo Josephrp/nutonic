@@ -54,6 +54,9 @@ def test_ranked_start_submit_verifies_distance(ranked_client: TestClient) -> Non
     ticket = body["round_ticket"]
     assert body["clue"]["map_id"] == "demo"
     assert "truth_lat" not in body["clue"]
+    pack = body["clue"].get("streetview_hint_pack")
+    assert isinstance(pack, list) and len(pack) >= 1
+    assert pack[0].get("text")
 
     submit = ranked_client.post(
         f"/api/v1/ranked/rounds/{rid}/submit",

@@ -1,7 +1,7 @@
 # Script specification: `narrative_llm_batch.py`
 
 **Path:** `data/scripts/narrative_llm_batch.py`  
-**Status:** Planned (**optional Phase G**).  
+**Status:** **Stub landed** — `--dry-run` (default) writes empty `llm_sidecar.json`; live backends per §5 remain optional wiring.  
 **Plan:** [`docs/NARRATIVE-AND-PROMPTS.md`](../NARRATIVE-AND-PROMPTS.md) §3–§4, [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase G.
 
 ---

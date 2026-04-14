@@ -23,6 +23,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices(
             "NUTONIC_LEADERBOARD_DATABASE_URL",
             "LEADERBOARD_DATABASE_URL",
+            "leaderboard_database_url",
         ),
         description=(
             "SQLAlchemy URL for community leaderboard persistence (IMP-060). "
@@ -48,7 +49,11 @@ class Settings(BaseSettings):
 
     ranked_database_url: str = Field(
         default="sqlite:///data/nutonic_ranked.db",
-        validation_alias=AliasChoices("NUTONIC_RANKED_DATABASE_URL", "RANKED_DATABASE_URL"),
+        validation_alias=AliasChoices(
+            "NUTONIC_RANKED_DATABASE_URL",
+            "RANKED_DATABASE_URL",
+            "ranked_database_url",
+        ),
         description="SQLite (or SQLAlchemy URL) for ranked round rows (IMP-090).",
     )
 
@@ -63,6 +68,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices(
             "NUTONIC_GUESS_TELEMETRY_DATABASE_URL",
             "GUESS_TELEMETRY_DATABASE_URL",
+            "guess_telemetry_database_url",
         ),
         description="SQLite URL for optional guess telemetry rows.",
     )
@@ -94,6 +100,15 @@ class Settings(BaseSettings):
         description=(
             "When false, GET /api/v1/cache/manifest omits `locations` and `ai_guesses` (spoiler hygiene for "
             "world-readable manifests). Set true for local dev / CI fixtures that assert full catalog slices."
+        ),
+    )
+
+    manifest_full_path: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("NUTONIC_MANIFEST_FULL_PATH", "MANIFEST_FULL_PATH"),
+        description=(
+            "Optional path to assembled manifest.full.json (same schema as GET /api/v1/cache/manifest when "
+            "truth is exposed). When set and the file exists, replaces builtin demo catalog for maps/locations/ai."
         ),
     )
 

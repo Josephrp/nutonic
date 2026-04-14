@@ -33,6 +33,18 @@
         "tier_5": "Austria — central European country context.",
         "tier_6": "Vienna-scale metro cues without coordinates (river-basin capital pattern)."
       },
+      "streetview_hint_pack": [
+        {
+          "text": "Pre-cached assist: broad European river-basin capital with historic core and ring boulevards.",
+          "viewpoint_id": null,
+          "rank": 1
+        },
+        {
+          "text": "Assist: temperate continental climate cues; dense inner city with tram-era street furniture.",
+          "viewpoint_id": null,
+          "rank": 2
+        }
+      ],
       "play_budget_ms": 180000,
       "ai_marker_phase_enabled": true
     },
@@ -53,6 +65,13 @@
         "tier_5": "United States — northeastern megalopolis corridor.",
         "tier_6": "Iconic island-core coastal megacity pattern (no coordinate literals)."
       },
+      "streetview_hint_pack": [
+        {
+          "text": "Pre-cached assist: dense island street grid with mid-rise masonry and steel-bridge skyline glimpses.",
+          "viewpoint_id": null,
+          "rank": 1
+        }
+      ],
       "play_budget_ms": 180000,
       "ai_marker_phase_enabled": true
     }

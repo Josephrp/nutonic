@@ -235,7 +235,8 @@ The repository root includes **`ecosystem.config.cjs`** and **`scripts/pm2-run-g
 | Step | Action | Pass criteria |
 |------|--------|----------------|
 | **A. Lint + unit tests (always)** | From **repository root**: `npm install` if needed → `npx pm2 start ecosystem.config.cjs --only nutonic-ci-local` → `npm run pm2:wait-stopped -- nutonic-ci-local 3600000` (or wait until PM2 shows **stopped**). | **`logs/nutonic-ci-local.out.log`** contains **`BUILD SUCCESSFUL`**. **`logs/nutonic-ci-local.err.log`** reviewed (JVM noise vs new errors). |
-| **B. Smoke build (when required)** | Same pattern with **`nutonic-build-verify`** and **`npm run pm2:wait-stopped -- nutonic-build-verify 7200000`** (long timeout; webpack + wasm). | **`logs/nutonic-build-verify.out.log`** contains **`BUILD SUCCESSFUL`**. |
+| **B. Smoke build (when required)** | Same pattern with **`nutonic-build-verify`** and **`npm run pm2:wait-stopped -- nutonic-build-verify 7200000`** (long timeout; includes JS webpack). | **`logs/nutonic-build-verify.out.log`** contains **`BUILD SUCCESSFUL`**. |
+| **C. Full Gradle `build` (optional)** | **`npm run pm2:build`** → **`npm run pm2:wait-stopped -- nutonic-build 7200000`** (long timeout; all variants + lint + ktlint). | **`logs/nutonic-build.err.log`** ends with **`BUILD SUCCESSFUL`** (stdout may be merged here when `merge_logs` is true). |
 
 **When step B is required:** The PR modifies **`nutonic/webApp/`**, **`nutonic/androidApp/`**, **`nutonic/desktopApp/`**, **`nutonic/shared/`** in ways that affect compilation or resources, **or** **`nutonic/kotlin-js-store/`**, **or** root Gradle / version catalog under **`nutonic/`** that affects those modules. If in doubt, run **B**.
 
@@ -267,6 +268,8 @@ npm run pm2:wait-stopped -- nutonic-ci-local 3600000
 
 npm run pm2:build-verify   # when §9.2 step B applies
 npm run pm2:wait-stopped -- nutonic-build-verify 7200000
+npm run pm2:build          # optional: full `./gradlew build`
+npm run pm2:wait-stopped -- nutonic-build 7200000
 
 npm run pm2:stop           # remove nutonic-* PM2 entries when done
 npm run pm2:jlist          # clean JSON for tooling

@@ -1,0 +1,17 @@
+{
+  "schema_version": "nutonic.ranked_clue_pack.v1",
+  "clues": [
+    {
+      "map_id": "demo",
+      "location_id": "demo-vienna-001",
+      "still_bundle_id": null,
+      "still_bundled_resource": null,
+      "useful_hints": null,
+      "streetview_hint_pack": null,
+      "streetview_assist_narrative": "Shipped ranked pack: optional fused assist narrative (no coordinates).",
+      "play_budget_ms": null,
+      "ai_marker_phase_enabled": true
+    }
+  ],
+  "ai_guesses": []
+}

@@ -34,8 +34,8 @@ All inputs **must** agree on **`content_version`** (or an explicit `--content-ve
 | Catalog row | `catalog_import_poi` | `map_id`, `location_id`, truth, `still_bundled_resource` / source paths, assist flags |
 | Reference still | `render_mapbox_still` | `still_bundle_id`, `still_sha256` (via sidecar or catalog patch), `still_bundled_resource` |
 | Useful hints | `compile_useful_hint_tiers` (+ optional `generate_useful_hints_llm`) | `useful_hints` (`UsefulHintsTiers`) |
-| Street View pack | `batch_streetview_hints` | **`streetview_hint_pack`** once OpenAPI adds it (see shipped-cache plan §4); until then, stash under extension field only in **full** manifest for forward-compat tests |
-| Street View narrative | `batch_streetview_hints` (**`--enable-narrative-pass`**) | Optional **`streetview_assist_narrative`** string (INTEL / chrome); OpenAPI extension in same change as `streetview_hint_pack` unless merged into narrative bundle elsewhere |
+| Street View pack | `batch_streetview_hints` | **`streetview_hint_pack`** on **`ManifestRoundLocation`** / wire DTOs (`docs/openapi.yaml`, Kotlin **`NutonicApiModels`**, server **`ManifestLocationOut`**) — merged from per-location JSON under `--streetview-dir` |
+| Street View narrative | `batch_streetview_hints` (**`--enable-narrative-pass`**) | Optional **`streetview_assist_narrative`** string (INTEL / chrome); same manifest fields as OpenAPI |
 | AI marker | `generate_ai_guess_fixture` | `ai_guesses[]` rows (`AiGuessRow`) — **must** align with `docs/GAME-ENGINE.md` §12 / §9.4: primary production source is **TerraMind TiM `Coordinates`** inside modality exports when available; decoy/heuristic modes are **interim** only |
 
 **Footguns**

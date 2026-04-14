@@ -10,7 +10,7 @@
 | Spec | Script path | Phase |
 |------|-------------|--------|
 | [SPEC-download-geoguessr-poi-imagery.md](SPEC-download-geoguessr-poi-imagery.md) | `data/scripts/download_geoguessr_poi_imagery.py` | **Existing** ingest |
-| [SPEC-geo-nutonic.md](SPEC-geo-nutonic.md) | `data/scripts/geo_nutonic.py` (planned shared module) | Shared |
+| [SPEC-geo-nutonic.md](SPEC-geo-nutonic.md) | `data/scripts/geo_nutonic.py` | **Shared — implemented** |
 | [SPEC-fetch-geo-baselines.md](SPEC-fetch-geo-baselines.md) | `data/scripts/fetch_geo_baselines.py` | **A — implemented** |
 | [SPEC-catalog-import-poi.md](SPEC-catalog-import-poi.md) | `data/scripts/catalog_import_poi.py` | **A — implemented** |
 | [SPEC-catalog-lint.md](SPEC-catalog-lint.md) | `data/scripts/catalog_lint.py` | **A — implemented** |
@@ -18,15 +18,19 @@
 | [SPEC-build-poi-geo-context.md](SPEC-build-poi-geo-context.md) | `data/scripts/build_poi_geo_context.py` | **C0 — implemented** |
 | [SPEC-compile-useful-hint-tiers.md](SPEC-compile-useful-hint-tiers.md) | `data/scripts/compile_useful_hint_tiers.py` | **C1 — implemented** |
 | [SPEC-validate-hint-strings.md](SPEC-validate-hint-strings.md) | `data/scripts/validate_hint_strings.py` | **C2 — implemented** |
-| [SPEC-generate-useful-hints-llm.md](SPEC-generate-useful-hints-llm.md) | `data/scripts/generate_useful_hints_llm.py` | C3 (optional) |
+| [SPEC-generate-useful-hints-llm.md](SPEC-generate-useful-hints-llm.md) | `data/scripts/generate_useful_hints_llm.py` | **C3 — dry-run + CLI** (live polish backends per SPEC §5) |
 | [SPEC-batch-streetview-hints.md](SPEC-batch-streetview-hints.md) | `tools/batch_streetview_hints.py` | **D — implemented** (local stubs under `inference/*`) |
 | [SPEC-generate-ai-guess-fixture.md](SPEC-generate-ai-guess-fixture.md) | `data/scripts/generate_ai_guess_fixture.py` | **E — implemented** |
 | [SPEC-assemble-manifest.md](SPEC-assemble-manifest.md) | `data/scripts/assemble_manifest.py` | **F — implemented** |
 | [SPEC-assemble-ranked-clue-pack.md](SPEC-assemble-ranked-clue-pack.md) | `data/scripts/assemble_ranked_clue_pack.py` | **F — implemented** |
-| [SPEC-sync-server-catalog.md](SPEC-sync-server-catalog.md) | `data/scripts/sync_server_catalog.py` | F |
-| [SPEC-narrative-llm-batch.md](SPEC-narrative-llm-batch.md) | `data/scripts/narrative_llm_batch.py` | G (optional) |
+| [SPEC-sync-server-catalog.md](SPEC-sync-server-catalog.md) | `data/scripts/sync_server_catalog.py` | **F — implemented** (`catalog_generated.py`) |
+| [SPEC-narrative-llm-batch.md](SPEC-narrative-llm-batch.md) | `data/scripts/narrative_llm_batch.py` | **G — dry-run stub** (live LLM per SPEC §5) |
 
-**Gradle (non-Python):** `:shared:validateCatalog` — see note in [SPEC-catalog-lint.md](SPEC-catalog-lint.md) §Related.
+**Gradle (non-Python):** `:shared:validateCatalog` runs **`data/scripts/validate_shipped_compose_resources.py`** against **`composeResources/files/cache/manifest.full.json`** and **`still_bundled_resource`** paths — see [SPEC-catalog-lint.md](SPEC-catalog-lint.md) §5. **`sync_server_catalog.py`** (**`--write`**) keeps **`server/src/nutonic_server/catalog_generated.py`** in sync with that manifest ([SPEC-sync-server-catalog.md](SPEC-sync-server-catalog.md)).
+
+**TerraMind TiM → `ai_guesses`:** torch-free **`generate_ai_guess_fixture.py`**; local TerraTorch forward + **`ingest`** live under **`inference/terramind_tim_local/`** (`inference/terramind_tim_local/README.md`, [SPEC-generate-ai-guess-fixture.md](SPEC-generate-ai-guess-fixture.md)).
+
+**Optional LLM scripts:** **`narrative_llm_batch.py`** and **`generate_useful_hints_llm.py`** default to **dry-run / stub** behavior until **`prompts/llm/`** and live backends are wired per their `SPEC-*.md` files.
 
 **Heavy ML boundary:** `data/scripts/` stays **torch-free and TerraTorch-free** (fast CI, no GPU imports). **VLMs** (e.g. LFM-VL) and **TerraMind / TerraTorch** run only in **`inference/*`**, **`tools/`**, **`demos/terramind_space/`**, or **HF Jobs** — those processes **may** load models via:
 
@@ -38,4 +42,4 @@
 
 ---
 
-*Index version: 2026-04-14e — Street View batch (`tools/batch_streetview_hints.py` + inference stubs) landed*
+*Index version: 2026-04-14g — Gradle validate path + `sync_server_catalog` + `terramind_tim_local` cross-links; optional LLM stub note*

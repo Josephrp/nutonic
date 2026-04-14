@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.graphics.scale
 
 actual fun grayScaleFilter(
     bitmap: ImageBitmap,
@@ -99,5 +100,5 @@ private fun scaleBitmapAspectRatio(
     val resultH = (bitmap.height * ratio).toInt()
     val resultW = (bitmap.width * ratio).toInt()
 
-    return Bitmap.createScaledBitmap(bitmap, resultW, resultH, filter)
+    return bitmap.scale(resultW, resultH, filter)
 }

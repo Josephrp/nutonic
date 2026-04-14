@@ -19,11 +19,11 @@ import com.nutonic.api.NutonicApiClient
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.cache.createManifestBlobStore
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
-import com.nutonic.persistence.createLocalLeaderboardBlobStore
 import com.nutonic.model.PictureData
 import com.nutonic.navigation.NutonicRoute
 import com.nutonic.navigation.decodeNutonicRoute
 import com.nutonic.navigation.encode
+import com.nutonic.persistence.createLocalLeaderboardBlobStore
 import com.nutonic.screens.AuthenticationScreenPlaceholder
 import com.nutonic.screens.NutonicMusicMasterTopBar
 import com.nutonic.screens.RoleSelectionScreenPlaceholder

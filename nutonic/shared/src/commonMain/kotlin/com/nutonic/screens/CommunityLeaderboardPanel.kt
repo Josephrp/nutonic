@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.nutonic.api.ApiResult
 import com.nutonic.api.CommunityLeaderboardPostBody
@@ -36,16 +37,22 @@ fun CommunityLeaderboardPanel(
     onMapIdChange: ((String) -> Unit)?,
     featureFlags: FeatureFlags?,
     sectionTitle: String,
+    /** When server `features.ranked` is on, show **GET …?tier=ranked** (RANK / SCAN follow-up). */
+    showRankedVerifiedFetch: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
     var rows by remember { mutableStateOf<List<CommunityLeaderboardRow>>(emptyList()) }
+    var rankedRows by remember { mutableStateOf<List<CommunityLeaderboardRow>>(emptyList()) }
     var status by remember { mutableStateOf<String?>(null) }
+    var rankedStatus by remember { mutableStateOf<String?>(null) }
     var lastFetched by remember { mutableStateOf<Instant?>(null) }
+    var rankedFetched by remember { mutableStateOf<Instant?>(null) }
     var lastDebug by remember { mutableStateOf<String?>(null) }
 
     val getEnabled = featureFlags?.communityLbGet != false
     val postEnabled = featureFlags?.communityLbPost != false
+    val rankedFetchEnabled = showRankedVerifiedFetch && featureFlags?.ranked == true
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CommunityLeaderboardPanelIntro(
@@ -67,6 +74,19 @@ fun CommunityLeaderboardPanel(
                 status = it.status
             },
         )
+        if (showRankedVerifiedFetch) {
+            CommunityLeaderboardRankedTierFetchButton(
+                scope = scope,
+                nutonicApiClient = nutonicApiClient,
+                mapId = mapId,
+                rankedFetchEnabled = rankedFetchEnabled,
+                onResult = {
+                    rankedRows = it.rows
+                    rankedFetched = it.lastFetched
+                    rankedStatus = it.status
+                },
+            )
+        }
         CommunityLeaderboardDebugSessionButton(
             scope = scope,
             nutonicApiClient = nutonicApiClient,
@@ -88,6 +108,19 @@ fun CommunityLeaderboardPanel(
             status = status,
             rows = rows,
         )
+        if (showRankedVerifiedFetch) {
+            Text(
+                text = "Server-verified ranked (GET ?tier=ranked)",
+                style = MaterialTheme.typography.subtitle2,
+                color = MaterialTheme.colors.primary,
+            )
+            CommunityLeaderboardPanelFooter(
+                lastFetched = rankedFetched,
+                lastDebug = null,
+                status = rankedStatus,
+                rows = rankedRows,
+            )
+        }
     }
 }
 
@@ -172,9 +205,46 @@ private fun CommunityLeaderboardGetButton(
             }
         },
         enabled = getEnabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag("communityLeaderboardFetchButton"),
     ) {
         Text("GET community leaderboard")
+    }
+}
+
+@Composable
+private fun CommunityLeaderboardRankedTierFetchButton(
+    scope: CoroutineScope,
+    nutonicApiClient: NutonicApiClient,
+    mapId: String,
+    rankedFetchEnabled: Boolean,
+    onResult: (GetLeaderboardUiResult) -> Unit,
+) {
+    Button(
+        onClick = {
+            scope.launch {
+                onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching server-verified ranked leaderboard…"))
+                when (val r = nutonicApiClient.getLeaderboard(mapId, tier = "ranked")) {
+                    is ApiResult.Ok ->
+                        onResult(GetLeaderboardUiResult(r.value, Clock.System.now(), null))
+
+                    is ApiResult.HttpFailure ->
+                        onResult(GetLeaderboardUiResult(emptyList(), null, r.userMessage))
+
+                    is ApiResult.NetworkFailure ->
+                        onResult(GetLeaderboardUiResult(emptyList(), null, "Network: ${r.debugMessage}"))
+                }
+            }
+        },
+        enabled = rankedFetchEnabled,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .testTag("rankedLeaderboardTierFetchButton"),
+    ) {
+        Text("GET ranked leaderboard (?tier=ranked)")
     }
 }
 

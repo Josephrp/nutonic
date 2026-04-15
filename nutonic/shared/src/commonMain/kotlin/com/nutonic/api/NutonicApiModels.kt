@@ -159,6 +159,7 @@ data class RankedClue(
     @SerialName("useful_hints") val usefulHints: UsefulHintsTiers? = null,
     @SerialName("streetview_hint_pack") val streetviewHintPack: List<StreetviewHintItem>? = null,
     @SerialName("streetview_assist_narrative") val streetviewAssistNarrative: String? = null,
+    @SerialName("satellite_caption_sidecar") val satelliteCaptionSidecar: JsonObject? = null,
     @SerialName("play_budget_ms") val playBudgetMs: Int? = null,
     @SerialName("ai_marker_phase_enabled") val aiMarkerPhaseEnabled: Boolean = true,
 )

@@ -32,6 +32,7 @@ fun mergeRankedClueWithPack(
         streetviewAssistNarrative =
             clue.streetviewAssistNarrative?.takeIf { it.isNotBlank() }
                 ?: slice.streetviewAssistNarrative?.takeIf { it.isNotBlank() },
+        satelliteCaptionSidecar = clue.satelliteCaptionSidecar ?: slice.satelliteCaptionSidecar,
         stillBundleId = clue.stillBundleId ?: slice.stillBundleId,
         stillBundledResource = clue.stillBundledResource ?: slice.stillBundledResource,
         playBudgetMs = clue.playBudgetMs ?: slice.playBudgetMs,

@@ -9,8 +9,10 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -85,7 +87,23 @@ class NutonicApiClient(
             header("Authorization", "Bearer $bearerAccessToken")
         }
 
-    suspend fun getLeaderboard(mapId: String): ApiResult<List<CommunityLeaderboardRow>> = getJson(leaderboardUrl(mapId))
+    suspend fun getLeaderboard(
+        mapId: String,
+        /** When `"ranked"`, same aggregate as [getRankedLeaderboard] (`?tier=ranked`). */
+        tier: String? = null,
+    ): ApiResult<List<CommunityLeaderboardRow>> {
+        val q = tier?.trim()?.takeIf { it.isNotEmpty() }?.let { "?tier=${it.encodeURLParameter()}" }.orEmpty()
+        return getJson(leaderboardUrl(mapId) + q)
+    }
+
+    /** Server-verified ranked aggregate (`GET /api/v1/maps/{map_id}/leaderboard/ranked`, `docs/RANKED-MODE.md` §4). */
+    suspend fun getRankedLeaderboard(mapId: String): ApiResult<List<CommunityLeaderboardRow>> =
+        getJson(
+            originTrimmed.trimEnd('/') +
+                "/api/v1/maps/" +
+                encodePathSegment(mapId) +
+                "/leaderboard/ranked",
+        )
 
     /** IMP-081: fetch versioned still bytes (`GET /api/v1/bundles/{bundle_id}`). */
     suspend fun getBundleStill(bundleId: String): ApiResult<ByteArray> =
@@ -139,6 +157,7 @@ class NutonicApiClient(
                 http.post(
                     originTrimmed.trimEnd('/') + "/api/v1/maps/" + encodePathSegment(mapId) + "/guesses/record",
                 ) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     if (!idempotencyKey.isNullOrBlank()) {
                         header("Idempotency-Key", idempotencyKey)
@@ -161,6 +180,7 @@ class NutonicApiClient(
         try {
             val response: HttpResponse =
                 http.post(leaderboardUrl(mapId)) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     if (!idempotencyKey.isNullOrBlank()) {
                         header("Idempotency-Key", idempotencyKey)
@@ -181,6 +201,7 @@ class NutonicApiClient(
         try {
             val response: HttpResponse =
                 http.post(originTrimmed.trimEnd('/') + "/api/v1/ranked/rounds/start") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     setBody(body)
                 }
@@ -205,6 +226,7 @@ class NutonicApiClient(
                     "/submit"
             val response: HttpResponse =
                 http.post(url) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     header("Idempotency-Key", idempotencyKey)
                     setBody(body)
@@ -229,6 +251,7 @@ class NutonicApiClient(
                     "/forfeit-ranked-integrity"
             val response: HttpResponse =
                 http.post(url) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     setBody(body)
                 }

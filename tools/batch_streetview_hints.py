@@ -22,10 +22,14 @@ import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPTS = REPO_ROOT / "data" / "scripts"
+_TOOLS = REPO_ROOT / "tools"
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+if str(_TOOLS) not in sys.path:
+    sys.path.insert(0, str(_TOOLS))
 
 from generate_ai_guess_fixture import iter_catalog_locations  # noqa: E402
+from nutonic_hmac import nutonic_hmac_headers_from_env  # noqa: E402
 from validate_hint_strings import validate_caption_text  # noqa: E402
 
 EXIT_OK = 0
@@ -66,6 +70,11 @@ class BatchConfig:
 
 def _normalize_base(url: str) -> str:
     return url.rstrip("/") + "/"
+
+
+def _hmac_headers(method: str, url: str) -> dict[str, str] | None:
+    h = nutonic_hmac_headers_from_env(method, url)
+    return h or None
 
 
 def _chunk(items: list[dict[str, Any]], size: int) -> Iterator[list[dict[str, Any]]]:
@@ -134,11 +143,11 @@ def _pano_sample(
     }
     primary = urljoin(base, "api/v1/panos/sample")
     legacy = urljoin(base, "v1/panos/sample")
-    r1 = client.post(primary, json=body)
+    r1 = client.post(primary, json=body, headers=_hmac_headers("POST", primary))
     if r1.status_code != 404:
         r1.raise_for_status()
         return r1.json()
-    r2 = client.post(legacy, json=body)
+    r2 = client.post(legacy, json=body, headers=_hmac_headers("POST", legacy))
     r2.raise_for_status()
     return r2.json()
 
@@ -161,7 +170,7 @@ def _lfm_suggestions(
     }
     if inject_tone and useful_hints:
         payload["useful_hints"] = useful_hints
-    r = client.post(url, json=payload)
+    r = client.post(url, json=payload, headers=_hmac_headers("POST", url))
     r.raise_for_status()
     data = r.json()
     sug = data.get("suggestions")
@@ -197,7 +206,7 @@ def _optional_narrative(
         "mission_flavor": "neutral",
     }
     try:
-        r = client.post(endpoint, json=body, timeout=60.0)
+        r = client.post(endpoint, json=body, timeout=60.0, headers=_hmac_headers("POST", endpoint))
         if r.status_code >= 400:
             return None
         data = r.json()
@@ -225,6 +234,7 @@ def _optional_satellite(
             endpoint,
             json={"task": "caption", "image_base64": image_base64},
             timeout=120.0,
+            headers=_hmac_headers("POST", endpoint),
         )
         if r.status_code >= 400:
             return None
@@ -234,7 +244,8 @@ def _optional_satellite(
 
 
 def _get_health_json(client: httpx.Client, base: str) -> dict[str, Any]:
-    r = client.get(urljoin(_normalize_base(base), "health"), timeout=10.0)
+    url = urljoin(_normalize_base(base), "health")
+    r = client.get(url, timeout=10.0, headers=_hmac_headers("GET", url))
     r.raise_for_status()
     data = r.json()
     return data if isinstance(data, dict) else {}
@@ -242,7 +253,8 @@ def _get_health_json(client: httpx.Client, base: str) -> dict[str, Any]:
 
 def _try_health_json(client: httpx.Client, base: str) -> dict[str, Any]:
     try:
-        r = client.get(urljoin(_normalize_base(base), "health"), timeout=10.0)
+        url = urljoin(_normalize_base(base), "health")
+        r = client.get(url, timeout=10.0, headers=_hmac_headers("GET", url))
         if r.status_code >= 400:
             return {}
         data = r.json()

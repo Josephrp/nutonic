@@ -37,7 +37,7 @@ Primary ship field remains **`streetview_hint_pack`** (see **`plans/2026-04-14-s
 ## 2. Non-goals
 
 - Does **not** embed golden coordinates in responses stored for **ranked** client packs.
-- Does **not** authenticate as a player; uses **operator** credentials (mTLS / `INFERENCE_HMAC_SECRET` per thin orchestrator plan).
+- Does **not** authenticate as a player; uses **operator** credentials (mTLS / shared secret per thin orchestrator plan). When **`NUTONIC_INFERENCE_HMAC_SECRET`** / **`INFERENCE_HMAC_SECRET`** is set in the batch process environment, **`tools/batch_streetview_hints.py`** adds **`X-Nutonic-*`** signing headers to **pano / LFM / narrative / satellite** HTTP calls so they match workers that enable **`NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC`** (`inference/README.md`).
 
 ---
 

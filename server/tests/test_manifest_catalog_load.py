@@ -35,7 +35,7 @@ def _minimal_manifest() -> dict[str, object]:
                 "useful_hints": None,
                 "play_budget_ms": 60_000,
                 "ai_marker_phase_enabled": True,
-                "satellite_caption_sidecar": {"pipeline": "test", "note": "ignored by server model"},
+                "satellite_caption_sidecar": {"pipeline": "test", "note": "preserved on ManifestLocationOut"},
             }
         ],
         "ai_guesses": [{"map_id": "m_x", "location_id": "loc_x", "ai_lat": 11.0, "ai_lon": 21.0}],
@@ -63,6 +63,10 @@ def test_manifest_full_path_replaces_catalog(tmp_path: Path, monkeypatch: pytest
         man = c.get("/api/v1/cache/manifest").json()
         assert man["content_version"] == "nutonic.catalog.from_file.v1"
         assert man["engine_version"] == "9.9.9"
+        import nutonic_server.catalog as gc
+
+        assert gc.MANIFEST_LOCATIONS[0].satellite_caption_sidecar is not None
+        assert gc.MANIFEST_LOCATIONS[0].satellite_caption_sidecar["pipeline"] == "test"
     finally:
         monkeypatch.delenv("NUTONIC_MANIFEST_FULL_PATH", raising=False)
         game_catalog.PUBLISHED_MAPS[:] = snap_pub

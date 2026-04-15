@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -70,6 +70,7 @@ class ManifestLocationOut(BaseModel):
     useful_hints: UsefulHintsOut | None = None
     streetview_hint_pack: list[StreetviewHintItemOut] | None = None
     streetview_assist_narrative: str | None = None
+    satellite_caption_sidecar: dict[str, Any] | None = None
     play_budget_ms: int | None = None
     ai_marker_phase_enabled: bool = True
 
@@ -111,6 +112,7 @@ class RankedClueOut(BaseModel):
     useful_hints: UsefulHintsOut | None = None
     streetview_hint_pack: list[StreetviewHintItemOut] | None = None
     streetview_assist_narrative: str | None = None
+    satellite_caption_sidecar: dict[str, Any] | None = None
     play_budget_ms: int | None = None
     ai_marker_phase_enabled: bool = True
 
@@ -148,18 +150,32 @@ class RankedForfeitOut(BaseModel):
 class ProJobCreateIn(BaseModel):
     center_lat: float = Field(ge=-90.0, le=90.0)
     center_lon: float = Field(ge=-180.0, le=180.0)
+    bbox_half_km: float = Field(default=5.0, gt=0, le=500.0)
+    mapbox_zoom: int = Field(default=12, ge=0, le=18)
+    enable_tim: bool = False
+    tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "RGB_mapbox"
+    vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512", max_length=128)
+    sentinel_fetch_mode: Literal["MINIMAL_RGB", "TERRAMIND_SPECTRAL", "FULL_STAC"] = "MINIMAL_RGB"
+    datetime_interval: str | None = Field(default=None, max_length=128)
 
 
 class ProJobCreateOut(BaseModel):
     job_id: str
     status: str = "queued"
     inference_upstream_ok: bool | None = None
+    materialization_ok: bool | None = None
+    materialization_id: str | None = None
+    cache_key: str | None = None
+    materialization_error: str | None = None
 
 
 class ProJobStatusOut(BaseModel):
     job_id: str
     status: str
     bundle_download_url: str | None = None
+    materialization_id: str | None = None
+    cache_key: str | None = None
+    materialization_summary: dict | None = None
 
 
 class CacheManifestOut(BaseModel):

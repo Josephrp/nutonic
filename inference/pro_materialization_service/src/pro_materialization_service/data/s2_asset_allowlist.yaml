@@ -1,0 +1,16 @@
+# Sentinel-2 L2A STAC asset keys (Earth Search ``sentinel-2-l2a``) for TerraMind 12-band order.
+# Bump `version` when this list changes (cache key + healthz).
+version: "2026-04-15-1"
+assets:
+  - coastal
+  - blue
+  - green
+  - red
+  - rededge1
+  - rededge2
+  - rededge3
+  - nir
+  - nir08
+  - wvp
+  - swir16
+  - swir22

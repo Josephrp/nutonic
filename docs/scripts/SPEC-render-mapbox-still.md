@@ -16,7 +16,7 @@ Produce **reference still** JPEG/PNG bytes for each catalog **`location_id`**:
 Emit files suitable for:
 
 - **`nutonic/shared/src/commonMain/composeResources/files/maps/<bundle_id>.jpg`**, and
-- **`server/`** bundle registry (`resolve_bundle_bytes`) via generated index.
+- **`server/`** bundle registry: JPEG filenames under `nutonic_server/bundles/` are listed in **`nutonic_server/bundles/registry.json`** (loaded by `resolve_bundle_bytes`; codegen may extend this list from `still_bundle_id` values in the manifest).
 
 **Downstream consumers (do not break contracts silently)**
 

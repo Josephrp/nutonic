@@ -46,6 +46,7 @@ def issue_round_ticket(settings: Settings, round_id: str, session_id: str) -> tu
 
 
 def decode_round_ticket(settings: Settings, token: str) -> dict[str, object]:
+    """Decode and validate ``exp`` / signature (PyJWT defaults — expired tickets raise ``ExpiredSignatureError``)."""
     data = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
     if data.get("typ") != "nutonic_ranked_round":
         raise jwt.InvalidTokenError("not a ranked round ticket")

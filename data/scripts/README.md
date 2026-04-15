@@ -32,9 +32,10 @@ python -m pytest data/scripts/tests -q
 | `validate_hint_strings.py` | Spoiler / length / empty-tier checks on `useful_hints` JSON |
 | `render_mapbox_still.py` | Reuse POI Mapbox PNGs or call Static Images API → JPEG + `still_index.json` |
 | `assemble_manifest.py` | Merge catalog + `still_index.json` + `useful_hints/*.json` + optional `ai_guesses.json` → `manifest.full.json` + redacted `manifest.public.json` |
-| `assemble_ranked_clue_pack.py` | From `manifest.full.json` + `maps.yaml` `ranked_pool` → `ranked_clue_pack.json` (no golden coordinates) |
+| `assemble_ranked_clue_pack.py` | From `manifest.full.json` + `maps.yaml` `ranked_pool` → `ranked_clue_pack.json` (cached assists incl. satellite sidecar; **no** golden coordinates) |
 | `generate_ai_guess_fixture.py` | `ai_guesses.json`: decoy offset, CSV table, seeded random, or **TiM** NDJSON / `*.json` dir (`tim_modality_outputs.Coordinates` / `coordinates_wgs84`); optional `--tim-export` overlay |
 | `requirements.txt` | Pinned deps for ingest + geo/catalog + still rendering (incl. Pillow) |
+| `generate_placeholder_bgm_wav.py` | Regenerate silent **WAV** placeholders under `nutonic/shared/.../composeResources/files/music/` (`docs/SCREEN-MUSIC-SPEC.md` §4) |
 
 ## Assembly (manifest + ranked pack)
 

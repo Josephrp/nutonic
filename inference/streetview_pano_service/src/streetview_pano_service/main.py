@@ -2,13 +2,28 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from streetview_pano_service.inference_hmac import hmac_secret, install_hmac_middleware, require_inbound_hmac
 from streetview_pano_service.models import PanosSampleRequest, PanosSampleResponse
 from streetview_pano_service.pano_config import get_pano_settings
 from streetview_pano_service.sample_dispatch import sample_panos
 
-app = FastAPI(title="NU:TONIC Street View pano service", version="0.3.0")
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    if require_inbound_hmac() and not hmac_secret():
+        raise RuntimeError(
+            "NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC is enabled but "
+            "NUTONIC_INFERENCE_HMAC_SECRET / INFERENCE_HMAC_SECRET is empty",
+        )
+    yield
+
+
+app = FastAPI(title="NU:TONIC Street View pano service", version="0.3.0", lifespan=_lifespan)
+install_hmac_middleware(app)
 
 
 @app.get("/health")

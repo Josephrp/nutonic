@@ -11,7 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
-/** Global music master in the header zone (docs/SCREEN-MUSIC-SPEC §5); BGM wiring is deferred. */
+/** Global music master in the header zone (`docs/SCREEN-MUSIC-SPEC` §5); route BGM is driven from [com.nutonic.NutonicApp]. */
 @Composable
 fun NutonicMusicMasterTopBar(
     musicMasterEnabled: Boolean,

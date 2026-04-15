@@ -52,6 +52,7 @@ def test_openapi_yaml_parseable() -> None:
         "/api/v1/maps",
         "/api/v1/cache/manifest",
         "/api/v1/maps/{map_id}/leaderboard",
+        "/api/v1/maps/{map_id}/leaderboard/ranked",
         "/api/v1/bundles/{bundle_id}",
         "/api/v1/maps/{map_id}/guesses/record",
         "/api/v1/ranked/rounds/start",

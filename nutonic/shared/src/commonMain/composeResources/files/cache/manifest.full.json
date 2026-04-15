@@ -45,6 +45,11 @@
           "rank": 2
         }
       ],
+      "satellite_caption_sidecar": {
+        "pipeline": "stub",
+        "caption": "Mapbox still ortho — river-basin capital block pattern and ring roads (no coordinates).",
+        "model_id": "stub-v1"
+      },
       "play_budget_ms": 180000,
       "ai_marker_phase_enabled": true
     },
@@ -54,7 +59,7 @@
       "truth_lat": 40.7128,
       "truth_lon": -74.006,
       "ruleset_version": "nutonic.ruleset.v1",
-      "still_bundle_id": "nutonic.bundle.v1.demo_still",
+      "still_bundle_id": "nutonic.still.v1.idempo_nyc",
       "still_bundled_resource": "files/3.jpg",
       "still_http_url": null,
       "useful_hints": {

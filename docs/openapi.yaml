@@ -85,6 +85,15 @@ paths:
           required: true
           schema:
             type: string
+        - name: tier
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ranked]
+          description: |
+            When **`ranked`**, return the same server-verified rows as **`GET /api/v1/maps/{map_id}/leaderboard/ranked`**
+            (`docs/RANKED-MODE.md` §4). Requires **`features.ranked`**. Omit for the default **community** board (requires **`features.community_lb_get`**).
       responses:
         "200":
           description: Rows for map_id
@@ -95,7 +104,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/LeaderboardRow"
         "403":
-          description: features.community_lb_get is false
+          description: features.community_lb_get is false, or features.ranked is false when tier=ranked
           content:
             application/json:
               schema:
@@ -138,6 +147,37 @@ paths:
           description: Missing or invalid token
         "403":
           description: features.community_lb_post is false
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureDisabledError"
+
+  /api/v1/maps/{map_id}/leaderboard/ranked:
+    get:
+      tags: [leaderboard, ranked]
+      summary: Server-verified ranked scores for a map (aggregate)
+      description: |
+        Rows produced only from successful **`POST /api/v1/ranked/rounds/{round_id}/submit`** (guess-only verification).
+        Separate from community **`GET /api/v1/maps/{map_id}/leaderboard`** (`docs/RANKED-MODE.md` §4).
+        When **`features.ranked`** is false, **403** `feature_disabled`.
+      operationId: getMapLeaderboardRanked
+      parameters:
+        - name: map_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Verified ranked rows, highest score first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LeaderboardRow"
+        "403":
+          description: features.ranked is false
           content:
             application/json:
               schema:
@@ -758,6 +798,12 @@ components:
         streetview_assist_narrative:
           type: string
           nullable: true
+        satellite_caption_sidecar:
+          type: object
+          nullable: true
+          description: |
+            Pre-cached satellite still caption (same schema as `ManifestRoundLocation`);
+            coordinate-safe; never merge into `streetview_hint_pack`.
         play_budget_ms:
           type: integer
           nullable: true
@@ -831,6 +877,32 @@ components:
         center_lon:
           type: number
           format: double
+        bbox_half_km:
+          type: number
+          format: double
+          default: 5.0
+        mapbox_zoom:
+          type: integer
+          format: int32
+          default: 12
+        enable_tim:
+          type: boolean
+          default: false
+        tim_branch:
+          type: string
+          enum: [S2L2A_full, RGB_mapbox]
+          default: RGB_mapbox
+        vlm_contract_id:
+          type: string
+          default: nutonic.pro.vlm.v1_512
+        sentinel_fetch_mode:
+          type: string
+          enum: [MINIMAL_RGB, TERRAMIND_SPECTRAL, FULL_STAC]
+          default: MINIMAL_RGB
+        datetime_interval:
+          type: string
+          nullable: true
+          description: Optional ISO8601 interval forwarded to PRO materialization STAC search
 
     ProJobCreateOut:
       type: object
@@ -843,7 +915,26 @@ components:
         inference_upstream_ok:
           type: boolean
           nullable: true
-          description: Result of optional GET {inference_worker_base_url}/health (IMP-092); null when URL unset
+          description: >
+            IMP-092: when `NUTONIC_INFERENCE_WORKER_BASE_URL` and/or `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL`
+            is set, `true` only if **every** configured origin responds OK to `GET {origin}/health`; `false` if any
+            probe fails; `null` when neither origin is configured.
+        materialization_ok:
+          type: boolean
+          nullable: true
+          description: >
+            When `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL` is set, `true` if `POST {origin}/internal/v1/materialize`
+            succeeded after health probes; `false` on worker HTTP/validation errors or when health probes failed;
+            `null` when no PRO materialization origin is configured.
+        materialization_id:
+          type: string
+          nullable: true
+        cache_key:
+          type: string
+          nullable: true
+        materialization_error:
+          type: string
+          nullable: true
 
     ProJobStatusOut:
       type: object
@@ -856,6 +947,16 @@ components:
         bundle_download_url:
           type: string
           nullable: true
+        materialization_id:
+          type: string
+          nullable: true
+        cache_key:
+          type: string
+          nullable: true
+        materialization_summary:
+          type: object
+          nullable: true
+          additionalProperties: true
 
     CacheManifest:
       type: object

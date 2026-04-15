@@ -103,6 +103,17 @@ def require_ranked_session(
     return claims
 
 
+def require_ranked_read_public(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> None:
+    """Read-only ranked surfaces (e.g. verified aggregate) without session JWT (`docs/RANKED-MODE.md` §4)."""
+    if not settings.feature_ranked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "feature_disabled", "feature": "ranked"},
+        )
+
+
 def require_guess_record_claims(
     _: Annotated[None, Depends(require_guesses_record_feature)],
     claims: Annotated[dict[str, object], Depends(require_session_jwt)],

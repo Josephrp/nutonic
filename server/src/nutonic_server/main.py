@@ -3,24 +3,25 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
 from nutonic_server.bundles import resolve_bundle_bytes
-from nutonic_server.inference_client import InferenceClient
+from nutonic_server.inference_client import InferenceClient, InferenceClientConfig
 import nutonic_server.catalog as game_catalog
 from nutonic_server.deps import (
     get_settings,
-    require_community_lb_get,
     require_guess_record_claims,
     require_post_leaderboard_claims,
     require_pro_jobs_feature,
+    require_ranked_read_public,
     require_ranked_session,
     require_session_jwt,
 )
@@ -56,6 +57,41 @@ _leaderboard_store = create_leaderboard_store(settings)
 _ranked_store = create_ranked_store(settings.ranked_database_url)
 _guess_telemetry_store = create_guess_telemetry_store(settings.guess_telemetry_database_url)
 _pro_job_status: dict[str, str] = {}  # job_id -> "queued" | "completed"
+_pro_job_materialization: dict[str, dict] = {}  # job_id -> summarized worker JSON (IMP-114)
+
+
+def _summarize_materialize_worker_response(data: dict) -> dict:
+    """Strip huge base64 from stored job payloads."""
+    rm = data.get("run_manifest") or {}
+    slim_rm = {
+        k: rm[k]
+        for k in (
+            "mapbox_center_mode",
+            "mapbox_attribution",
+            "bbox_wgs84",
+            "vlm_canvas",
+            "s2_asset_mapping_version",
+        )
+        if k in rm
+    }
+    arts: list[dict] = []
+    for a in data.get("vlm_artifacts") or []:
+        if isinstance(a, dict):
+            arts.append({k: a[k] for k in ("role", "sha256", "mime", "width", "height") if k in a})
+    out: dict = {
+        "materialization_id": data.get("materialization_id"),
+        "cache_key": data.get("cache_key"),
+        "run_manifest": slim_rm,
+        "vlm_artifacts": arts,
+    }
+    tp = data.get("tim_payload")
+    if isinstance(tp, dict):
+        out["tim_payload"] = {
+            "branch": tp.get("branch"),
+            "modalities_keys": tp.get("modalities_keys"),
+            "has_npz": bool(tp.get("npz_base64")),
+        }
+    return out
 
 app = FastAPI(
     title="NU:TONIC Game Server",
@@ -169,9 +205,27 @@ def list_maps() -> list[MapSummaryOut]:
 )
 def get_leaderboard(
     map_id: str,
-    _: Annotated[None, Depends(require_community_lb_get)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    tier: Annotated[
+        str | None,
+        Query(description="Use ``ranked`` for server-verified aggregate (same rows as ``…/leaderboard/ranked``)."),
+    ] = None,
 ) -> list[LeaderboardRowOut]:
-    """Per-map community rows from ``LeaderboardStore`` (IMP-060: SQLite file by default; URL ``memory`` = in-process)."""
+    """Per-map community rows, or ``tier=ranked`` for verified ranked aggregate (``docs/RANKED-MODE.md`` §4)."""
+    t = (tier or "").strip().lower()
+    if t == "ranked":
+        if not settings.feature_ranked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"error": "feature_disabled", "feature": "ranked"},
+            )
+        rows = _ranked_store.list_ranked_leaderboard(map_id.strip())
+        return [LeaderboardRowOut.model_validate(r.__dict__) for r in rows]
+    if not settings.feature_community_lb_get:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "feature_disabled", "feature": "community_lb_get"},
+        )
     rows = _leaderboard_store.list_rows(map_id)
     return [LeaderboardRowOut.model_validate(r.__dict__) for r in rows]
 
@@ -200,6 +254,20 @@ def post_leaderboard_row(
     stored = _leaderboard_store.append_row(map_id, row, idempotency_key=key)
     _ = claims
     return LeaderboardRowOut.model_validate(stored.__dict__)
+
+
+@app.get(
+    "/api/v1/maps/{map_id}/leaderboard/ranked",
+    tags=["leaderboard", "ranked"],
+    response_model=list[LeaderboardRowOut],
+)
+def get_ranked_verified_leaderboard(
+    map_id: str,
+    _: Annotated[None, Depends(require_ranked_read_public)],
+) -> list[LeaderboardRowOut]:
+    """Server-verified ranked scores only (``docs/RANKED-MODE.md`` §4); separate from community GET."""
+    rows = _ranked_store.list_ranked_leaderboard(map_id.strip())
+    return [LeaderboardRowOut.model_validate(r.__dict__) for r in rows]
 
 
 @app.post(
@@ -239,6 +307,11 @@ def ranked_round_start(
     s: Annotated[Settings, Depends(get_settings)],
 ) -> RankedRoundStartOut:
     """Server-held secret round for ranked play (IMP-090)."""
+    now_ts = int(datetime.now(tz=UTC).timestamp())
+    _ranked_store.prune_stale_open_rounds(
+        now_epoch=now_ts,
+        max_age_seconds=s.ranked_stale_open_round_max_age_seconds,
+    )
     loc = game_catalog.manifest_location_for_map(body.map_id.strip())
     if loc is None:
         raise HTTPException(status_code=404, detail="Unknown map_id for ranked catalog")
@@ -261,6 +334,7 @@ def ranked_round_start(
         useful_hints=loc.useful_hints,
         streetview_hint_pack=loc.streetview_hint_pack,
         streetview_assist_narrative=loc.streetview_assist_narrative,
+        satellite_caption_sidecar=loc.satellite_caption_sidecar,
         play_budget_ms=loc.play_budget_ms,
         ai_marker_phase_enabled=loc.ai_marker_phase_enabled,
     )
@@ -337,6 +411,13 @@ def ranked_round_submit(
     )
     if inserted:
         _ranked_store.mark_submitted(round_id)
+        _ranked_store.append_verified_leaderboard(
+            map_id=row.map_id,
+            round_id=round_id,
+            session_id=session_claim,
+            score_points=s_out,
+            distance_km=d_out,
+        )
     return RankedSubmitOut(distance_km=d_out, score_points=s_out, verified=True)
 
 
@@ -347,21 +428,79 @@ def pro_create_job(
     _: Annotated[None, Depends(require_pro_jobs_feature)],
     claims: Annotated[dict[str, object], Depends(require_session_jwt)],
 ) -> ProJobCreateOut:
-    """Stub PRO control plane (IMP-114 placeholder until worker ships)."""
+    """PRO control plane: health probes (IMP-092) + optional ``POST …/internal/v1/materialize`` (IMP-114)."""
     jid = uuid.uuid4().hex
     _pro_job_status[jid] = "queued"
-    _ = claims, body
+    _ = claims
+    origins = [
+        o
+        for o in (
+            s.inference_worker_base_url.strip(),
+            s.pro_materialization_service_url.strip(),
+        )
+        if o
+    ]
+    pro_url = s.pro_materialization_service_url.strip()
     inference_ok: bool | None = None
-    base = s.inference_worker_base_url.strip().rstrip("/")
-    if base:
-        health_url = f"{base}/health"
+    materialization_ok: bool | None = None
+    materialization_id: str | None = None
+    cache_key: str | None = None
+    materialization_error: str | None = None
+    if pro_url:
+        materialization_ok = False
+    if origins:
         try:
-            with InferenceClient() as ic:
-                ic.get_json(health_url)
-            inference_ok = True
+            hmac_secret = s.inference_hmac_secret.strip() or None
+            ic_cfg = InferenceClientConfig(hmac_secret=hmac_secret)
+            with InferenceClient(config=ic_cfg) as ic:
+                inference_ok = all(ic.probe_health_origin(o) for o in origins)
+                if pro_url and inference_ok:
+                    base = pro_url.rstrip("/")
+                    try:
+                        mreq = {
+                            "latitude": body.center_lat,
+                            "longitude": body.center_lon,
+                            "bbox_half_km": body.bbox_half_km,
+                            "mapbox_zoom": body.mapbox_zoom,
+                            "enable_tim": body.enable_tim,
+                            "tim_branch": body.tim_branch,
+                            "vlm_contract_id": body.vlm_contract_id,
+                            "sentinel_fetch_mode": body.sentinel_fetch_mode,
+                        }
+                        if body.datetime_interval:
+                            mreq["datetime_interval"] = body.datetime_interval
+                        mat = ic.post_json(
+                            f"{base}/internal/v1/materialize",
+                            json_body=mreq,
+                            read_timeout_s=120.0,
+                        )
+                        materialization_ok = True
+                        materialization_id = str(mat.get("materialization_id") or "") or None
+                        cache_key = str(mat.get("cache_key") or "") or None
+                        _pro_job_materialization[jid] = _summarize_materialize_worker_response(mat)
+                    except Exception as e:
+                        materialization_ok = False
+                        materialization_error = str(e)[:500]
+                        _pro_job_materialization[jid] = {"error": materialization_error}
+                elif pro_url and inference_ok is False:
+                    materialization_ok = False
+                    materialization_error = "inference_health_probe_failed"
+                    _pro_job_materialization[jid] = {"error": materialization_error}
         except Exception:
             inference_ok = False
-    return ProJobCreateOut(job_id=jid, status="queued", inference_upstream_ok=inference_ok)
+            if pro_url:
+                materialization_ok = False
+                materialization_error = "inference_client_error"
+                _pro_job_materialization[jid] = {"error": materialization_error}
+    return ProJobCreateOut(
+        job_id=jid,
+        status="queued",
+        inference_upstream_ok=inference_ok,
+        materialization_ok=materialization_ok,
+        materialization_id=materialization_id,
+        cache_key=cache_key,
+        materialization_error=materialization_error,
+    )
 
 
 @app.get("/api/v1/pro/jobs/{job_id}", tags=["pro"], response_model=ProJobStatusOut)
@@ -373,10 +512,27 @@ def pro_job_status(
     st = _pro_job_status.get(job_id)
     if st is None:
         raise HTTPException(status_code=404, detail="Unknown job_id")
+    detail = _pro_job_materialization.get(job_id)
+    mid = None if not detail or "error" in detail else detail.get("materialization_id")
+    ck = None if not detail or "error" in detail else detail.get("cache_key")
     if st == "queued":
         _pro_job_status[job_id] = "completed"
-        return ProJobStatusOut(job_id=job_id, status="queued", bundle_download_url=None)
-    return ProJobStatusOut(job_id=job_id, status="completed", bundle_download_url=None)
+        return ProJobStatusOut(
+            job_id=job_id,
+            status="queued",
+            bundle_download_url=None,
+            materialization_id=mid if isinstance(mid, str) else None,
+            cache_key=ck if isinstance(ck, str) else None,
+            materialization_summary=detail,
+        )
+    return ProJobStatusOut(
+        job_id=job_id,
+        status="completed",
+        bundle_download_url=None,
+        materialization_id=mid if isinstance(mid, str) else None,
+        cache_key=ck if isinstance(ck, str) else None,
+        materialization_summary=detail,
+    )
 
 
 def _maybe_mount_gradio(app_: FastAPI, s: Settings) -> None:

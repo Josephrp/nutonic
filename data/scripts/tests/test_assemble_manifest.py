@@ -92,6 +92,9 @@ def test_assemble_manifest_merges_streetview_pack() -> None:
     ranked = build_ranked_pack(full_doc, {"asm_fix_a": True, "asm_fix_b": False})
     assert ranked["clues"][0].get("streetview_hint_pack") is not None
     assert ranked["clues"][0]["streetview_assist_narrative"].startswith("Street-level")
+    sat = ranked["clues"][0].get("satellite_caption_sidecar")
+    assert isinstance(sat, dict)
+    assert sat.get("pipeline") == "fixture"
 
 
 def test_assemble_manifest_cli_writes_files(tmp_path: Path) -> None:

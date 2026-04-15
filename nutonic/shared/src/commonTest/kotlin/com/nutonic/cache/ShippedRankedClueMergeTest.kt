@@ -5,6 +5,8 @@ import com.nutonic.api.RankedClue
 import com.nutonic.api.RankedCluePackDocument
 import com.nutonic.api.StreetviewHintItem
 import kotlin.test.Test
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -89,6 +91,45 @@ class ShippedRankedClueMergeTest {
         val merged = mergeRankedClueWithPack(api, RankedCluePackDocument("v1", listOf(slice)))
         assertEquals(1, merged.streetviewHintPack?.size)
         assertEquals("API line", merged.streetviewHintPack!![0].text)
+    }
+
+    @Test
+    fun mergeRankedClueWithPack_fills_satellite_when_api_omits() {
+        val fromPack =
+            JsonObject(
+                mapOf(
+                    "pipeline" to JsonPrimitive("pack"),
+                    "caption" to JsonPrimitive("Shipped satellite caption."),
+                ),
+            )
+        val api =
+            RankedClue(
+                mapId = "demo",
+                locationId = "demo-vienna-001",
+                stillBundleId = null,
+                stillBundledResource = null,
+                usefulHints = null,
+                streetviewHintPack = null,
+                streetviewAssistNarrative = null,
+                satelliteCaptionSidecar = null,
+                playBudgetMs = null,
+                aiMarkerPhaseEnabled = true,
+            )
+        val slice =
+            RankedClue(
+                mapId = "demo",
+                locationId = "demo-vienna-001",
+                stillBundleId = null,
+                stillBundledResource = null,
+                usefulHints = null,
+                streetviewHintPack = null,
+                streetviewAssistNarrative = null,
+                satelliteCaptionSidecar = fromPack,
+                playBudgetMs = null,
+                aiMarkerPhaseEnabled = true,
+            )
+        val merged = mergeRankedClueWithPack(api, RankedCluePackDocument("v1", listOf(slice)))
+        assertEquals(fromPack, merged.satelliteCaptionSidecar)
     }
 
     @Test

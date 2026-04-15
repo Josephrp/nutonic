@@ -3,9 +3,185 @@
 from __future__ import annotations
 
 import importlib
+from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
+
+
+def test_ranked_start_returns_403_when_feature_disabled(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FEATURE_RANKED", "false")
+    monkeypatch.setenv("NUTONIC_RANKED_DATABASE_URL", f"sqlite:///{tmp_path}/ranked_off.db")
+    monkeypatch.setenv("NUTONIC_LEADERBOARD_DATABASE_URL", "memory")
+    import nutonic_server.main as main
+
+    importlib.reload(main)
+    c = TestClient(main.app)
+    tok = c.post("/api/v1/auth/token").json()["access_token"]
+    r = c.post(
+        "/api/v1/ranked/rounds/start",
+        headers={"Authorization": f"Bearer {tok}"},
+        json={"map_id": "demo"},
+    )
+    assert r.status_code == 403, r.text
+    body = r.json()
+    assert body.get("error") == "feature_disabled"
+    assert body.get("feature") == "ranked"
+
+
+def test_ranked_submit_requires_idempotency_key(ranked_client: TestClient) -> None:
+    tok = ranked_client.post("/api/v1/auth/token").json()["access_token"]
+    headers = {"Authorization": f"Bearer {tok}"}
+    start = ranked_client.post("/api/v1/ranked/rounds/start", headers=headers, json={"map_id": "demo"})
+    assert start.status_code == 200, start.text
+    rid = start.json()["round_id"]
+    ticket = start.json()["round_ticket"]
+    submit = ranked_client.post(
+        f"/api/v1/ranked/rounds/{rid}/submit",
+        headers=headers,
+        json={"guess_lat": 1.0, "guess_lon": 2.0, "round_ticket": ticket},
+    )
+    assert submit.status_code == 400, submit.text
+
+
+def test_ranked_submit_rejects_round_ticket_for_other_session(ranked_client: TestClient) -> None:
+    tok_a = ranked_client.post("/api/v1/auth/token").json()["access_token"]
+    start = ranked_client.post(
+        "/api/v1/ranked/rounds/start",
+        headers={"Authorization": f"Bearer {tok_a}"},
+        json={"map_id": "demo"},
+    )
+    assert start.status_code == 200, start.text
+    rid = start.json()["round_id"]
+    ticket = start.json()["round_ticket"]
+    tok_b = ranked_client.post("/api/v1/auth/token").json()["access_token"]
+    submit = ranked_client.post(
+        f"/api/v1/ranked/rounds/{rid}/submit",
+        headers={"Authorization": f"Bearer {tok_b}", "Idempotency-Key": "rk-other-session"},
+        json={"guess_lat": 48.2082, "guess_lon": 16.3738, "round_ticket": ticket},
+    )
+    assert submit.status_code == 403, submit.text
+
+
+def test_ranked_verified_leaderboard_after_submit(ranked_client: TestClient) -> None:
+    lb0 = ranked_client.get("/api/v1/maps/demo/leaderboard/ranked")
+    assert lb0.status_code == 200
+    assert lb0.json() == []
+
+    tok = ranked_client.post("/api/v1/auth/token").json()["access_token"]
+    headers = {"Authorization": f"Bearer {tok}"}
+    start = ranked_client.post("/api/v1/ranked/rounds/start", headers=headers, json={"map_id": "demo"})
+    assert start.status_code == 200, start.text
+    rid = start.json()["round_id"]
+    ticket = start.json()["round_ticket"]
+    sub = ranked_client.post(
+        f"/api/v1/ranked/rounds/{rid}/submit",
+        headers={**headers, "Idempotency-Key": "rk-lb-test"},
+        json={"guess_lat": 48.2082, "guess_lon": 16.3738, "round_ticket": ticket},
+    )
+    assert sub.status_code == 200, sub.text
+
+    lb1 = ranked_client.get("/api/v1/maps/demo/leaderboard/ranked")
+    assert lb1.status_code == 200
+    rows = lb1.json()
+    assert len(rows) == 1
+    assert rows[0]["player_role"] == "RANKED"
+    assert rows[0]["display_handle"].startswith("RNK-")
+    assert rows[0]["score_points"] == sub.json()["score_points"]
+
+
+def test_ranked_leaderboard_get_403_when_feature_disabled(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FEATURE_RANKED", "false")
+    monkeypatch.setenv("NUTONIC_RANKED_DATABASE_URL", f"sqlite:///{tmp_path}/r2.db")
+    monkeypatch.setenv("NUTONIC_LEADERBOARD_DATABASE_URL", "memory")
+    import nutonic_server.main as main
+
+    importlib.reload(main)
+    c = TestClient(main.app)
+    r = c.get("/api/v1/maps/demo/leaderboard/ranked")
+    assert r.status_code == 403
+    assert r.json().get("feature") == "ranked"
+
+
+def test_get_leaderboard_tier_ranked_matches_dedicated_path(ranked_client: TestClient) -> None:
+    tok = ranked_client.post("/api/v1/auth/token").json()["access_token"]
+    headers = {"Authorization": f"Bearer {tok}"}
+    start = ranked_client.post("/api/v1/ranked/rounds/start", headers=headers, json={"map_id": "demo"})
+    rid = start.json()["round_id"]
+    ticket = start.json()["round_ticket"]
+    ranked_client.post(
+        f"/api/v1/ranked/rounds/{rid}/submit",
+        headers={**headers, "Idempotency-Key": "rk-tier-alias"},
+        json={"guess_lat": 48.2082, "guess_lon": 16.3738, "round_ticket": ticket},
+    )
+    via_tier = ranked_client.get("/api/v1/maps/demo/leaderboard?tier=ranked")
+    dedicated = ranked_client.get("/api/v1/maps/demo/leaderboard/ranked")
+    assert via_tier.status_code == 200 and dedicated.status_code == 200
+    assert via_tier.json() == dedicated.json()
+
+
+def test_prune_removes_stale_open_round_on_next_start(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = tmp_path / "prune.db"
+    monkeypatch.setenv("FEATURE_RANKED", "true")
+    monkeypatch.setenv("NUTONIC_RANKED_DATABASE_URL", f"sqlite:///{db}")
+    monkeypatch.setenv("NUTONIC_LEADERBOARD_DATABASE_URL", "memory")
+    monkeypatch.setenv("NUTONIC_RANKED_STALE_OPEN_ROUND_MAX_AGE_SECONDS", "120")
+    import nutonic_server.main as main
+
+    importlib.reload(main)
+    c = TestClient(main.app)
+    tok = c.post("/api/v1/auth/token").json()["access_token"]
+    h = {"Authorization": f"Bearer {tok}"}
+    start1 = c.post("/api/v1/ranked/rounds/start", headers=h, json={"map_id": "demo"})
+    rid1 = start1.json()["round_id"]
+    ticket1 = start1.json()["round_ticket"]
+
+    import sqlite3
+
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE ranked_rounds SET opened_at_epoch = 1 WHERE round_id = ?", (rid1,))
+    conn.commit()
+    conn.close()
+
+    c.post("/api/v1/ranked/rounds/start", headers=h, json={"map_id": "demo"})
+
+    gone = c.post(
+        f"/api/v1/ranked/rounds/{rid1}/submit",
+        headers={**h, "Idempotency-Key": "rk-after-prune"},
+        json={"guess_lat": 48.2082, "guess_lon": 16.3738, "round_ticket": ticket1},
+    )
+    assert gone.status_code == 404, gone.text
+
+
+def test_ranked_submit_rejects_expired_round_ticket(ranked_client: TestClient) -> None:
+    from nutonic_server.settings import load_settings
+
+    s = load_settings()
+    tok = ranked_client.post("/api/v1/auth/token").json()["access_token"]
+    sess = jwt.decode(tok, s.jwt_secret, algorithms=["HS256"])["session_id"]
+    headers = {"Authorization": f"Bearer {tok}"}
+    start = ranked_client.post("/api/v1/ranked/rounds/start", headers=headers, json={"map_id": "demo"})
+    rid = start.json()["round_id"]
+    past = datetime.now(tz=UTC) - timedelta(hours=1)
+    expired_ticket = jwt.encode(
+        {
+            "typ": "nutonic_ranked_round",
+            "round_id": rid,
+            "session_id": str(sess),
+            "jti": "jti-expired",
+            "iat": int(past.timestamp()),
+            "exp": int(past.timestamp()),
+        },
+        s.jwt_secret,
+        algorithm="HS256",
+    )
+    sub = ranked_client.post(
+        f"/api/v1/ranked/rounds/{rid}/submit",
+        headers={**headers, "Idempotency-Key": "rk-expired-ticket"},
+        json={"guess_lat": 48.2082, "guess_lon": 16.3738, "round_ticket": expired_ticket},
+    )
+    assert sub.status_code == 401, sub.text
 
 
 @pytest.fixture()
@@ -57,6 +233,9 @@ def test_ranked_start_submit_verifies_distance(ranked_client: TestClient) -> Non
     pack = body["clue"].get("streetview_hint_pack")
     assert isinstance(pack, list) and len(pack) >= 1
     assert pack[0].get("text")
+    sat = body["clue"].get("satellite_caption_sidecar")
+    assert isinstance(sat, dict)
+    assert sat.get("caption")
 
     submit = ranked_client.post(
         f"/api/v1/ranked/rounds/{rid}/submit",
@@ -92,6 +271,34 @@ def test_bundle_demo_still_bytes() -> None:
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/jpeg")
     assert len(r.content) > 100
+
+
+def test_bundle_idempo_nyc_still_bytes() -> None:
+    from fastapi.testclient import TestClient
+
+    from nutonic_server.main import app
+
+    r = TestClient(app).get("/api/v1/bundles/nutonic.still.v1.idempo_nyc")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/jpeg")
+    assert len(r.content) > 100
+
+
+def test_bundle_unknown_returns_404() -> None:
+    from fastapi.testclient import TestClient
+
+    from nutonic_server.main import app
+
+    r = TestClient(app).get("/api/v1/bundles/nutonic.bundle.v99.missing")
+    assert r.status_code == 404
+
+
+def test_bundle_registry_contains_shipped_ids() -> None:
+    from nutonic_server.bundles import list_registered_bundle_ids
+
+    ids = list_registered_bundle_ids()
+    assert "nutonic.bundle.v1.demo_still" in ids
+    assert "nutonic.still.v1.idempo_nyc" in ids
 
 
 def test_guess_record_when_enabled(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,9 +337,26 @@ def test_pro_job_stub_when_enabled(tmp_path, monkeypatch: pytest.MonkeyPatch) ->
     h = {"Authorization": f"Bearer {tok}"}
     j = c.post("/api/v1/pro/jobs", headers=h, json={"center_lat": 1.0, "center_lon": 2.0})
     assert j.status_code == 200
-    jid = j.json()["job_id"]
+    body = j.json()
+    jid = body["job_id"]
+    assert body.get("inference_upstream_ok") is None
     s1 = c.get(f"/api/v1/pro/jobs/{jid}", headers=h)
     assert s1.status_code == 200
     assert s1.json()["status"] == "queued"
     s2 = c.get(f"/api/v1/pro/jobs/{jid}", headers=h)
     assert s2.json()["status"] == "completed"
+
+
+def test_pro_job_inference_upstream_false_when_worker_unreachable(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FEATURE_PRO_JOBS", "true")
+    monkeypatch.setenv("NUTONIC_LEADERBOARD_DATABASE_URL", "memory")
+    monkeypatch.setenv("NUTONIC_INFERENCE_WORKER_BASE_URL", "http://127.0.0.1:59998")
+    import nutonic_server.main as main
+
+    importlib.reload(main)
+    c = TestClient(main.app)
+    tok = c.post("/api/v1/auth/token").json()["access_token"]
+    h = {"Authorization": f"Bearer {tok}"}
+    j = c.post("/api/v1/pro/jobs", headers=h, json={"center_lat": 1.0, "center_lon": 2.0})
+    assert j.status_code == 200
+    assert j.json().get("inference_upstream_ok") is False

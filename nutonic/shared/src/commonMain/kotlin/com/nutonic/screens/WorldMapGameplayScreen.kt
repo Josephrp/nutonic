@@ -20,6 +20,7 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
+import com.nutonic.audio.LocalNutonicBgmOverlay
+import com.nutonic.audio.NutonicBgmTrack
 import com.nutonic.api.ApiResult
 import com.nutonic.api.CacheManifestDocument
 import com.nutonic.api.GuessRecordIn
@@ -481,6 +484,19 @@ fun WorldMapGameplayDetail(
         hideSuccessOverlay = false
     }
 
+    val showSuccessOverlay =
+        lockedGuess != null && !hideSuccessOverlay && (rankedServerOutcome != null || !isRanked)
+    val bgmOverlayHolder = LocalNutonicBgmOverlay.current
+    LaunchedEffect(showSuccessOverlay, bgmOverlayHolder) {
+        val h = bgmOverlayHolder ?: return@LaunchedEffect
+        h.value = if (showSuccessOverlay) NutonicBgmTrack.MusicSuccess else null
+    }
+    DisposableEffect(bgmOverlayHolder) {
+        onDispose {
+            bgmOverlayHolder?.value = null
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         rankedServerError?.let { err ->
             Card(
@@ -500,7 +516,7 @@ fun WorldMapGameplayDetail(
                 )
             }
         }
-        if (lockedGuess != null && !hideSuccessOverlay && (rankedServerOutcome != null || !isRanked)) {
+        if (showSuccessOverlay) {
             RoundSuccessOverlay(
                 scorePoints = scorePoints,
                 distanceKm = distanceKm,
@@ -914,7 +930,7 @@ private fun RoundSuccessOverlay(
                 ) {
                     Text("Share scorecard")
                 }
-                TextButton(onClick = onDismiss) {
+                TextButton(modifier = Modifier.testTag("worldMapSuccessDismissButton"), onClick = onDismiss) {
                     Text("Dismiss")
                 }
             }

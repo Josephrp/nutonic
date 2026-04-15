@@ -525,6 +525,7 @@ private fun ScanHubRoot(
                 onMapIdChange = null,
                 featureFlags = serverFeatureFlags,
                 sectionTitle = "SCAN hub · community leaderboard preview",
+                showRankedVerifiedFetch = serverFeatureFlags?.ranked == true,
                 modifier = Modifier.padding(top = 16.dp),
             )
         }
@@ -594,6 +595,7 @@ private fun RankTabRoot(
                 onMapIdChange = onMapContextIdChange,
                 featureFlags = serverFeatureFlags,
                 sectionTitle = "RANK · community leaderboard (same composable as SCAN hub)",
+                showRankedVerifiedFetch = serverFeatureFlags?.ranked == true,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }

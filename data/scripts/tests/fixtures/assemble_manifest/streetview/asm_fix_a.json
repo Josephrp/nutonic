@@ -13,5 +13,10 @@
     }
   ],
   "streetview_assist_narrative": "Street-level rhythm alternates built frontage with short planting strips; no coordinates.",
+  "satellite_caption_sidecar": {
+    "pipeline": "fixture",
+    "caption": "Ortho still: mixed roof heights and a major corridor axis (no coordinates).",
+    "model_id": "fixture-sat"
+  },
   "model_pins": {}
 }

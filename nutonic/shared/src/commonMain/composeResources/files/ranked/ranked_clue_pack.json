@@ -9,6 +9,11 @@
       "useful_hints": null,
       "streetview_hint_pack": null,
       "streetview_assist_narrative": "Shipped ranked pack: optional fused assist narrative (no coordinates).",
+      "satellite_caption_sidecar": {
+        "pipeline": "stub",
+        "caption": "Shipped pack: Mapbox still ortho — river-basin capital block pattern (no coordinates).",
+        "model_id": "pack-placeholder"
+      },
       "play_budget_ms": null,
       "ai_marker_phase_enabled": true
     }

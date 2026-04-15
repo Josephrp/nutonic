@@ -20,9 +20,9 @@
 | `STREETVIEW_PANO_SERVICE_URL` | Internal pano / still URL builder |
 | `LFM_VL_HINT_SERVICE_URL` | LFM-VL hint JSON |
 | `LFM_VL_SATELLITE_CAPTION_SERVICE_URL` | Satellite caption / VQA |
-| `PRO_MATERIALIZATION_SERVICE_URL` | PRO fetch + downsample |
+| `PRO_MATERIALIZATION_SERVICE_URL` / `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL` | PRO materialization worker origin; when set, **`POST /api/v1/pro/jobs`** includes **`GET {origin}/health`** in the IMP-092 probe set (with `NUTONIC_INFERENCE_WORKER_BASE_URL` if present) |
 | `TERRAMIND_WORKER_URL` | Optional collapsed TiM + generate router |
-| `INFERENCE_HMAC_SECRET` | Server → inference request signing |
+| `INFERENCE_HMAC_SECRET` / `NUTONIC_INFERENCE_HMAC_SECRET` | When set, **`InferenceClient`** signs outbound **`GET`** probes toward **`inference/*`** (IMP-092); workers verify when enabled |
 | `DATABASE_URL` | SQLite / Postgres for ranked + stores (future; community LB uses `NUTONIC_LEADERBOARD_DATABASE_URL` today) |
 | `NUTONIC_LEADERBOARD_DATABASE_URL` | SQLAlchemy URL for community leaderboard table (**IMP-060**); default file under `data/` |
 | `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY` | Auth material |
@@ -31,7 +31,7 @@
 
 ## Timeout policy (placeholder)
 
-Document per-upstream connect/read ceilings when `InferenceClient` lands (IMP-092). Ranked **`submit`** must not block on hint Spaces (orchestrator §5, `rules/06-server-vlm-tim-and-on-device-ml.md`).
+`InferenceClient` implements connect/read/write timeouts and **`GET …/health`** probes for **`POST /api/v1/pro/jobs`** (IMP-092). Ranked **`submit`** must not block on hint Spaces (orchestrator §5, `rules/06-server-vlm-tim-and-on-device-ml.md`).
 
 ## Related
 

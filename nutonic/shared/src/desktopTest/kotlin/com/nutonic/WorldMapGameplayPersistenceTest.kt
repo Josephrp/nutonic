@@ -1,6 +1,7 @@
 package com.nutonic
 
 import androidx.compose.material.MaterialTheme
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -35,6 +36,9 @@ class WorldMapGameplayPersistenceTest {
         rule.onNodeWithTag("worldMapSearchButton").performClick()
         rule.onNodeWithTag("worldMapSubmitGuessButton").performClick()
         rule.waitForIdle()
+        rule.onNodeWithTag("worldMapSuccessOverlay").assertIsDisplayed()
+        rule.onNodeWithTag("worldMapShareScoreStub").assertIsDisplayed()
+        rule.onNodeWithTag("worldMapSuccessDismissButton").performClick()
         rule.waitUntil(timeoutMillis = 10_000) {
             runBlocking { repo.rowsForMap("demo").isNotEmpty() }
         }

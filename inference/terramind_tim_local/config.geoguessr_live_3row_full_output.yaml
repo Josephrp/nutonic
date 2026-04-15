@@ -2,6 +2,12 @@
 # NU:TONIC — TerraMind TiM **live batch** (GeoGuessr POI downloads in-repo)
 # =============================================================================
 #
+# **DEPRECATED for TerraMind fidelity:** ``RGB`` from Mapbox JPEGs is **not**
+# the same distribution as TerraMind ``untok_sen2rgb@224`` (trained on
+# Sentinel-2 reflectance). Expect TiM behaviour closer to unconditioned /
+# arbitrary inputs. For **compatible** RGB+S2L2A, use
+# ``config.geoguessr_live_3row_s2_compatible.yaml`` (``rgb_mode: s2_rgb``).
+#
 # Run from the **repository root** (so ``paths.repo_root`` + relative JPEG
 # paths resolve, and STAC defaults match the POI download script):
 #

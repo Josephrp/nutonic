@@ -6,7 +6,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from nutonic_terramind_tim_local.run import _build_inputs
+from nutonic_terramind_tim_local.inputs_build import _build_inputs, _rgb_from_s12_reflectance
 from nutonic_terramind_tim_local.serialize import build_tim_modality_outputs
 
 
@@ -29,6 +29,28 @@ def test_build_inputs_rgb_plus_s2() -> None:
     d, _aux = _build_inputs(cfg, torch.device("cpu"))
     assert d["RGB"].shape == (1, 3, 224, 224)
     assert d["S2L2A"].shape == (1, 12, 224, 224)
+
+
+def test_rgb_s2_rgb_matches_s2_channels() -> None:
+    s12 = torch.arange(12 * 4, dtype=torch.float32).reshape(1, 12, 2, 2)
+    rgb = _rgb_from_s12_reflectance(s12)
+    assert rgb.shape == (1, 3, 2, 2)
+    # channels 3,2,1 = RED, GREEN, BLUE
+    assert torch.equal(rgb[0, 0], s12[0, 3])
+    assert torch.equal(rgb[0, 1], s12[0, 2])
+    assert torch.equal(rgb[0, 2], s12[0, 1])
+
+
+def test_build_inputs_rgb_s2_rgb_shared_zeros_not_stac() -> None:
+    """Shared STAC path is skipped when neither branch uses stac/s2_rgb."""
+    cfg = {
+        "modalities": ["RGB", "S2L2A"],
+        "inputs": {"batch_size": 1, "rgb_mode": "zeros", "s2_mode": "zeros"},
+    }
+    d, aux = _build_inputs(cfg, torch.device("cpu"))
+    assert d["RGB"].shape == (1, 3, 224, 224)
+    assert d["S2L2A"].shape == (1, 12, 224, 224)
+    assert aux == {}
 
 
 def test_tim_outputs_full_retains_keys() -> None:

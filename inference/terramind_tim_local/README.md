@@ -15,6 +15,49 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
+### Install with **uv** (locked env, recommended for TerraTorch)
+
+The package ships a **`uv.lock`** so TerraTorch, **peft**, **transformers**, and **urllib3** resolve together (avoids broken global stacks such as `HybridCache` / `BaseSSLError` mismatches).
+
+From the **monorepo root** `nutonic/`:
+
+```bash
+uv sync --project inference/terramind_tim_local --extra dev --extra s2
+```
+
+The **`s2`** extra includes **`boto3`** so **rasterio** can build a real **AWS session** for Earth Search / `amazonaws.com` COG URLs instead of logging **DummySession** fallback INFO on every band open.
+
+Run the CLI with the project venv (cwd becomes `inference/terramind_tim_local`):
+
+```bash
+uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local run ^
+  --config config.example.yaml --output-dir ./out
+```
+
+**S2-compatible GeoGuessr E2E** (STAC + `rgb_mode: s2_rgb`; writes under `data/downloads/…`):
+
+```bash
+uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local run ^
+  --config config.geoguessr_live_3row_s2_compatible.yaml ^
+  --output-dir ../../data/downloads/tim_geoguessr_uv_e2e
+```
+
+**GeoGuessr E2E + materialized LULC/NDVI** (same three POIs, **`terramind_v1_large_tim`**, **`pretrained: true`**): runs STAC batch, writes `tim_export.jsonl` / `tim_run.json`, and under each **`<output-dir>/<map_id>/materialized/`** saves **`lulc_decoded_argmax_rgb.png`**, **`ndvi_decoded_preview.png`**, and **`coords_decoded.json`** from `tokenizer[...].decode_tokens` / `decode_text`. First run downloads large weights from Hugging Face.
+
+```bash
+uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local.geoguessr_materialize ^
+  --config config.geoguessr_live_3row_s2_compatible_large.yaml ^
+  --output-dir ../../data/downloads/tim_geoguessr_large_materialized
+```
+
+Equivalent console script: **`nutonic-tim-geoguessr-materialize`** (same module).
+
+Tests:
+
+```bash
+uv run --directory inference/terramind_tim_local pytest tests -q
+```
+
 Weights download from Hugging Face on first `pretrained: true` run (`HF_TOKEN` optional for higher rate limits).
 
 ## Quick run (random RGB smoke)
@@ -74,6 +117,8 @@ TerraMind expects **12 channels** in the same order as TerraTorch `PRETRAINED_BA
 - After a STAC run, the export includes `inputs_meta.s2_stac` (item id, datetime, cloud cover, resolved asset keys).
 
 For **RGB + S2** together, set `inputs.mode` for RGB (e.g. `jpeg`) and **`inputs.s2_mode`** for S2 (defaults to `random` if unset — it does **not** reuse `inputs.mode`).
+
+**TerraMind `RGB` is not generic JPEG.** The backbone maps the string `RGB` to **`untok_sen2rgb@224`** (Sentinel-2 RED / GREEN / BLUE reflectance, same numeric range as S2L2A). Feeding Mapbox or other 8-bit RGB PNGs (e.g. `rgb_mode: jpeg`) will **not** match pre-training and TiM outputs can look arbitrary. For POI batches, use **`rgb_mode: s2_rgb`** so RGB is sliced from the same STAC stack as `S2L2A` (see `config.geoguessr_live_3row_s2_compatible.yaml`), or use **`modalities: [S2L2A]`** only.
 
 ## CI
 

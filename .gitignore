@@ -23,3 +23,28 @@ node_modules/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Python envs, packaging, tests, and tooling (repo-wide: inference/, tools/, data/scripts/, etc.)
+# server/.gitignore only applies under server/; keep these patterns here too.
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.tox/
+htmlcov/
+.benchmarks/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+dist/
+build/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+.hatch/

@@ -14,14 +14,21 @@ dependencies = [
     "PyYAML>=6.0.1",
     "numpy>=1.26.0",
     "Pillow>=10.0.0",
+    # Align with TerraTorch → peft: older peft imports HybridCache from transformers;
+    # transformers 5.2+ reshaped exports — peft 0.18.1+ avoids the stale import path.
+    "peft>=0.18.1",
+    "transformers>=4.48.0",
+    # requests 2.33 + urllib3 2.6.x can hit ``BaseSSLError`` import errors on some stacks
+    "urllib3>=2.2.0,<2.6",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
-s2 = ["pystac-client>=0.7.0", "rasterio>=1.3.9"]
+s2 = ["pystac-client>=0.7.0", "rasterio>=1.3.9", "boto3>=1.34.0"]
 
 [project.scripts]
 nutonic-tim-local = "nutonic_terramind_tim_local.cli:main"
+nutonic-tim-geoguessr-materialize = "nutonic_terramind_tim_local.geoguessr_materialize:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/nutonic_terramind_tim_local"]

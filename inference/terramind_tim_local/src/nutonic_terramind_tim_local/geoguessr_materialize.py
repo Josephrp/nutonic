@@ -1,6 +1,14 @@
-"""GeoGuessr S2-compatible batch: TiM JSON export + decoded LULC/NDVI PNGs per ``map_id``.
+"""GeoGuessr S2-compatible batch: TiM JSON export + **materialized previews for every TiM key**.
 
-Run from ``inference/terramind_tim_local`` (same cwd as other configs), with ``--extra s2``:
+For each batch row, ``<output-dir>/<map_id>/materialized/`` contains:
+
+- **``coords``** — ``coords_decoded.json`` (tokenizer ``decode_text``), NaNs JSON-safe.
+- **``tok_*``** — ``{key}_decoded.png`` via ``model.tokenizer[key].decode_tokens`` when available;
+  LULC / NDVI also get modality-specific previews (argmax palette / grayscale stretch).
+- **``untok_*``** — ``{key}_tensor_preview.png`` from the raw ``tensor`` block (RGB or S2-style false color).
+- **``tim_shapes.json``** — compact dtype/shape (and channel count) for every sub-tensor in the TiM dict.
+
+Run from ``inference/terramind_tim_local`` with ``--extra s2``:
 
 .. code-block:: bash
 
@@ -8,8 +16,7 @@ Run from ``inference/terramind_tim_local`` (same cwd as other configs), with ``-
      --output-dir ../../data/downloads/tim_geoguessr_large_materialized
 
 Default config: ``config.geoguessr_live_3row_s2_compatible_large.yaml`` (``terramind_v1_large_tim``,
-``pretrained: true``). Each POI row gets ``<output-dir>/<map_id>/materialized/`` with raster
-previews from ``tokenizer[tok_*].decode_tokens`` (B×H×W token grid reshaped from TiM ``tensor``).
+``pretrained: true``).
 """
 
 from __future__ import annotations
@@ -34,6 +41,16 @@ from nutonic_terramind_tim_local.terramind_patches import apply_terramind_coord_
 apply_terramind_coord_decode_hotfix()
 
 # Ten-class legend for argmax on (1, 10, H, W) LULC decode (preview only).
+def _safe_stem(tim_key: str) -> str:
+    return tim_key.replace("@", "_at_").replace("/", "_").replace("\\", "_")
+
+
+def _json_default(o: Any) -> Any:
+    if isinstance(o, float) and (o != o):
+        return None
+    raise TypeError
+
+
 LULC_PALETTE_RGB = np.array(
     [
         [0, 0, 0],
@@ -127,20 +144,77 @@ def _save_lulc_argmax_png(dec: torch.Tensor, path: Path) -> None:
     Image.fromarray(rgb, mode="RGB").save(path)
 
 
-def _save_untok_rgb_preview(block: Mapping[str, Any], path: Path) -> None:
-    """Save first 3 channels of ``untok_*`` reflectance stack (rough preview, not TiM decode)."""
-    raw = block.get("tensor")
-    if not isinstance(raw, torch.Tensor) or raw.ndim != 4 or raw.shape[1] < 3:
-        raise ValueError("untok tensor must be (B, C>=3, H, W)")
-    t = raw.detach().float().cpu()[0, :3].numpy()
-    lo, hi = float(t.min()), float(t.max())
-    if hi <= lo:
-        rgb = np.zeros((t.shape[1], t.shape[2], 3), dtype=np.uint8)
+def _tensor_bchw_to_rgb_u8(t_bchw: torch.Tensor) -> np.ndarray:
+    """
+    Map ``(B,C,H,W)`` batch item 0 to uint8 RGB ``(H,W,3)``.
+
+    - **12 channels** — treat as Sentinel-2 L2A order: use RED/GREEN/BLUE = bands 3,2,1 (0-based).
+    - **3+ channels** — first three, min–max normalized jointly.
+    - **2 channels** — R,G and B=0.
+    - **1 channel** — grayscale replicated to RGB.
+    """
+    t = t_bchw.detach().float().cpu()
+    if t.ndim != 4:
+        raise ValueError(f"Expected (B,C,H,W), got {tuple(t.shape)}")
+    x = t[0].numpy()
+    c = x.shape[0]
+    if c >= 12:
+        red_i, green_i, blue_i = 3, 2, 1
+        x3 = np.stack([x[red_i], x[green_i], x[blue_i]], axis=0)
+    elif c >= 3:
+        x3 = x[:3]
+    elif c == 2:
+        x3 = np.concatenate([x, np.zeros((1, x.shape[1], x.shape[2]), dtype=x.dtype)], axis=0)
+    elif c == 1:
+        x3 = np.repeat(x, 3, axis=0)
     else:
-        tn = (t - lo) / (hi - lo)
-        rgb = (np.clip(tn.transpose(1, 2, 0), 0.0, 1.0) * 255.0).astype(np.uint8)
+        raise ValueError(f"Need C>=1, got C={c}")
+    lo, hi = float(x3.min()), float(x3.max())
+    if hi <= lo:
+        return np.zeros((x3.shape[1], x3.shape[2], 3), dtype=np.uint8)
+    xn = (x3 - lo) / (hi - lo)
+    return (np.clip(xn.transpose(1, 2, 0), 0.0, 1.0) * 255.0).astype(np.uint8)
+
+
+def _save_bchw_preview_png(t_bchw: torch.Tensor, path: Path) -> None:
+    rgb = _tensor_bchw_to_rgb_u8(t_bchw)
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(rgb, mode="RGB").save(path)
+
+
+def _save_generic_decoded_preview(dec: torch.Tensor, path: Path) -> None:
+    """Single-channel percentile stretch or multi-channel RGB from ``decode_tokens`` output."""
+    dec = dec.detach().float().cpu()
+    if dec.ndim == 4:
+        _save_bchw_preview_png(dec, path)
+        return
+    if dec.ndim == 3:
+        v = dec[0].numpy()
+        lo, hi = float(np.percentile(v, 2)), float(np.percentile(v, 98))
+        if hi <= lo:
+            u8 = np.zeros_like(v, dtype=np.uint8)
+        else:
+            u8 = (np.clip((v - lo) / (hi - lo), 0.0, 1.0) * 255.0).astype(np.uint8)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(u8, mode="L").save(path)
+        return
+    raise ValueError(f"Unsupported decode tensor rank {dec.ndim}")
+
+
+def _tim_dict_tensor_summary(tim: Mapping[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for k, block in tim.items():
+        if not isinstance(block, dict):
+            out[k] = type(block).__name__
+            continue
+        sub: dict[str, Any] = {}
+        for sk, sv in block.items():
+            if isinstance(sv, torch.Tensor):
+                sub[sk] = {"dtype": str(sv.dtype), "shape": list(sv.shape)}
+            else:
+                sub[sk] = type(sv).__name__
+        out[k] = sub
+    return out
 
 
 def _save_ndvi_preview_png(dec: torch.Tensor, path: Path) -> None:
@@ -165,8 +239,6 @@ def materialize_tim_row(
     model: torch.nn.Module,
     tim: Mapping[str, Any],
     row_out: Path,
-    *,
-    device: torch.device,
 ) -> dict[str, Any]:
     """Write ``materialized/`` under ``row_out`` (e.g. ``.../poi_0013``). Returns a small manifest."""
     row_out = Path(row_out)
@@ -174,62 +246,110 @@ def materialize_tim_row(
     mat.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {"assets": []}
     tok = getattr(model, "tokenizer", None)
-    if tok is None:
-        return manifest
-
     mod_dev = next(model.parameters()).device
 
-    for tim_key, block in tim.items():
-        if not tim_key.startswith("tok_") or not isinstance(block, dict) or "tensor" not in block:
-            continue
-        if tim_key not in tok:
-            continue
-        try:
-            ids_bhw = _ids_bhw_from_block(block, mod_dev)
-            dec = _decode_tokens_safe(tok[tim_key], ids_bhw)
-        except Exception as exc:  # noqa: BLE001
-            manifest["assets"].append({"tim_key": tim_key, "error": str(exc)[:500]})
+    shapes_path = mat / "tim_shapes.json"
+    shapes_path.write_text(json.dumps(_tim_dict_tensor_summary(tim), indent=2) + "\n", encoding="utf-8")
+    manifest["assets"].append({"tim_key": "_summary", "kind": "tim_shapes_json", "path": str(shapes_path.resolve())})
+
+    if not isinstance(tim, Mapping) or not tim:
+        return manifest
+
+    for tim_key in sorted(tim.keys()):
+        block = tim[tim_key]
+        stem = _safe_stem(tim_key)
+
+        if tim_key == "coords":
+            if tok is None or "coords" not in tok or not isinstance(block, dict):
+                manifest["assets"].append({"tim_key": tim_key, "kind": "skip", "reason": "no_coords_tokenizer_or_block"})
+                continue
+            try:
+                decoded = tok["coords"].decode_text({"coords": dict(block)})
+                cpath = mat / f"{stem}_decoded.json"
+                cpath.write_text(
+                    json.dumps({"decoded_lon_lat_pairs": decoded}, indent=2, default=_json_default) + "\n",
+                    encoding="utf-8",
+                )
+                manifest["assets"].append({"tim_key": tim_key, "kind": "coords_json", "path": str(cpath.resolve())})
+            except Exception as exc:  # noqa: BLE001
+                manifest["assets"].append({"tim_key": tim_key, "error": str(exc)[:500]})
             continue
 
-        try:
-            if "lulc" in tim_key.lower():
-                p = mat / "lulc_decoded_argmax_rgb.png"
-                _save_lulc_argmax_png(dec, p)
-                manifest["assets"].append(
-                    {"tim_key": tim_key, "kind": "lulc_argmax_rgb", "path": str(p.resolve())}
-                )
-            elif "ndvi" in tim_key.lower():
-                p = mat / "ndvi_decoded_preview.png"
-                _save_ndvi_preview_png(dec, p)
-                manifest["assets"].append(
-                    {"tim_key": tim_key, "kind": "ndvi_preview_gray", "path": str(p.resolve())}
-                )
-        except Exception as exc:  # noqa: BLE001
-            manifest["assets"].append({"tim_key": tim_key, "decode_ok": True, "write_error": str(exc)[:500]})
+        if not isinstance(block, dict):
+            manifest["assets"].append({"tim_key": tim_key, "kind": "skip", "reason": "block_not_dict"})
+            continue
 
-    # Optional input echo when TiM token decode failed (encoder-side RGB reflectance).
-    ut = tim.get("untok_sen2rgb@224")
-    if isinstance(ut, dict) and "tensor" in ut:
-        try:
-            p = mat / "untok_sen2rgb_input_preview.png"
-            _save_untok_rgb_preview(ut, p)
+        if tim_key.startswith("untok_"):
+            raw = block.get("tensor")
+            if isinstance(raw, torch.Tensor) and raw.ndim == 4:
+                try:
+                    p = mat / f"{stem}_tensor_preview.png"
+                    _save_bchw_preview_png(raw, p)
+                    manifest["assets"].append(
+                        {"tim_key": tim_key, "kind": "untok_tensor_rgb_preview", "path": str(p.resolve())}
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    manifest["assets"].append({"tim_key": tim_key, "error": str(exc)[:500]})
+            else:
+                manifest["assets"].append(
+                    {"tim_key": tim_key, "kind": "skip", "reason": "no_bchw_tensor", "tensor_ndim": getattr(raw, "ndim", None)}
+                )
+            continue
+
+        if tim_key.startswith("tok_"):
+            if tok is None or tim_key not in tok:
+                manifest["assets"].append({"tim_key": tim_key, "kind": "skip", "reason": "no_tokenizer_entry"})
+                continue
+            tok_mod = tok[tim_key]
+            if not hasattr(tok_mod, "decode_tokens"):
+                manifest["assets"].append({"tim_key": tim_key, "kind": "skip", "reason": "no_decode_tokens"})
+                continue
+            if "tensor" not in block:
+                manifest["assets"].append({"tim_key": tim_key, "kind": "skip", "reason": "no_tensor"})
+                continue
+            try:
+                ids_bhw = _ids_bhw_from_block(block, mod_dev)
+                dec = _decode_tokens_safe(tok_mod, ids_bhw)
+            except Exception as exc:  # noqa: BLE001
+                manifest["assets"].append({"tim_key": tim_key, "error": str(exc)[:500]})
+                continue
+
+            try:
+                p_generic = mat / f"{stem}_decoded.png"
+                _save_generic_decoded_preview(dec, p_generic)
+                manifest["assets"].append(
+                    {"tim_key": tim_key, "kind": "tok_decoded_preview", "path": str(p_generic.resolve())}
+                )
+                if "lulc" in tim_key.lower():
+                    p2 = mat / f"{stem}_lulc_argmax_rgb.png"
+                    _save_lulc_argmax_png(dec, p2)
+                    manifest["assets"].append(
+                        {"tim_key": tim_key, "kind": "lulc_argmax_rgb", "path": str(p2.resolve())}
+                    )
+                if "ndvi" in tim_key.lower():
+                    p3 = mat / f"{stem}_ndvi_percentile_gray.png"
+                    _save_ndvi_preview_png(dec, p3)
+                    manifest["assets"].append(
+                        {"tim_key": tim_key, "kind": "ndvi_preview_gray", "path": str(p3.resolve())}
+                    )
+            except Exception as exc:  # noqa: BLE001
+                manifest["assets"].append({"tim_key": tim_key, "decode_ok": True, "write_error": str(exc)[:500]})
+            continue
+
+        raw = block.get("tensor")
+        if isinstance(raw, torch.Tensor) and raw.ndim == 4:
+            try:
+                p = mat / f"{stem}_tensor_preview.png"
+                _save_bchw_preview_png(raw, p)
+                manifest["assets"].append(
+                    {"tim_key": tim_key, "kind": "generic_bchw_preview", "path": str(p.resolve())}
+                )
+            except Exception as exc:  # noqa: BLE001
+                manifest["assets"].append({"tim_key": tim_key, "error": str(exc)[:500]})
+        else:
             manifest["assets"].append(
-                {"tim_key": "untok_sen2rgb@224", "kind": "input_rgb_preview", "path": str(p.resolve())}
+                {"tim_key": tim_key, "kind": "skip", "reason": "no_materializer_for_block_shape"}
             )
-        except Exception as exc:  # noqa: BLE001
-            manifest["assets"].append({"tim_key": "untok_sen2rgb@224", "error": str(exc)[:300]})
-
-    if isinstance(tim.get("coords"), dict) and "coords" in tok:
-        try:
-            decoded = tok["coords"].decode_text({"coords": dict(tim["coords"])})
-            cpath = mat / "coords_decoded.json"
-            cpath.write_text(
-                json.dumps({"decoded_lon_lat_pairs": decoded}, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            manifest["assets"].append({"tim_key": "coords", "kind": "json", "path": str(cpath.resolve())})
-        except Exception as exc:  # noqa: BLE001
-            manifest["assets"].append({"tim_key": "coords", "error": str(exc)[:300]})
 
     return manifest
 
@@ -277,14 +397,14 @@ def run_geoguessr_batch_with_materialize(cfg: Mapping[str, Any], output_dir: Pat
             location_id=lid,
             inputs_aux=inputs_aux,
         )
-        export_row["materialized"] = materialize_tim_row(model, tim_raw, output_dir / mid, device=device)
+        export_row["materialized"] = materialize_tim_row(model, tim_raw, output_dir / mid)
         out_rows.append(export_row)
     return out_rows
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="GeoGuessr S2-compatible TiM batch + per-POI materialized LULC/NDVI PNGs.",
+        description="GeoGuessr S2-compatible TiM batch + per-POI materialized previews for every TiM output key.",
     )
     parser.add_argument(
         "--config",

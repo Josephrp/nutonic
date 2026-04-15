@@ -42,7 +42,7 @@ uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim
   --output-dir ../../data/downloads/tim_geoguessr_uv_e2e
 ```
 
-**GeoGuessr E2E + materialized LULC/NDVI** (same three POIs, **`terramind_v1_large_tim`**, **`pretrained: true`**): runs STAC batch, writes `tim_export.jsonl` / `tim_run.json`, and under each **`<output-dir>/<map_id>/materialized/`** saves **`lulc_decoded_argmax_rgb.png`**, **`ndvi_decoded_preview.png`**, and **`coords_decoded.json`** from `tokenizer[...].decode_tokens` / `decode_text`. First run downloads large weights from Hugging Face.
+**GeoGuessr E2E + full TiM materialization** (same three POIs, **`terramind_v1_large_tim`**, **`pretrained: true`**): runs STAC batch, writes `tim_export.jsonl` / `tim_run.json`, and under each **`<output-dir>/<map_id>/materialized/`** writes **every TiM sampler key** — `tim_shapes.json`, **`coords_*_decoded.json`**, each **`untok_*`** as **`{key}_tensor_preview.png`** (12-band S2 uses RGB = bands 3,2,1), each **`tok_*`** as **`{key}_decoded.png`** plus LULC/NDVI extras when those names appear. First run downloads large weights from Hugging Face.
 
 ```bash
 uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local.geoguessr_materialize ^

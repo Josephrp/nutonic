@@ -1,0 +1,2 @@
+# Hugging Face Jobs submission + dataset snapshot pull (operator-only; not required for nutonic-ci.yml).
+huggingface_hub>=0.30.0

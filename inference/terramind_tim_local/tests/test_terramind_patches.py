@@ -6,15 +6,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
+_TERRA_SKIP = {"exc_type": ImportError, "reason": "requires a working terratorch stack (transformers/peft compatible)"}
+
 torch = pytest.importorskip("torch")
 
 from nutonic_terramind_tim_local.terramind_patches import (
+    _coerce_discrete_token_ids,
     _parse_lat_lon_from_coord_text,
     apply_terramind_coord_decode_hotfix,
+    apply_terramind_tim_runtime_hotfixes,
 )
 
 
 def test_coord_decode_hotfix_full_sequence_and_regex() -> None:
+    pytest.importorskip("terratorch", **_TERRA_SKIP)
     apply_terramind_coord_decode_hotfix()
     from terratorch.models.backbones.terramind.tokenizer.text.text_tokenizer import CoordsTokenizer
 
@@ -36,8 +41,22 @@ def test_coord_decode_hotfix_full_sequence_and_regex() -> None:
 
 
 def test_coord_decode_hotfix_idempotent() -> None:
+    pytest.importorskip("terratorch", **_TERRA_SKIP)
     apply_terramind_coord_decode_hotfix()
     apply_terramind_coord_decode_hotfix()
+
+
+def test_coerce_discrete_token_ids_float_to_long() -> None:
+    x = torch.tensor([[1.0, 2.4, 303.7]])
+    y = _coerce_discrete_token_ids(x)
+    assert y.dtype == torch.long
+    assert y.tolist() == [[1, 2, 304]]
+
+
+def test_tim_runtime_hotfixes_idempotent() -> None:
+    pytest.importorskip("terratorch", **_TERRA_SKIP)
+    apply_terramind_tim_runtime_hotfixes()
+    apply_terramind_tim_runtime_hotfixes()
 
 
 def test_parse_double_lon_prefix_mislabel() -> None:
@@ -58,6 +77,7 @@ def test_parse_double_lat_missing_lon() -> None:
 
 
 def test_coord_decode_lon_before_lat_in_string() -> None:
+    pytest.importorskip("terratorch", **_TERRA_SKIP)
     apply_terramind_coord_decode_hotfix()
     from terratorch.models.backbones.terramind.tokenizer.text.text_tokenizer import CoordsTokenizer
 

@@ -21,7 +21,8 @@
 **Fourth pass:** 2026-04-14 — **IMP-060** SQLite **`LeaderboardStore`** (gap analysis **v0.6**).  
 **Fifth pass:** 2026-04-14 — gap **v0.7** / **v0.8** prep: manifest route, redaction, gameplay + SCAN wiring (**IMP-080** / **IMP-083** partial).  
 **Sixth pass:** 2026-04-13 — backlog **§0.1** table re-verified vs `nutonic/` + `server/`; gap analysis **v0.8**; this memo **v0.7**.  
-**Seventh pass:** 2026-04-14 — gap analysis **v0.9** ( **`inference/streetview_pano_service/`** stub noted); **shipped-cache / narrative / hint pipeline** plan added — [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md); this memo **v0.8**.
+**Seventh pass:** 2026-04-14 — gap analysis **v0.9** ( **`inference/streetview_pano_service/`** stub noted); **shipped-cache / narrative / hint pipeline** plan added — [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md); this memo **v0.8**.  
+**Eighth pass:** 2026-04-16 — **§2.8** + **§3** inference wording corrected (**packages present**; “stub” = **default CI / no-key** behavior, not missing repos); aligns with gap analysis **v1.2** and [`plans/2026-04-16-stub-replacement-implementation-plan.md`](2026-04-16-stub-replacement-implementation-plan.md); this memo **v0.9**.
 
 ---
 
@@ -91,11 +92,12 @@
 
 ### 2.8 “Defer live LFM-VL, pano service, TerraMind demos, PRO materialization until spine stable.”
 
-| Verdict | **Verified** |
+| Verdict | **Partial — nuance** |
 |---------|--------------|
-| Evidence | `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §0.1 script-first, §0.2 topology; `inference/README.md` (services are optional batch/PRO; game server `httpx` only); phased tables defer **S5**/**S6** and orchestrator **P4+** after manifests (`plans/2026-04-07-complete-implementation-architecture.md` §9). |
+| Evidence | `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §0.1 script-first, §0.2 topology; `inference/README.md` (optional batch/PRO; thin game server **no torch**); phased tables defer **S5**/**S6** and full orchestrator **P4+** after manifests (`plans/2026-04-07-complete-implementation-architecture.md` §9). |
+| Correction | **“Defer” ≠ “no packages”:** `inference/*` **services exist** and ship in CI with **stub/default backends**; **game server** may **`httpx`** to **`pro_materialization_service`** via **`InferenceClient`** when **`FEATURE_PRO_JOBS`** and URLs are set (**IMP-092** partial). **Still deferred for production trust path:** non-stub GPU deploys, **IMP-110** Street View hardening, full **TerraMind** demos — see repo reality paragraph below. |
 
-**Repo reality:** `inference/` contains **`README.md`** plus **`streetview_pano_service/`** **stub** (FastAPI health + placeholder metadata route); **`lfm_vl_hint_service/`** etc. still **absent**. **Normative** batch → bundle → KMP embed sequencing: **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** (Phase **D**). Deferral after spine remains **correct** for **full IMP-110+**.
+**Repo reality (2026-04-16):** `inference/` contains **deployable FastAPI packages** with **`pytest`** in **`.github/workflows/nutonic-ci.yml`**: **`streetview_pano_service/`** (health + **`POST /api/v1/panos/sample`**; **Google** path when keyed, else **synthetic JPEG** stub frames), **`lfm_vl_hint_service/`** (**`stub` | `transformers` | `openai_compatible`**), **`lfm_vl_satellite_caption_service/`**, **`pro_materialization_service/`** (internal materialize + public **stub** route), optional **`terramind_tim_local/`**. **Normative** batch → bundle → KMP embed sequencing: **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** (Phase **D**). **Corrected claim:** services are **not** absent — **production-hardening** (**IMP-110+** real pano ops, non-stub deploy defaults, **`InferenceClient`** full fan-out) remains **ahead**, per **`plans/2026-04-16-stub-replacement-implementation-plan.md`**.
 
 ---
 
@@ -142,7 +144,7 @@
 |-----|--------|
 | ~~No `server/` tree~~ | **Resolved** for thin reference slice — see §2.4 reassessment. |
 | §9 **S1c** prose used unversioned `/api/maps` | **Corrected** in `plans/2026-04-07-complete-implementation-architecture.md` §9 — implement paths only from **`docs/openapi.yaml`**. |
-| `inference/*` **full** workers | **`lfm_vl_hint_service/`** etc. still **absent**; **`streetview_pano_service/`** is a **stub** only — **IMP-110** remains open. **Normative batch + embed** sequencing: **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`**. |
+| `inference/*` **production** workers | Packages **exist** and run in CI with **stub / default-CPU** paths; **IMP-110** (real Street View ops), **IMP-111/112** (non-stub VLM deploy defaults), **IMP-113** (PRO materialization completeness), and **`plans/2026-04-16-stub-replacement-implementation-plan.md`** track remaining hardening. **Normative batch + embed** sequencing: **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`**. |
 | ~~KMP still template identity~~ | **Largely resolved** — `com.nutonic` + `nutonic` root name; residual template UX (legacy gallery) is optional debt. |
 | ~~**KMP ↔ server wire-up**~~ | **Largely resolved** — **`NutonicApiClient`** in `shared` (**Ktor** + **`kotlinx.serialization`** DTOs aligned to **`docs/openapi.yaml`**); **SCAN** / **RANK** call **GET maps**, **GET/POST leaderboard**, **GET config**, **auth token** paths (**IMP-070**). **Partial** **IMP-071**: shared hub **`map_id`**, **Final results → RANK** + saveable route **`rankFocusMapId`** / **`#`** fragment (not yet production “no hardcoded rows” / full C4). |
 | ~~**Community `LeaderboardStore` only in-memory**~~ | **Resolved** — **`IMP-060`**: **`SqliteLeaderboardStore`** + idempotency table, env-configurable URL, **`pytest`** file persistence + **`TestClient`** hermetic in-memory default. |
@@ -163,4 +165,5 @@
 | 0.6 | 2026-04-14 | **Fourth pass** header; §2.4 repo reality: **`GET /api/v1/maps` → 200** + **IMP-060** SQLite **`LeaderboardStore`**; §3 new resolved gap row; aligns with gap analysis **v0.6** |
 | 0.7 | 2026-04-13 | **Sixth pass** header; §2.4 repo reality extended (**cache/manifest**, redaction, client wiring); §3 spine gap narrowed; aligns with gap analysis **v0.8** + backlog **§0.1** refresh |
 | 0.8 | 2026-04-14 | **Seventh pass** header; §3 **`inference/*`** row: **streetview** stub nuance + **shipped-cache plan** link; §3 spine gap row: **embed** manifest / ranked clue pack; aligns with gap **v0.9** + backlog **§0.1** **0.7** |
+| 0.9 | 2026-04-16 | **Eighth pass** header; **§2.8** repo reality + **§3** gap row: inference packages **landed**; production hardening per **stub-replacement plan**; gap analysis **v1.2** cross-ref. |
 

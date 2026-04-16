@@ -43,7 +43,9 @@ Optional: copy **`.env.example`** to **`server/.env`** so local runs pick up **`
 | `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL` / `PRO_MATERIALIZATION_SERVICE_URL` | No | Optional second origin for **IMP-092** / **IMP-114**: when set (with or without `NUTONIC_INFERENCE_WORKER_BASE_URL`), **`POST /api/v1/pro/jobs`** probes **`GET {origin}/health`** for **each** configured origin; **`inference_upstream_ok`** is **`true`** only if **all** probes succeed. Example: `http://127.0.0.1:7865` for `inference/pro_materialization_service`. |
 | `NUTONIC_INFERENCE_HMAC_SECRET` / `INFERENCE_HMAC_SECRET` | No | When non-empty, **`InferenceClient`** adds **`X-Nutonic-Timestamp`**, **`X-Nutonic-Nonce`**, **`X-Nutonic-Signature`** (HMAC-SHA256) to outbound worker **`GET`** requests (e.g. health probes). **Inference workers** (`streetview_pano_service`, `pro_materialization_service`) verify when **`NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC=1`** is set on the worker (`inference/README.md`). |
 
-Future variables (placeholders — not read by this slice yet): `DATABASE_URL`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `STREETVIEW_PANO_SERVICE_URL`, `LFM_VL_HINT_SERVICE_URL`, `LFM_VL_SATELLITE_CAPTION_SERVICE_URL`, `TERRAMIND_WORKER_URL`, `HF_TOKEN`. See `plans/2026-04-07-game-server-thin-orchestrator.md` §4.
+**Thin-slice worker env (implemented):** `NUTONIC_INFERENCE_WORKER_BASE_URL`, `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL`, optional `NUTONIC_INFERENCE_HMAC_SECRET` — see table above (**`InferenceClient`**, **IMP-092**).
+
+Future variables (placeholders — **not read by `server/` yet**): `DATABASE_URL`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `STREETVIEW_PANO_SERVICE_URL`, `LFM_VL_HINT_SERVICE_URL`, `LFM_VL_SATELLITE_CAPTION_SERVICE_URL`, `TERRAMIND_WORKER_URL`, `HF_TOKEN` (per-service URLs for **game-server-orchestrated** batch would duplicate **`tools/batch_streetview_hints.py`** / Jobs until **IMP-092** fan-out is extended — see `server/docs/TOPOLOGY.md`). See `plans/2026-04-07-game-server-thin-orchestrator.md` §4.
 
 ## OpenAPI
 

@@ -1,0 +1,86 @@
+# TerraMind TiM batch — first five ``geoguessr_poi_12`` rows (sorted ``poi_*`` order).
+# Used when Hugging Face Jobs set ``NUTONIC_POI_LIMIT=5`` (or ``--tim-config-in-container`` points here).
+
+content_version: nutonic.tim_local.hf_job.poi12_first5.v1
+
+paths:
+  repo_root: /workspace
+
+model_id: terramind_v1_tiny_tim
+pretrained: true
+merge_method: mean
+
+modalities:
+  - RGB
+  - S2L2A
+
+tim_modalities:
+  - LULC
+  - NDVI
+  - location
+
+device: cuda
+
+inputs:
+  batch_size: 1
+  s2_mode: stac
+  datetime: "2026-01-10/2026-04-10"
+  s2:
+    stac_url: https://earth-search.aws.element84.com/v1
+    collection: sentinel-2-l2a
+    half_km: 14.0
+    patch_hw: 224
+    max_cloud: 80
+    max_items: 30
+
+serialization:
+  tensor_sample_limit: 0
+  encoder_tensor_sample_limit: 0
+  include_encoder_trace: true
+  encoder_trace_mode: all
+  tim_outputs: full
+  include_tim_raw_keys: true
+
+export:
+  include_ai_guess_row: true
+
+batch:
+  - map_id: poi_0000
+    location_id: poi_0000
+    rgb_mode: s2_rgb
+    lat: -34.240926
+    lon: 138.914068
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0001
+    location_id: poi_0001
+    rgb_mode: s2_rgb
+    lat: 38.6758949
+    lon: -27.3289406
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0002
+    location_id: poi_0002
+    rgb_mode: s2_rgb
+    lat: -47.2796229
+    lon: -71.4751713
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0003
+    location_id: poi_0003
+    rgb_mode: s2_rgb
+    lat: -23.0401911
+    lon: 30.377415
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0004
+    location_id: poi_0004
+    rgb_mode: s2_rgb
+    lat: 44.8301906
+    lon: 141.9546757
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac

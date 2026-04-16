@@ -1,6 +1,6 @@
-# NU:TONIC game server — topology (stub)
+# NU:TONIC game server — topology (living stub)
 
-**Status:** Initial stub for IMP-012; expand when HTTP fan-out to workers is merged.
+**Status:** **IMP-012** satisfied as a **short topology doc**; **IMP-092 (partial)** merged — expand rows when the game server **orchestrates additional** `inference/*` callers beyond **PRO** health/materialize.
 
 ## Process
 
@@ -11,7 +11,7 @@
 ## Invariants
 
 - **No torch** in this deployable — no TerraTorch, transformers, or pano math in-process (`plans/2026-04-07-game-server-thin-orchestrator.md`).
-- **Future outbound HTTP** (not wired in this slice): `httpx` → `inference/*` and TerraMind workers with per-upstream timeouts and size limits (orchestrator §5).
+- **Outbound HTTP (partial):** **`InferenceClient`** (`nutonic_server/inference_client.py`) — **`GET …/health`** (+ optional HMAC) toward **`NUTONIC_INFERENCE_WORKER_BASE_URL`** and **`NUTONIC_PRO_MATERIALIZATION_SERVICE_URL`** for **`POST /api/v1/pro/jobs`**; optional **`POST …/internal/v1/materialize`** forward. **Not yet:** server-driven **Street View / LFM** batch (scripts and Jobs call workers directly today).
 
 ## Environment (future URLs — TBD)
 

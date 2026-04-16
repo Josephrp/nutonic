@@ -449,7 +449,7 @@ paths:
   /api/v1/pro/jobs:
     post:
       tags: [pro]
-      summary: Create PRO materialization job (stub control plane)
+      summary: Create PRO materialization job (in-process queue + optional worker forward)
       operationId: postProJob
       security:
         - bearerAuth: []
@@ -461,7 +461,7 @@ paths:
               $ref: "#/components/schemas/ProJobCreateIn"
       responses:
         "200":
-          description: Job accepted (stub)
+          description: Job accepted (server issues job_id; may forward to pro_materialization_service when configured)
           content:
             application/json:
               schema:
@@ -472,7 +472,7 @@ paths:
   /api/v1/pro/jobs/{job_id}:
     get:
       tags: [pro]
-      summary: Poll PRO job status (stub)
+      summary: Poll PRO job status (in-memory store; optional worker summary when forward ran)
       operationId: getProJob
       security:
         - bearerAuth: []
@@ -720,7 +720,7 @@ components:
     AiGuessRow:
       type: object
       description: |
-        Fixture / precomputed AI placement for `map_id` + `location_id` (`IMP-082`, `AiGuessStore` stub).
+        Precomputed AI marker placement for `map_id` + `location_id` (`IMP-082`); consumed by the Kotlin client as `AiGuessStore` when manifest or ranked clue pack includes `ai_guesses`.
       required: [map_id, location_id, ai_lat, ai_lon]
       properties:
         map_id:

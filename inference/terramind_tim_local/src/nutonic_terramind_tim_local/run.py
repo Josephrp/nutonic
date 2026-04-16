@@ -9,11 +9,11 @@ import torch
 from terratorch import BACKBONE_REGISTRY
 
 from nutonic_terramind_tim_local.capture import attach_tim_sampler_capture
-from nutonic_terramind_tim_local.terramind_patches import apply_terramind_coord_decode_hotfix
+from nutonic_terramind_tim_local.terramind_patches import apply_terramind_tim_runtime_hotfixes
 from nutonic_terramind_tim_local.inputs_build import _build_inputs, load_run_config
 from nutonic_terramind_tim_local.serialize import build_tim_modality_outputs, encoder_trace_summary
 
-apply_terramind_coord_decode_hotfix()
+apply_terramind_tim_runtime_hotfixes()
 
 
 def _export_row(

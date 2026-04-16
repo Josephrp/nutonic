@@ -1,0 +1,80 @@
+# TerraMind TiM batch — first three rows of ``data/downloads/geoguessr_poi_12``
+# (matches ``catalog_import_poi.py --poi-root .../geoguessr_poi_12 --poi-limit 3``).
+#
+# Run locally (GPU recommended; CPU works for ``terramind_v1_tiny_tim``):
+#   uv sync --project inference/terramind_tim_local --extra dev --extra s2
+#   uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local run ^
+#     --config config.live_hydrate_geoguessr_poi12_first3.yaml ^
+#     --output-dir ../../data/cache/tim_live_hydrate_poi12_first3
+#
+# Hugging Face: run the same command inside the TerraMind Space / Job container,
+# upload ``tim_export.jsonl`` to your Dataset repo, then pull locally or use
+# ``python -m nutonic_terramind_tim_local ingest`` against a downloaded copy.
+
+content_version: nutonic.tim_local.live_hydrate.poi12_first3.v1
+
+paths:
+  repo_root: ../..
+
+model_id: terramind_v1_tiny_tim
+pretrained: true
+merge_method: mean
+
+modalities:
+  - RGB
+  - S2L2A
+
+tim_modalities:
+  - LULC
+  - NDVI
+  - location
+
+device: cpu
+
+inputs:
+  batch_size: 1
+  s2_mode: stac
+  datetime: "2026-01-10/2026-04-10"
+  s2:
+    stac_url: https://earth-search.aws.element84.com/v1
+    collection: sentinel-2-l2a
+    half_km: 14.0
+    patch_hw: 224
+    max_cloud: 80
+    max_items: 30
+
+serialization:
+  tensor_sample_limit: 0
+  encoder_tensor_sample_limit: 0
+  include_encoder_trace: true
+  encoder_trace_mode: all
+  tim_outputs: full
+  include_tim_raw_keys: true
+
+export:
+  include_ai_guess_row: true
+
+batch:
+  - map_id: poi_0000
+    location_id: poi_0000
+    rgb_mode: s2_rgb
+    lat: -34.240926
+    lon: 138.914068
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0001
+    location_id: poi_0001
+    rgb_mode: s2_rgb
+    lat: 38.6758949
+    lon: -27.3289406
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0002
+    location_id: poi_0002
+    rgb_mode: s2_rgb
+    lat: -47.2796229
+    lon: -71.4751713
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac

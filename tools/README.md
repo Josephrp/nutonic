@@ -1,5 +1,13 @@
 # Operator tools (`tools/`)
 
+## Hugging Face Dataset mirror + Jobs (hydration)
+
+- **Pull POI trees from Hub:** [`pull_poidata_from_hub.py`](pull_poidata_from_hub.py) syncs `NuTonic/poidata` into `data/downloads/` via `snapshot_download` (default patterns: `geoguessr_poi_12/**`, `geoguessr_poi_120/**`). Loads `.env` and prefers **`HF_API_READ`** for private snapshots (`pip install huggingface_hub`).
+- **Submit GPU Jobs (VLM + TiM):** [`submit_nutonic_hydration_job.py`](submit_nutonic_hydration_job.py) wraps `huggingface_hub.run_job` (dataset volume mount, secrets, flavors). Install `pip install -r tools/hf_jobs/requirements.txt`. Operator guide: [`hf_jobs/README.md`](hf_jobs/README.md).
+- **Full hydration (Jobs only — recommended):** [`run_full_hydration.py`](run_full_hydration.py) submits GPU `sv-lfm`, GPU TerraMind `tim`, then CPU `llm-sidecars`, waits, and downloads outputs ([`run_hf_hydration_full.py`](run_hf_hydration_full.py)). **Does not load LFM weights locally.**
+- **Build & push Job images:** [`hf_jobs/build_and_push_images.py`](hf_jobs/build_and_push_images.py) — `docker build` + `docker push` for `nutonic-hydration-sv-lfm`, `nutonic-hydration-llm`, and `nutonic-hydration-tim` (requires `docker login`).
+- **Local dev (loads weights on your machine):** [`run_local_full_hydration.py`](run_local_full_hydration.py) requires `--allow-local-model-weights`. For a tiny 3-POI smoke test only, [`run_geoguessr_hydration_local.py`](run_geoguessr_hydration_local.py).
+
 ## Street View hint batch (`batch_streetview_hints.py`)
 
 **Normative spec:** [`docs/scripts/SPEC-batch-streetview-hints.md`](../docs/scripts/SPEC-batch-streetview-hints.md).

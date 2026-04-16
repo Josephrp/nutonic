@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import warnings
 from typing import Any
+
+import torch
 
 # Match training-style ``lat=…`` / ``lon=…`` independently so ``lon=… lat=…`` order works.
 _COORD_LAT_RE = re.compile(r"lat\s*=\s*([-+]?\d*(?:\.\d+)?(?:[eE][-+]?\d+)?)")
 _COORD_LON_RE = re.compile(r"lon\s*=\s*([-+]?\d*(?:\.\d+)?(?:[eE][-+]?\d+)?)")
 
 _PATCHED = False
+_MERGE_SEQ_LONG_PATCHED = False
+_TOKEN_EMB_INDICES_PATCHED = False
 
 
 def _parse_lat_lon_from_coord_text(text: str) -> tuple[float, float] | None:
@@ -83,3 +88,101 @@ def apply_terramind_coord_decode_hotfix() -> None:
 
     tt.CoordsTokenizer.decode_text = _coords_decode_text_patched  # type: ignore[method-assign]
     _PATCHED = True
+
+
+def _coerce_discrete_token_ids(t: torch.Tensor) -> torch.Tensor:
+    """``nn.Embedding`` requires integer indices; some TiM paths yield float tensors (e.g. merge_sequences)."""
+    if not isinstance(t, torch.Tensor) or not t.is_floating_point():
+        return t
+    return t.round().clamp(min=0).to(dtype=torch.long)
+
+
+def apply_terramind_tim_merge_sequences_long_hotfix() -> None:
+    """
+    Ensure sequence merge outputs are ``long`` token rows.
+
+    TerraTorch ``GenerationSampler.merge_sequences`` uses ``torch.tensor(merged_ids)`` without an
+    explicit integer dtype. If ``pred_ids`` is a floating tensor (mixed precision / dtype promotion),
+    merged coordinate tokens stay float and ``TerraMindTiM.forward`` fails on the second encoder pass
+    with: embedding indices must be Long/Int.
+    """
+    global _MERGE_SEQ_LONG_PATCHED
+    if _MERGE_SEQ_LONG_PATCHED:
+        return
+    from terratorch.models.backbones.terramind.model.generate import GenerationSampler
+
+    _orig_ms = GenerationSampler.merge_sequences
+    _orig_msb = GenerationSampler.merge_sequences_batched
+
+    @functools.wraps(_orig_ms)
+    def merge_sequences(  # noqa: ANN001
+        self,
+        mod_dict,
+        pred_ids,
+        target_mod,
+        text_tokenizer,
+        default_sentinel="[S_1]",
+    ):
+        _orig_ms(self, mod_dict, pred_ids, target_mod, text_tokenizer, default_sentinel)
+        blk = mod_dict[target_mod]
+        if isinstance(blk, dict) and isinstance(blk.get("tensor"), torch.Tensor):
+            blk["tensor"] = _coerce_discrete_token_ids(blk["tensor"])
+        return mod_dict
+
+    @functools.wraps(_orig_msb)
+    def merge_sequences_batched(  # noqa: ANN001
+        self,
+        mod_dict,
+        pred_ids,
+        target_mod,
+        text_tokenizer,
+        default_sentinel="[S_1]",
+    ):
+        _orig_msb(self, mod_dict, pred_ids, target_mod, text_tokenizer, default_sentinel)
+        blk = mod_dict[target_mod]
+        if isinstance(blk, dict) and isinstance(blk.get("tensor"), torch.Tensor):
+            blk["tensor"] = _coerce_discrete_token_ids(blk["tensor"])
+        return mod_dict
+
+    GenerationSampler.merge_sequences = merge_sequences  # type: ignore[method-assign]
+    GenerationSampler.merge_sequences_batched = merge_sequences_batched  # type: ignore[method-assign]
+    _MERGE_SEQ_LONG_PATCHED = True
+
+
+def apply_terramind_token_embedding_indices_hotfix() -> None:
+    """
+    Coerce float token maps to ``long`` before ``nn.Embedding`` in TerraMind token/sequence encoders.
+
+    Defense in depth for TiM outputs (e.g. LULC/NDVI token grids or coords) that should be discrete IDs.
+    """
+    global _TOKEN_EMB_INDICES_PATCHED
+    if _TOKEN_EMB_INDICES_PATCHED:
+        return
+    from terratorch.models.backbones.terramind.model.encoder_embeddings import (
+        ImageTokenEncoderEmbedding,
+        SequenceEncoderEmbedding,
+    )
+
+    def _wrap_forward(orig):  # noqa: ANN001
+        @functools.wraps(orig)
+        def forward(self, d):  # noqa: ANN001
+            if isinstance(d, dict):
+                t = d.get("tensor")
+                if isinstance(t, torch.Tensor) and t.is_floating_point():
+                    d = {**d, "tensor": _coerce_discrete_token_ids(t)}
+            elif isinstance(d, torch.Tensor) and d.is_floating_point():
+                d = _coerce_discrete_token_ids(d)
+            return orig(self, d)
+
+        return forward
+
+    SequenceEncoderEmbedding.forward = _wrap_forward(SequenceEncoderEmbedding.forward)  # type: ignore[method-assign]
+    ImageTokenEncoderEmbedding.forward = _wrap_forward(ImageTokenEncoderEmbedding.forward)  # type: ignore[method-assign]
+    _TOKEN_EMB_INDICES_PATCHED = True
+
+
+def apply_terramind_tim_runtime_hotfixes() -> None:
+    """Apply all TerraMind TiM runtime patches used by this package (safe to call multiple times)."""
+    apply_terramind_coord_decode_hotfix()
+    apply_terramind_tim_merge_sequences_long_hotfix()
+    apply_terramind_token_embedding_indices_hotfix()

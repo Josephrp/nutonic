@@ -54,6 +54,22 @@ def test_collect_layout_b_without_manifest():
     assert {j["poi_id"] for j in jobs} == {"poi_b0", "poi_b1"}
 
 
+def test_plan_import_poi_limit(tmp_path):
+    locs, maps, _warnings = plan_import(
+        FIXTURE_POI_MINI,
+        REPO_ROOT,
+        tmp_path / "catalog",
+        force=True,
+        map_overrides={},
+        ranked_split=None,
+        poi_limit=1,
+    )
+    assert len(locs) == 1
+    assert locs[0]["location_id"] == "poi_test_0"
+    assert len(maps) == 1
+    assert maps[0]["map_id"] == "poi_test_0"
+
+
 def test_import_layout_a_dry_run(tmp_path):
     catalog = tmp_path / "catalog"
     rc = run_import(

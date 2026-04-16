@@ -36,9 +36,9 @@ from terratorch import BACKBONE_REGISTRY
 from nutonic_terramind_tim_local.capture import attach_tim_sampler_capture
 from nutonic_terramind_tim_local.inputs_build import _build_inputs, load_run_config
 from nutonic_terramind_tim_local.run import _export_row, append_jsonl, write_json
-from nutonic_terramind_tim_local.terramind_patches import apply_terramind_coord_decode_hotfix
+from nutonic_terramind_tim_local.terramind_patches import apply_terramind_tim_runtime_hotfixes
 
-apply_terramind_coord_decode_hotfix()
+apply_terramind_tim_runtime_hotfixes()
 
 # Ten-class legend for argmax on (1, 10, H, W) LULC decode (preview only).
 def _safe_stem(tim_key: str) -> str:

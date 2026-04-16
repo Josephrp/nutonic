@@ -20,6 +20,8 @@ dependencies = [
     "transformers>=4.48.0",
     # requests 2.33 + urllib3 2.6.x can hit ``BaseSSLError`` import errors on some stacks
     "urllib3>=2.2.0,<2.6",
+    "accelerate>=1.13.0",
+    "triton>=3.0.0 ; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]

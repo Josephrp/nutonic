@@ -238,9 +238,14 @@ def plan_import(
     force: bool,
     map_overrides: dict[str, dict[str, Any]],
     ranked_split: str | None = None,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    poi_limit: int | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     """Returns (location_dicts, merged_maps_for_maps_yaml, warnings)."""
     jobs = collect_import_jobs(poi_root)
+    if poi_limit is not None:
+        if poi_limit < 0:
+            raise CatalogImportError("--poi-limit must be >= 0")
+        jobs = jobs[:poi_limit]
     seen_ids: set[str] = set()
     locations: list[dict[str, Any]] = []
     map_rows: list[dict[str, Any]] = []
@@ -298,6 +303,7 @@ def run_import(
     maps_file: Path | None,
     content_version: str | None,
     ranked_split: str | None = None,
+    poi_limit: int | None = None,
 ) -> int:
     poi_root = poi_root.resolve()
     catalog_root = catalog_root.resolve()
@@ -310,6 +316,7 @@ def run_import(
             force=force,
             map_overrides=overrides,
             ranked_split=ranked_split,
+            poi_limit=poi_limit,
         )
     except CatalogImportError as e:
         print(f"catalog_import_poi: {e}", file=sys.stderr)
@@ -365,6 +372,13 @@ def main(argv: list[str] | None = None) -> int:
         default="none",
         help="half: after import, set ranked_pool false for first n//2 map_ids (sorted), true for the rest",
     )
+    p.add_argument(
+        "--poi-limit",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Import at most the first N POIs from manifest order (layout A) or sorted poi_*/ order (layout B)",
+    )
     args = p.parse_args(argv)
     rs = None if args.ranked_split == "none" else args.ranked_split
     return run_import(
@@ -376,6 +390,7 @@ def main(argv: list[str] | None = None) -> int:
         maps_file=args.maps_file,
         content_version=args.content_version,
         ranked_split=rs,
+        poi_limit=args.poi_limit,
     )
 
 

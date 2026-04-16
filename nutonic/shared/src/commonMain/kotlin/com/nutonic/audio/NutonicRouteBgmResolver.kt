@@ -18,7 +18,7 @@ fun resolveNutonicBgmTrack(route: NutonicRoute): NutonicBgmTrack =
     }
 
 private fun resolveShellBgm(shell: NutonicRoute.Shell): NutonicBgmTrack =
-    when (val d = shell.detail) {
+    when (shell.detail) {
         ShellDetail.WorldMapGameplay -> NutonicBgmTrack.MusicGameplay
         ShellDetail.SuccessOverlay -> NutonicBgmTrack.MusicSuccess
         ShellDetail.FinalResults -> NutonicBgmTrack.MusicResults

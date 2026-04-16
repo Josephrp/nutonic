@@ -92,7 +92,12 @@ class NutonicApiClient(
         /** When `"ranked"`, same aggregate as [getRankedLeaderboard] (`?tier=ranked`). */
         tier: String? = null,
     ): ApiResult<List<CommunityLeaderboardRow>> {
-        val q = tier?.trim()?.takeIf { it.isNotEmpty() }?.let { "?tier=${it.encodeURLParameter()}" }.orEmpty()
+        val q =
+            tier
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { "?tier=${it.encodeURLParameter()}" }
+                .orEmpty()
         return getJson(leaderboardUrl(mapId) + q)
     }
 

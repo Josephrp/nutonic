@@ -4,9 +4,9 @@ import com.nutonic.api.NutonicJson
 import com.nutonic.api.RankedClue
 import com.nutonic.api.RankedCluePackDocument
 import com.nutonic.api.StreetviewHintItem
-import kotlin.test.Test
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue

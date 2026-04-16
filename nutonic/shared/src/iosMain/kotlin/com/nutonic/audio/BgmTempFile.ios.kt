@@ -9,7 +9,10 @@ import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fwrite
 
-internal fun writeBgmWavToTemp(bytes: ByteArray, suffix: String): String? {
+internal fun writeBgmWavToTemp(
+    bytes: ByteArray,
+    suffix: String,
+): String? {
     val dir = NSTemporaryDirectory()
     val path =
         if (dir.endsWith("/")) {

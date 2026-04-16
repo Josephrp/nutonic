@@ -21,7 +21,15 @@ model = [
     "transformers>=5.2.0,<6",
     "accelerate>=0.33.0,<1",
 ]
+# Gradio SDK + Hugging Face ``spaces`` (``@spaces.GPU`` / ZeroGPU). Not required for CI stub tests.
+serve = [
+    "gradio>=4.44.0,<6",
+    "spaces>=0.44.0,<1",
+]
 dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+nutonic-lfm-vl-serve = "lfm_vl_hint_service.run_serve:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/lfm_vl_hint_service"]

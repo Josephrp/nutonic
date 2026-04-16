@@ -1,12 +1,17 @@
 """
 In-process **official** LFM-VL inference via Hugging Face ``transformers`` (Liquid docs).
 
+**Weights:** loaded once via ``ensure_transformers_model_loaded()`` (module scope / eager startup),
+not inside ``@spaces.GPU``. **GPU slice:** only ``model.generate(...)`` runs through
+``apply_zero_gpu`` for Hugging Face ZeroGPU compatibility.
+
 Install: ``pip install -e ".[model]"`` then set ``LFM_VL_BACKEND=transformers``.
 """
 
 from __future__ import annotations
 
 import base64
+import os
 from io import BytesIO
 from typing import Any
 
@@ -15,9 +20,15 @@ from PIL import Image
 from lfm_vl_hint_service.config import get_settings
 from lfm_vl_hint_service.models import SuggestionItem, SuggestionsFromFramesRequest, SuggestionsFromFramesResponse
 from lfm_vl_hint_service.prompts import narrative_system_prompt, narrative_user_payload, streetview_user_prompt
+from lfm_vl_hint_service.spaces_zero import apply_zero_gpu
 
 _model: Any = None
 _processor: Any = None
+
+
+def _force_model_cuda() -> bool:
+    """HF ZeroGPU / CUDA emulation: place weights on ``cuda`` even when no physical GPU yet."""
+    return os.environ.get("LFM_VL_FORCE_MODEL_CUDA", "").lower() in ("1", "true", "yes")
 
 
 def reset_transformers_model() -> None:
@@ -32,7 +43,14 @@ def _pil_from_b64(b64: str) -> Image.Image:
     return Image.open(BytesIO(raw)).convert("RGB")
 
 
-def _load_hf():
+def ensure_transformers_model_loaded() -> tuple[Any, Any]:
+    """
+    Load processor + model **once** (outside ``@spaces.GPU``).
+
+    Call from FastAPI ``lifespan`` when ``LFM_VL_EAGER_LOAD=1``, or lazily on first inference.
+    For Hugging Face ZeroGPU Spaces, set ``LFM_VL_FORCE_MODEL_CUDA=1`` so weights sit on
+    ``cuda`` during CUDA emulation before real GPU inside ``generate``.
+    """
     global _model, _processor
     if _model is not None and _processor is not None:
         return _model, _processor
@@ -68,11 +86,42 @@ def _load_hf():
         _model = AutoModelForImageTextToText.from_pretrained(mid, **base_kw)
         dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         _model = _model.to(dev)
+
+    if _force_model_cuda():
+        try:
+            dm = getattr(_model, "hf_device_map", None) or {}
+            if not dm:
+                _model = _model.to("cuda")
+        except Exception:
+            pass
+    elif torch.cuda.is_available():
+        try:
+            dm = getattr(_model, "hf_device_map", None) or {}
+            if not dm and str(next(_model.parameters()).device) == "cpu":
+                _model = _model.to("cuda")
+        except Exception:
+            pass
+
     return _model, _processor
 
 
+def _raw_model_generate(gen_kwargs: dict[str, Any]) -> Any:
+    """Only ``model.generate`` — wrapped by ``apply_zero_gpu`` for ZeroGPU."""
+    global _model
+    if _model is None:
+        raise RuntimeError("transformers model not loaded; call ensure_transformers_model_loaded() first")
+    try:
+        return _model.generate(**gen_kwargs)
+    except TypeError:
+        gen2 = {k: v for k, v in gen_kwargs.items() if k != "min_p"}
+        return _model.generate(**gen2)
+
+
+_model_generate_gpu = apply_zero_gpu(_raw_model_generate)
+
+
 def infer_from_frames_transformers(req: SuggestionsFromFramesRequest) -> SuggestionsFromFramesResponse:
-    model, processor = _load_hf()
+    model, processor = ensure_transformers_model_loaded()
     device = model.device
     out: list[SuggestionItem] = []
     settings = get_settings()
@@ -113,11 +162,7 @@ def infer_from_frames_transformers(req: SuggestionsFromFramesRequest) -> Suggest
             "repetition_penalty": 1.05,
             "min_p": 0.15,
         }
-        try:
-            output_ids = model.generate(**gen_kwargs)
-        except TypeError:
-            gen_kwargs.pop("min_p", None)
-            output_ids = model.generate(**gen_kwargs)
+        output_ids = _model_generate_gpu(gen_kwargs)
         new_tokens = output_ids[:, in_len:]
         text = processor.batch_decode(new_tokens, skip_special_tokens=True)[0].strip()
         out.append(SuggestionItem(text=text, viewpoint_id=vid, rank=i + 1))
@@ -126,7 +171,7 @@ def infer_from_frames_transformers(req: SuggestionsFromFramesRequest) -> Suggest
 
 
 def narrative_fuse_transformers(captions: list[tuple[str, str]]) -> str:
-    model, processor = _load_hf()
+    model, processor = ensure_transformers_model_loaded()
     device = model.device
     settings = get_settings()
     conversation: list[dict[str, Any]] = [
@@ -148,11 +193,12 @@ def narrative_fuse_transformers(captions: list[tuple[str, str]]) -> str:
     else:
         inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
     in_len = int(inputs["input_ids"].shape[1])
-    output_ids = model.generate(
+    gen_kwargs = {
         **inputs,
-        max_new_tokens=min(512, settings.max_new_tokens),
-        do_sample=True,
-        temperature=0.2,
-    )
+        "max_new_tokens": min(512, settings.max_new_tokens),
+        "do_sample": True,
+        "temperature": 0.2,
+    }
+    output_ids = _model_generate_gpu(gen_kwargs)
     new_tokens = output_ids[:, in_len:]
     return processor.batch_decode(new_tokens, skip_special_tokens=True)[0].strip()

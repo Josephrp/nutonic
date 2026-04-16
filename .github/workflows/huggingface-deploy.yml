@@ -1,0 +1,275 @@
+# Deploy Python services to Hugging Face Docker Spaces after targeted pytest.
+# Secrets: HF_TOKEN_TONIC (Spaces under Tonic), HF_TOKEN_NUTONIC (Spaces under NuTonic).
+# See tools/hf_deploy/README.md
+
+name: huggingface — deploy Spaces
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "inference/lfm_vl_hint_service/**"
+      - "inference/terramind_tim_local/**"
+      - "server/**"
+      - "inference/pro_materialization_service/**"
+      - "tools/hf_deploy/**"
+      - ".github/workflows/huggingface-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Which services to deploy"
+        type: choice
+        options:
+          - all
+          - lfm_vl_hint
+          - terramind_tim
+          - game_server
+          - pro_materialization
+        default: all
+
+concurrency:
+  group: huggingface-deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Path / dispatch gate
+    runs-on: ubuntu-latest
+    outputs:
+      lfm: ${{ steps.set.outputs.lfm }}
+      tim: ${{ steps.set.outputs.tim }}
+      server: ${{ steps.set.outputs.server }}
+      pro: ${{ steps.set.outputs.pro }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            lfm:
+              - 'inference/lfm_vl_hint_service/**'
+            tim:
+              - 'inference/terramind_tim_local/**'
+            server:
+              - 'server/**'
+            pro:
+              - 'inference/pro_materialization_service/**'
+            tools:
+              - 'tools/hf_deploy/**'
+              - '.github/workflows/huggingface-deploy.yml'
+
+      - id: set
+        shell: bash
+        run: |
+          set_deploy_flags() {
+            echo "lfm=$1" >> "$GITHUB_OUTPUT"
+            echo "tim=$2" >> "$GITHUB_OUTPUT"
+            echo "server=$3" >> "$GITHUB_OUTPUT"
+            echo "pro=$4" >> "$GITHUB_OUTPUT"
+          }
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            T="${{ github.event.inputs.targets }}"
+            case "$T" in
+              all)
+                set_deploy_flags true true true true ;;
+              lfm_vl_hint)
+                set_deploy_flags true false false false ;;
+              terramind_tim)
+                set_deploy_flags false true false false ;;
+              game_server)
+                set_deploy_flags false false true false ;;
+              pro_materialization)
+                set_deploy_flags false false false true ;;
+              *)
+                set_deploy_flags true true true true ;;
+            esac
+          else
+            LFM='${{ steps.filter.outputs.lfm }}'
+            TIM='${{ steps.filter.outputs.tim }}'
+            SRV='${{ steps.filter.outputs.server }}'
+            PRO='${{ steps.filter.outputs.pro }}'
+            TOOLS='${{ steps.filter.outputs.tools }}'
+            if [ "$TOOLS" = "true" ]; then
+              set_deploy_flags true true true true
+            else
+              set_deploy_flags "${LFM:-false}" "${TIM:-false}" "${SRV:-false}" "${PRO:-false}"
+            fi
+          fi
+
+  pytest-lfm-vl-hint:
+    name: Pytest — lfm_vl_hint_service
+    needs: changes
+    if: needs.changes.outputs.lfm == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test
+        run: |
+          pip install -U pip
+          pip install pytest
+          pip install -e "./inference/lfm_vl_hint_service[dev]"
+          python -m pytest inference/lfm_vl_hint_service/tests -q
+
+  pytest-terramind-tim:
+    name: Pytest — terramind_tim_local
+    needs: changes
+    if: needs.changes.outputs.tim == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test
+        run: |
+          pip install -U pip setuptools wheel
+          pip install pytest
+          pip install -e "./inference/terramind_tim_local[dev,space]"
+          python -m pytest inference/terramind_tim_local/tests -q
+
+  pytest-game-server:
+    name: Pytest — server
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test
+        run: |
+          pip install -U pip
+          pip install -e "./server[dev]"
+          pytest server/tests -q
+
+  pytest-pro-materialization:
+    name: Pytest — pro_materialization_service
+    needs: changes
+    if: needs.changes.outputs.pro == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test
+        run: |
+          pip install -U pip
+          pip install pytest
+          pip install -e "./inference/pro_materialization_service"
+          python -m pytest inference/pro_materialization_service/tests -q
+
+  deploy-lfm-vl-hint:
+    name: HF upload — LFM-VL Street View (Tonic)
+    needs: [changes, pytest-lfm-vl-hint]
+    if: needs.changes.outputs.lfm == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install hub CLI deps
+        run: pip install -r tools/hf_deploy/requirements.txt
+      - name: Upload Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC }}
+        run: >
+          python tools/hf_deploy/upload_space.py
+          --service lfm_vl_hint
+          --repo-id Tonic/nutonic-lfm-vl-streetview
+          --token-env HF_TOKEN
+
+  deploy-terramind-tim:
+    name: HF upload — TerraMind TiM (Tonic)
+    needs: [changes, pytest-terramind-tim]
+    if: needs.changes.outputs.tim == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r tools/hf_deploy/requirements.txt
+      - name: Upload Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC }}
+        run: >
+          python tools/hf_deploy/upload_space.py
+          --service terramind_tim
+          --repo-id Tonic/nutonic-terramind-tim
+          --token-env HF_TOKEN
+
+  deploy-game-server:
+    name: HF upload — game server (NuTonic)
+    needs: [changes, pytest-game-server]
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r tools/hf_deploy/requirements.txt
+      - name: Upload Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC }}
+        run: >
+          python tools/hf_deploy/upload_space.py
+          --service game_server
+          --repo-id NuTonic/nutonic-game-server
+          --token-env HF_TOKEN
+
+  deploy-pro-materialization:
+    name: HF upload — PRO materialization (NuTonic)
+    needs: [changes, pytest-pro-materialization]
+    if: needs.changes.outputs.pro == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r tools/hf_deploy/requirements.txt
+      - name: Upload Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC }}
+        run: >
+          python tools/hf_deploy/upload_space.py
+          --service pro_materialization
+          --repo-id NuTonic/nutonic-pro-materialization
+          --token-env HF_TOKEN

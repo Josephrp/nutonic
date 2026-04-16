@@ -60,6 +60,17 @@ uv run --directory inference/terramind_tim_local pytest tests -q
 
 Weights download from Hugging Face on first `pretrained: true` run (`HF_TOKEN` optional for higher rate limits).
 
+### Hugging Face Space (Docker + optional ZeroGPU)
+
+Optional **`[space]`** extra adds **FastAPI** on port **`PORT`** (default **7860**): **`GET /health`**, **`POST /v1/tim/export`** (JSON `config` or `config_yaml`). Run locally:
+
+```bash
+pip install -e ".[space]"
+python -m nutonic_terramind_tim_local.run_space_serve
+```
+
+The repo **`Dockerfile`** targets **CUDA** images; pick **ZeroGPU** or GPU hardware on Hugging Face. CI deploy: **`tools/hf_deploy/README.md`**.
+
 ## Quick run (random RGB smoke)
 
 On Windows, if the console script is not on `PATH`, use the module form:

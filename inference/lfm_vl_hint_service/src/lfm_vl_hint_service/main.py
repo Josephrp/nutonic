@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
@@ -11,7 +13,18 @@ from lfm_vl_hint_service.config import get_settings
 from lfm_vl_hint_service.dispatch import effective_lfm_backend, infer_suggestions, narrative_fuse_text
 from lfm_vl_hint_service.models import SuggestionsFromFramesRequest, SuggestionsFromFramesResponse
 
-app = FastAPI(title="NU:TONIC LFM-VL hint service", version="0.2.0")
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    if os.environ.get("LFM_VL_EAGER_LOAD", "").lower() in ("1", "true", "yes"):
+        if effective_lfm_backend() == "transformers":
+            from lfm_vl_hint_service.infer_transformers import ensure_transformers_model_loaded
+
+            ensure_transformers_model_loaded()
+    yield
+
+
+app = FastAPI(title="NU:TONIC LFM-VL hint service", version="0.2.0", lifespan=_lifespan)
 
 
 class NarrativeCaption(BaseModel):
@@ -72,3 +85,25 @@ def narrative_fuse(req: NarrativeFuseRequest) -> NarrativeFuseResponse:
     caps = [(c.viewpoint_id, c.text) for c in req.captions]
     text = narrative_fuse_text(caps)
     return NarrativeFuseResponse(narrative=text)
+
+
+def _mount_gradio_if_requested(application: FastAPI) -> FastAPI:
+    """
+    Optional Gradio UI at ``/gradio`` (Hugging Face ZeroGPU + Gradio SDK).
+
+    Set ``LFM_VL_MOUNT_GRADIO=1`` and install the ``serve`` extra (``gradio``, ``spaces``).
+    """
+    import os
+
+    if os.environ.get("LFM_VL_MOUNT_GRADIO", "").lower() not in ("1", "true", "yes"):
+        return application
+    try:
+        import gradio as gr
+
+        from lfm_vl_hint_service.gradio_panel import build_gradio_blocks
+    except ImportError:
+        return application
+    return gr.mount_gradio_app(application, build_gradio_blocks(), path="/gradio")
+
+
+app = _mount_gradio_if_requested(app)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI
@@ -8,7 +10,18 @@ from lfm_vl_satellite_caption_service.config import get_settings
 from lfm_vl_satellite_caption_service.dispatch import effective_backend, infer
 from lfm_vl_satellite_caption_service.models import SatelliteInferRequest, SatelliteInferResponse
 
-app = FastAPI(title="NU:TONIC LFM-VL satellite caption service", version="0.1.0")
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    if os.environ.get("LFM_SATELLITE_EAGER_LOAD", "").lower() in ("1", "true", "yes"):
+        if effective_backend() == "transformers":
+            from lfm_vl_satellite_caption_service.infer_transformers import ensure_satellite_model_loaded
+
+            ensure_satellite_model_loaded()
+    yield
+
+
+app = FastAPI(title="NU:TONIC LFM-VL satellite caption service", version="0.1.0", lifespan=_lifespan)
 
 
 @app.get("/health")

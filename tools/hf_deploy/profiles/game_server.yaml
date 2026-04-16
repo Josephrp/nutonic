@@ -1,0 +1,15 @@
+# Thin game server (NuTonic). Prefer Postgres URL in secret for production.
+
+space_hardware: cpu-basic
+sleep_time_seconds: null
+
+variables:
+  FEATURE_RANKED: "false"
+  FEATURE_COMMUNITY_LB_POST: "false"
+  FEATURE_PRO_JOBS: "false"
+  NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH: "false"
+
+secrets:
+  JWT_SECRET: NUTONIC_JWT_SECRET
+  NUTONIC_LEADERBOARD_DATABASE_URL: NUTONIC_LEADERBOARD_DATABASE_URL
+  NUTONIC_RANKED_DATABASE_URL: NUTONIC_RANKED_DATABASE_URL

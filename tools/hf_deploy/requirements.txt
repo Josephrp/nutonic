@@ -1,1 +1,3 @@
-huggingface_hub>=0.26.0,<1
+# Ships the `hf` entry point (not `huggingface-cli`) and Python helpers for Space secret/variable sync.
+huggingface_hub>=1.10.2,<2
+PyYAML>=6.0.1,<7

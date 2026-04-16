@@ -1,0 +1,10 @@
+# PRO materialization worker (NuTonic / CPU).
+
+space_hardware: cpu-basic
+
+variables:
+  NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC: "1"
+
+secrets:
+  MAPBOX_ACCESS_TOKEN: NUTONIC_MAPBOX_ACCESS_TOKEN
+  NUTONIC_INFERENCE_HMAC_SECRET: NUTONIC_INFERENCE_HMAC_SECRET

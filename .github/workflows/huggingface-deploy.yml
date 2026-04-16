@@ -1,5 +1,6 @@
 # Deploy Python services to Hugging Face Docker Spaces after targeted pytest.
 # Secrets: HF_TOKEN_TONIC (Spaces under Tonic), HF_TOKEN_NUTONIC (Spaces under NuTonic).
+# Optional runtime secrets are forwarded as env vars so deploy_space.py can push them to the Space.
 # See tools/hf_deploy/README.md
 
 name: huggingface — deploy Spaces
@@ -182,7 +183,7 @@ jobs:
           python -m pytest inference/pro_materialization_service/tests -q
 
   deploy-lfm-vl-hint:
-    name: HF upload — LFM-VL Street View (Tonic)
+    name: HF deploy — LFM-VL Street View (Tonic)
     needs: [changes, pytest-lfm-vl-hint]
     if: needs.changes.outputs.lfm == 'true'
     runs-on: ubuntu-latest
@@ -194,19 +195,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install hub CLI deps
-        run: pip install -r tools/hf_deploy/requirements.txt
-      - name: Upload Space
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC }}
+          TONIC_LFM_OPENAI_API_KEY: ${{ secrets.TONIC_LFM_OPENAI_API_KEY }}
+          TONIC_LFM_OPENAI_BASE_URL: ${{ secrets.TONIC_LFM_OPENAI_BASE_URL }}
         run: >
-          python tools/hf_deploy/upload_space.py
+          python tools/hf_deploy/deploy_space.py
           --service lfm_vl_hint
           --repo-id Tonic/nutonic-lfm-vl-streetview
           --token-env HF_TOKEN
 
   deploy-terramind-tim:
-    name: HF upload — TerraMind TiM (Tonic)
+    name: HF deploy — TerraMind TiM (Tonic)
     needs: [changes, pytest-terramind-tim]
     if: needs.changes.outputs.tim == 'true'
     runs-on: ubuntu-latest
@@ -218,18 +224,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r tools/hf_deploy/requirements.txt
-      - name: Upload Space
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC }}
+          TONIC_TERRAMIND_HF_TOKEN: ${{ secrets.TONIC_TERRAMIND_HF_TOKEN }}
         run: >
-          python tools/hf_deploy/upload_space.py
+          python tools/hf_deploy/deploy_space.py
           --service terramind_tim
           --repo-id Tonic/nutonic-terramind-tim
           --token-env HF_TOKEN
 
   deploy-game-server:
-    name: HF upload — game server (NuTonic)
+    name: HF deploy — game server (NuTonic)
     needs: [changes, pytest-game-server]
     if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
@@ -241,18 +252,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r tools/hf_deploy/requirements.txt
-      - name: Upload Space
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC }}
+          NUTONIC_JWT_SECRET: ${{ secrets.NUTONIC_JWT_SECRET }}
+          NUTONIC_LEADERBOARD_DATABASE_URL: ${{ secrets.NUTONIC_LEADERBOARD_DATABASE_URL }}
+          NUTONIC_RANKED_DATABASE_URL: ${{ secrets.NUTONIC_RANKED_DATABASE_URL }}
         run: >
-          python tools/hf_deploy/upload_space.py
+          python tools/hf_deploy/deploy_space.py
           --service game_server
           --repo-id NuTonic/nutonic-game-server
           --token-env HF_TOKEN
 
   deploy-pro-materialization:
-    name: HF upload — PRO materialization (NuTonic)
+    name: HF deploy — PRO materialization (NuTonic)
     needs: [changes, pytest-pro-materialization]
     if: needs.changes.outputs.pro == 'true'
     runs-on: ubuntu-latest
@@ -264,12 +282,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r tools/hf_deploy/requirements.txt
-      - name: Upload Space
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC }}
+          NUTONIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.NUTONIC_MAPBOX_ACCESS_TOKEN }}
+          NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET }}
         run: >
-          python tools/hf_deploy/upload_space.py
+          python tools/hf_deploy/deploy_space.py
           --service pro_materialization
           --repo-id NuTonic/nutonic-pro-materialization
           --token-env HF_TOKEN

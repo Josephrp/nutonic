@@ -1,0 +1,10 @@
+# TerraMind TiM local Space (Tonic / GPU or ZeroGPU).
+
+space_hardware: zero-a10g
+sleep_time_seconds: -1
+
+variables:
+  PORT: "7860"
+
+secrets:
+  HF_TOKEN: TONIC_TERRAMIND_HF_TOKEN

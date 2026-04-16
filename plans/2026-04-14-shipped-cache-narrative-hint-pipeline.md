@@ -262,7 +262,7 @@ They receive:
 | **Street View assist UI** | **Landed (SCAN dock):** `AssistDock` lists **`streetview_hint_pack`** lines + optional narrative from **`ManifestRoundLocation`** / ranked clue merge; ranked **forfeit** gating unchanged (`docs/RANKED-MODE.md` §6). |
 | **Idempotency fix** | Stable `Idempotency-Key` for ranked submit (separate small PR, prerequisite for ranked E2E). |
 
-**Web / WASM:** Large binary caps — consider **splitting** `ranked_clue_pack` by `map_id` lazy fetch from same origin or gzip; document in `docs/map-engines.md` annex.
+**Web (Kotlin/JS):** Large binary caps — consider **splitting** `ranked_clue_pack` by `map_id` lazy fetch from same origin or gzip; document in `docs/map-engines.md` annex.
 
 ---
 

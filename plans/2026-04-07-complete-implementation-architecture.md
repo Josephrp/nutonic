@@ -33,7 +33,7 @@ Illustrative tree (names may be adjusted; **boundaries** are normative):
 nutonic/                          # Gradle root (KMP client) — rules/03, 11
   shared/
     src/commonMain/kotlin/        # UI shell, theme, ViewModels, domain, API interfaces, DTOs
-    src/androidMain/ ... iosMain/ ... jvmMain/ ... webMain|jsMain|wasmJsMain/
+    src/androidMain/ ... iosMain/ ... jvmMain/ ... webMain|jsMain/
   androidApp/
   iosApp/                         # (or Xcode project consuming shared.framework)
   desktopApp/

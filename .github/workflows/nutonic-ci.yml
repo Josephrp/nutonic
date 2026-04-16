@@ -5,21 +5,9 @@ name: nutonic — quality, tests, clients
 
 on:
   workflow_dispatch:
-#  push:
-#    paths:
-#      - "nutonic/**"
-#      - "server/**"
-#      - "data/scripts/**"
-#      - "docs/scripts/**"
-#      - "tools/**"
-#      - "inference/streetview_pano_service/**"
-#      - "inference/lfm_vl_hint_service/**"
-#      - "inference/lfm_vl_satellite_caption_service/**"
-#      - "inference/pro_materialization_service/**"
-#      - "docs/openapi.yaml"
-#      - ".github/workflows/nutonic-ci.yml"
-#      - "rules/**"
   pull_request:
+    branches:
+      - main
     paths:
       - "nutonic/**"
       - "server/**"
@@ -32,6 +20,7 @@ on:
       - "inference/pro_materialization_service/**"
       - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
+      - ".github/workflows/nutonic-release.yml"
       - "rules/**"
 
 concurrency:
@@ -163,7 +152,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: androidApp/build/outputs/apk/debug/*.apk
+          path: nutonic/androidApp/build/outputs/apk/debug/*.apk
 
   desktop-deb:
     name: Desktop package (Linux deb)
@@ -192,10 +181,78 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-linux-deb
-          path: desktopApp/build/compose/binaries/main-release/deb/*.deb
+          path: nutonic/desktopApp/build/compose/binaries/main-release/deb/*.deb
+
+  desktop-msi:
+    name: Desktop package (Windows MSI)
+    needs: quality-and-unit-tests
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI
+        shell: bash
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Install WiX Toolset (Compose Desktop MSI)
+        run: choco install wixtoolset -y --no-progress
+
+      - name: Package release MSI
+        run: ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-msi
+          path: nutonic/desktopApp/build/compose/binaries/main-release/msi/*.msi
+
+  desktop-dmg:
+    name: Desktop package (macOS DMG)
+    needs: quality-and-unit-tests
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Package release DMG
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-dmg
+          path: nutonic/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
 
   web-bundles:
-    name: Web JS + Wasm production bundles
+    name: Web JS production bundle
     needs: quality-and-unit-tests
     runs-on: ubuntu-latest
     steps:
@@ -221,7 +278,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: web-js-productionExecutable
-          path: webApp/build/dist/js/productionExecutable/
+          path: nutonic/webApp/build/dist/js/productionExecutable/
 
   ios-framework:
     name: iOS shared framework (simulator)

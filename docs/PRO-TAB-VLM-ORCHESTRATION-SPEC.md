@@ -235,7 +235,7 @@ Illustrative JSON header (bytes may be **CBOR** or **zip**; OpenAPI must fix one
 ### 7.3 Client rendering parity
 
 - **Android / iOS / Desktop:** `Canvas` or `graphicsLayer` with **device pixel ratio** scaling so 0–1 boxes align.  
-- **Web (wasm/js):** Same math; test **one** reference bundle across targets in CI snapshot tests (`rules/11`).
+- **Web (Kotlin/JS):** Same math; test **one** reference bundle across targets in CI snapshot tests (`rules/11`).
 
 ### 7.4 Optional on-device bbox parse
 

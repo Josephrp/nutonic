@@ -8,7 +8,7 @@
 
 - **`shared` (`commonMain`)**: Navigation shell, design system, screen composables, ViewModels/state holders, DTOs, API interfaces, use cases, **game state machine, scoring, difficulty, levels, fairness rules** for **non-ranked** missions, **ranked round orchestration** (call start/submit, hold `round_ticket`, render server scores) for **ranked** missions, **PRO** surface (VLM port from **`refs/VLMExample/`**), and **pure logic**.
 
-- **Platform source sets** (`androidMain`, `iosMain`, `jvm` desktop, `webMain` / `js` / `wasmJs`): Entry points, permissions, **map view binding**, file I/O, and other expect/actual bridges. **Secure credential storage** only if an optional account/JWT mode is added later—not required for **default local-only** non-ranked leaderboards.
+- **Platform source sets** (`androidMain`, `iosMain`, `jvm` desktop, `webMain` / `js`): Entry points, permissions, **map view binding**, file I/O, and other expect/actual bridges. **Secure credential storage** only if an optional account/JWT mode is added later—not required for **default local-only** non-ranked leaderboards.
 
 
 

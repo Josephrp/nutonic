@@ -10,7 +10,7 @@
 
 - **`MapViewport` / `GameMapController`** lives behind one **`commonMain`** contract; each target ships a **thin** `expect`/`actual` (`rules/04-maps-and-gameplay.md`).
 - **Strict v1:** **behavioral parity** across all v1 targets — same routes, shell, tabs, guess flow, leaderboard dimensions, and PRO entry surface; only **platform ports** (map SDK, secure storage, attestation hooks) differ where the OS requires it.
-- Gradle **`shared`** already declares **Android**, **iOS** (device + simulators), **JVM desktop** (one **Compose Desktop** line used to ship **Windows, macOS, Linux**), **js**, and **wasmJs** (`nutonic/shared/build.gradle.kts`).
+- Gradle **`shared`** already declares **Android**, **iOS** (device + simulators), **JVM desktop** (one **Compose Desktop** line used to ship **Windows, macOS, Linux**), and **`js`** for the browser shell (`nutonic/shared/build.gradle.kts`). **Browser builds use Kotlin/JS only** (no second browser Gradle target in this repo).
 - **`mapview-desktop`** today is **Compose + OSM raster tiles** (`OPENSTREET_MAP_*` in `nutonic/mapview-desktop/.../Config.kt`). Android already depends on **Google Maps Compose**.
 
 ---
@@ -22,7 +22,7 @@
 | **Android** | Android devices | **Google Maps** (Maps Compose) | Keys / Play Services policy in Android build config — not `commonMain`. |
 | **iOS** | iPhone / iPad (+ simulators for CI) | **MapKit** (or agreed thin Swift/Compose interop wrapper) | Same contract as Android; satellite/road/hybrid mapped per `rules/04`. |
 | **Desktop** (`jvm("desktop")`) | **Windows, macOS, Linux** | **OSM + in-repo `mapview-desktop`** (Compose tile stack) | One desktop module; release pipelines produce per-OS installers as product defines. |
-| **Web** (`js` + `wasmJs`) | Browser | **MapLibre GL JS or Leaflet** (or documented Canvas fallback for constrained envs) | CORS, key policy, and perf differ from native — parity is **UX + contract**, not identical GPU path (`complete` plan §11). **js** vs **wasmJs** share one Web `MapViewport` design; dual artifacts stay build/test parity. |
+| **Web** (`js`) | Browser | **MapLibre GL JS or Leaflet** (or documented Canvas fallback for constrained envs) | CORS, key policy, and perf differ from native — parity is **UX + contract**, not identical GPU path (`complete` plan §11). |
 
 **Out of scope for this ADR:** Choosing store listing order or regional rollout — not the same as **code** parity.
 
@@ -33,7 +33,7 @@
 - **Desktop:** interactive `MapViewport` via `mapview-desktop` (OSM), provisional/locked markers, peer/AI overlays, and optimistic tap feedback.
 - **Android:** interactive `MapViewport` via Google Maps Compose, marker phases, and shared camera/bounds contract.
 - **iOS:** interactive `MapViewport` via MapKit with tap-to-place and marker annotations on the shared contract.
-- **Web (`js` + `wasmJs`):** interactive Canvas fallback `MapViewport` (pan/zoom/tap + marker layers + bounds) on the shared contract; MapLibre/Leaflet remains an optional future upgrade path.
+- **Web (`js`):** interactive Canvas fallback `MapViewport` (pan/zoom/tap + marker layers + bounds) on the shared contract; MapLibre/Leaflet remains an optional future upgrade path.
 
 ## Annex and off-client orchestration (normative for v1)
 

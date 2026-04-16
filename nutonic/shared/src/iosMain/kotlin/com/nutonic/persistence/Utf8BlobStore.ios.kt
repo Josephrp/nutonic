@@ -22,6 +22,7 @@ private class IosUtf8BlobStore(
     override suspend fun save(text: String) {
         withContext(Dispatchers.Default) {
             fileUrl.URLByDeletingLastPathComponent?.mkdirs()
+            // NSString.writeToURL(..., atomically = true) — durable single-file replace on iOS.
             fileUrl.writeText(text)
         }
     }

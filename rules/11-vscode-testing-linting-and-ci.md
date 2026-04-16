@@ -116,13 +116,23 @@ Place the generated `baseline.xml` at `nutonic/config/detekt/baseline.xml`. The 
 
 Workflow: **`.github/workflows/nutonic-ci.yml`**
 
+- **Triggers:** **`pull_request`** when the **base branch is `main`** (and paths match the filter below), plus **`workflow_dispatch`** for ad-hoc full CI from the Actions tab.
+- **Path filters:** PRs / dispatches only run client CI when changes touch listed paths (e.g. `nutonic/**`, `server/**`, `docs/openapi.yaml`, workflows under `.github/workflows/`, `rules/**`) — see the workflow file for the exact list.
+
 | Job | Runner | Purpose |
 |-----|--------|---------|
 | **quality-and-unit-tests** | `ubuntu-latest` | `./gradlew --continue quality test` (one invocation; `--continue` so lint and tests both run even if one fails); Android SDK via **setup-android before** `local.properties`; **Checks** from JUnit XML; artifacts for tests + detekt. |
 | **android-debug-apk** | `ubuntu-latest` | `:androidApp:assembleDebug` → APK artifact. |
 | **desktop-deb** | `ubuntu-latest` | `:desktopApp:packageReleaseDeb` → `.deb` artifact. |
-| **web-bundles** | `ubuntu-latest` | `:webApp:jsBrowserProductionWebpack` + `:webApp:wasmJsBrowserProductionWebpack` → upload `productionExecutable` trees. |
+| **desktop-msi** | `windows-latest` | `:desktopApp:packageReleaseMsi` after **WiX** (`choco install wixtoolset`) → `.msi` artifact. |
+| **desktop-dmg** | `macos-latest` | `:desktopApp:packageReleaseDmg` → `.dmg` artifact (unsigned; notarization still manual). |
+| **web-bundles** | `ubuntu-latest` | `:webApp:jsBrowserProductionWebpack` → upload **`webApp/build/dist/js/productionExecutable/`** tree. |
 | **ios-framework** | `macos-latest` | `:shared:linkDebugFrameworkIosSimulatorArm64` → zipped `shared.framework`. |
+
+### Release installers + GitHub Release (`.github/workflows/nutonic-release.yml`)
+
+- **Triggers:** **`push`** to **`main`** (path-filtered: `nutonic/**`, release workflow file, `docs/openapi.yaml`, `rules/**`) builds **`.deb` / `.msi` / `.dmg`** and uploads **workflow artifacts** (no GitHub Release on push). **`workflow_dispatch`** runs the same builds, then **publishes** assets to a **GitHub Release** for the **tag** you enter, using **`softprops/action-gh-release@v2.6.2`**.
+- **Repository settings:** publishing requires **Actions → General → Workflow permissions → Read and write** for the default `GITHUB_TOKEN` (the publish job sets **`contents: write`**; push-only runs use **`contents: read`**).
 
 ### CI conventions
 
@@ -135,7 +145,7 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 
 ### Not in CI (by default)
 
-- **Signing** release APK/AAB or notarizing macOS desktop installers.
+- **Store-grade signing:** Play/App Store **AAB/APK signing**, Windows **Authenticode** on MSI, or **Apple notarization** for macOS (PR CI still produces **unsigned** `.msi` / `.dmg` for smoke verification).
 - **App Store / Play** upload.
 - **iOS Xcode archive** for device; only **Simulator** framework linkage is automated here.
 
@@ -178,9 +188,9 @@ So the portable contract for the team is: **set `JAVA_HOME` to a JDK 17+**, or s
 
 If the daemon runs on **JDK 25** (or another version not yet handled by the Kotlin compiler bundled with **Gradle’s Kotlin DSL**), configuration can fail early with **`IllegalArgumentException: 25.0.2`** (or similar) inside **`JavaVersion.parse`**. Prefer a **JDK 17–23** (or the **JetBrains Runtime** that ships with **Android Studio**, typically **21**) for **`org.gradle.java.home`** / **`JAVA_HOME`**.
 
-### Kotlin/JS and Wasm: `kotlin-js-store`
+### Kotlin/JS: `kotlin-js-store`
 
-- A failed **`kotlinStoreYarnLock`** task usually means the resolved graph no longer matches the committed lockfile. Run **`./gradlew kotlinUpgradeYarnLock`** (or a full **`jsBrowserProductionWebpack`** / **`wasmJsBrowserProductionWebpack`** with a clean npm install) and **commit** the resulting changes under **`nutonic/kotlin-js-store/`** (including **`yarn.lock`** and, when present, the **`wasm/`** subtree) so CI and other clones stay reproducible.
+- A failed **`kotlinStoreYarnLock`** task usually means the resolved graph no longer matches the committed lockfile. Run **`./gradlew kotlinUpgradeYarnLock`** (or a full **`jsBrowserProductionWebpack`** with a clean npm install) and **commit** the resulting changes under **`nutonic/kotlin-js-store/`** (including **`yarn.lock`**) so CI and other clones stay reproducible.
 
 ### Documented example (copy-paste)
 
@@ -210,7 +220,7 @@ See **`nutonic/gradle.properties.PERSONAL.example`**: it explains putting **`org
 Typical one-liner after clone (from **`nutonic/`**):
 
 ```bash
-./gradlew --no-configuration-cache test :androidApp:assembleDebug :desktopApp:compileKotlinJvm :webApp:jsBrowserProductionWebpack :webApp:wasmJsBrowserProductionWebpack
+./gradlew --no-configuration-cache test :androidApp:assembleDebug :desktopApp:compileKotlinJvm :webApp:jsBrowserProductionWebpack
 ```
 
 If **`quality`** fails on **ktlint** for the legacy template tree, run **`./gradlew formatKotlin`** and re-run **`./gradlew quality`**, or ratchet with **`detektBaseline`** (see §4).
@@ -291,7 +301,7 @@ npm run pm2:test           # optional ad-hoc
 - **Windows vs Unix:** The launcher selects **`nutonic/gradlew.bat`** vs **`gradlew`** automatically (aligned with **`.vscode/tasks.json`**).
 - **Do not pipe raw `pm2 jlist` through PowerShell `ConvertFrom-Json`:** PM2’s payload can include **duplicate env keys** differing only by case; use **`npm run pm2:jlist`** or **`node scripts/pm2-jlist-json.cjs`** and parse in Node.
 - **`pm2 update`:** Restarts the PM2 daemon and may **restore** apps from **`~/.pm2/dump.pm2`**; use with care on shared laptops (see runbook §6.3).
-- **Web / Wasm builds:** **`nutonic-build-verify`** can take a long time and may require a valid **`kotlin-js-store`** / lockfile state per §7.
+- **Web (Kotlin/JS) builds:** **`nutonic-build-verify`** can take a long time and may require a valid **`kotlin-js-store`** / lockfile state per §7.
 - **Future `server/` tests:** When **`server/`** lands, extend mandatory assessment with a PM2 app (e.g. **`pytest`**) and **`logs/`** paths; document in **`docs/PM2_LOCAL_VERIFICATION.md`** and add a row to §9.2 (`plans/2026-04-07-gradio-terramind-backend.md`).
 
 ---
@@ -300,5 +310,5 @@ npm run pm2:test           # optional ad-hoc
 
 - **`03-kotlin-multiplatform-structure.md`** — where tests and shared code live.
 - **`05-networking-leaderboard.md`** — **local** default leaderboards, optional community API, ranked contracts (not covered by this file).
-- **`14-testing-validation-pm2-and-documentation.md`** — PM2-first testing for Kotlin, Kotlin/JS/Wasm, and Python; **mandatory log review** and fix-before-continue; **complete PM2 environment** per feature; pragmatic **tests vs code** order; **plans/** pinning and **rules/docs** updates when standards shift.
+- **`14-testing-validation-pm2-and-documentation.md`** — PM2-first testing for Kotlin, Kotlin/JS, and Python; **mandatory log review** and fix-before-continue; **complete PM2 environment** per feature; pragmatic **tests vs code** order; **plans/** pinning and **rules/docs** updates when standards shift.
 - **`README.md`** (rules) — reading order for product and UX constraints.

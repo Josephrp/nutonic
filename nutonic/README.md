@@ -22,12 +22,17 @@ Choose a run configuration for an appropriate target in IDE and run it.
 
 `./gradlew desktopApp:run`
 
-### Building native desktop distribution
+### Building native desktop installers
 
+From **`nutonic/`** (per-OS packages, e.g. **`.deb`**, **`.msi`**, **`.dmg`**):
+
+```bash
+./gradlew :desktopApp:packageReleaseDeb    # Linux
+./gradlew :desktopApp:packageReleaseMsi    # Windows (WiX Toolset required)
+./gradlew :desktopApp:packageReleaseDmg    # macOS
 ```
-./gradlew :desktop:packageDistributionForCurrentOS
-# outputs are written to desktopApp/build/compose/binaries
-```
+
+Outputs: **`desktopApp/build/compose/binaries/main-release/`**. **PR CI** (`nutonic-ci.yml`) and **pushes to `main`** (`nutonic-release.yml`) build installers on **Ubuntu / Windows / macOS** (see **`../rules/11-vscode-testing-linting-and-ci.md`** §5). **Publish a GitHub Release:** run **`.github/workflows/nutonic-release.yml`** from the **Actions** tab via **`workflow_dispatch`** (tag + optional draft).
 
 ## Run on Web via Gradle
 

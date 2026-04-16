@@ -1,0 +1,146 @@
+# Builds Linux .deb, Windows .msi, and macOS .dmg on every matching push to `main` (workflow artifacts only).
+# **GitHub Release** upload runs only on `workflow_dispatch` (tag + optional draft).
+# Publish job needs **Actions → General → Workflow permissions: Read and write** for `GITHUB_TOKEN`.
+
+name: nutonic — release (installers + optional GitHub Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0). Created at the workflow commit if it does not exist."
+        required: true
+        type: string
+      draft:
+        description: "Create as draft release"
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - "nutonic/**"
+      - ".github/workflows/nutonic-release.yml"
+      - "docs/openapi.yaml"
+      - "rules/**"
+
+concurrency:
+  group: nutonic-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: nutonic
+
+jobs:
+  build-linux-deb:
+    name: Release build — Linux .deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Package release .deb
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDeb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-deb
+          path: nutonic/desktopApp/build/compose/binaries/main-release/deb/*.deb
+
+  build-windows-msi:
+    name: Release build — Windows .msi
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Local properties for CI
+        shell: bash
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Install WiX Toolset (Compose Desktop MSI)
+        run: choco install wixtoolset -y --no-progress
+      - name: Package release MSI
+        run: ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-msi
+          path: nutonic/desktopApp/build/compose/binaries/main-release/msi/*.msi
+
+  build-macos-dmg:
+    name: Release build — macOS .dmg
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Package release DMG
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-dmg
+          path: nutonic/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
+
+  publish-github-release:
+    name: Publish GitHub Release
+    if: github.event_name == 'workflow_dispatch'
+    needs: [build-linux-deb, build-windows-msi, build-macos-dmg]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Flatten installers for release upload
+        run: |
+          mkdir -p upload
+          find dist -type f \( -name '*.deb' -o -name '*.msi' -o -name '*.dmg' \) -exec cp -v {} upload/ \;
+          ls -la upload/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2.6.2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.tag }}
+          draft: ${{ github.event.inputs.draft }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: upload/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

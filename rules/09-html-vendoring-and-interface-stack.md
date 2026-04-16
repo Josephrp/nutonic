@@ -4,7 +4,7 @@ This document records the **technical implications** of “fully vendoring” th
 
 ## What `nutonic/kotlin-js-store` is
 
-- The **`kotlin-js-store/`** directory (notably `yarn.lock`) is part of the **Kotlin/JS (and related browser targets) Gradle toolchain**: Yarn/npm resolution for **Webpack** and transitive JS dependencies used when compiling **Kotlin/JS** or **Kotlin/Wasm** browser binaries.
+- The **`kotlin-js-store/`** directory (notably `yarn.lock`) is part of the **Kotlin/JS** Gradle toolchain: Yarn/npm resolution for **Webpack** and transitive JS dependencies used when compiling **Kotlin/JS** browser binaries.
 - It is **not** an application UI module, a design system, or a place to drop vendored screen HTML unless you deliberately extend the JS build with a **packaged web asset pipeline** (see below).
 - **Rule:** Treat `kotlin-js-store` as **build infrastructure**. Do not assume “putting HTML there” integrates with Android, iOS, or Desktop Compose targets.
 

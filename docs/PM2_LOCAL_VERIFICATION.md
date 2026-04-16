@@ -33,7 +33,7 @@ This document records how NU:TONIC runs **Kotlin Multiplatform** checks under **
 | `nutonic-test` | `--no-configuration-cache test` | no | ~seconds–minutes |
 | `nutonic-quality` | `--no-configuration-cache quality` | no | ~seconds–minutes |
 | `nutonic-ci-local` | `--no-configuration-cache --continue quality test` | no | ~tens of seconds |
-| `nutonic-build-verify` | `test` + `:androidApp:assembleDebug` + `:desktopApp:compileKotlinJvm` + JS/Wasm **production** webpack | no | **several minutes** (webpack + wasm) |
+| `nutonic-build-verify` | `test` + `:androidApp:assembleDebug` + `:desktopApp:compileKotlinJvm` + JS **production** webpack | no | **several minutes** (webpack) |
 | `nutonic-test-watch` | `test --continuous` | yes | long-running |
 
 **Start one app at a time** unless you intentionally want parallel Gradle load:
@@ -89,7 +89,7 @@ Environment notes: Gradle **8.13**, Kotlin **2.0.21**, launcher JVM **25** (with
 ### 5.2 `nutonic-build-verify`
 
 - **Duration:** `BUILD SUCCESSFUL in 6m 18s`; **189** actionable tasks (**92** executed).
-- **Notable output:** Webpack **asset size** hints for large JS/Wasm bundles (expected for Compose Multiplatform template).
+- **Notable output:** Webpack **asset size** hints for large JS bundles (expected for Compose Multiplatform template).
 - **Kotlin:** Various **deprecation** and **expect/actual Beta** warnings; build still succeeded.
 
 ### 5.3 `nutonic-test`

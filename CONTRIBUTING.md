@@ -51,7 +51,7 @@ From **`nutonic/`** (see [`rules/11`](rules/11-vscode-testing-linting-and-ci.md)
 
 **KMP rule of thumb:** game rules, non-ranked scoring, and shared UI belong in **`shared/src/commonMain`**; platform folders stay thin ([`rules/03`](rules/03-kotlin-multiplatform-structure.md)).
 
-**Kotlin/JS + Wasm:** if you change JS/Wasm dependencies, follow **`rules/11`** §7 on **`nutonic/kotlin-js-store/`** and lockfile hygiene.
+**Kotlin/JS:** if you change JS dependencies or the lockfile, follow **`rules/11`** §7 on **`nutonic/kotlin-js-store/`** and lockfile hygiene.
 
 ---
 

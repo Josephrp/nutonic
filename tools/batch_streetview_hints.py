@@ -10,8 +10,10 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import random
 import sys
+import zlib
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,9 +38,19 @@ EXIT_OK = 0
 EXIT_HARD = 9
 EXIT_USAGE = 2
 
-# VLMs often slightly exceed 400 chars; keep a hard cap for manifest / client safety.
-MAX_PACK_CAPTION = 480
-MAX_NARRATIVE = 900
+# Keep aligned with ``streetview_pano_service.sampling_extent.S2_AREA_POLICY_VERSION``.
+S2_AREA_POLICY_VERSION = "2026-04-18.v1"
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, str(default)).strip())
+    except ValueError:
+        return default
+
+
+# Caps are soft policy; override with NUTONIC_STREETVIEW_* env for long-caption pipelines.
+MAX_PACK_CAPTION = max(400, _int_env("NUTONIC_STREETVIEW_PACK_CAPTION_MAX", 2400))
+MAX_NARRATIVE = max(400, _int_env("NUTONIC_STREETVIEW_NARRATIVE_MAX", 2400))
 
 
 @dataclass
@@ -66,6 +78,11 @@ class BatchConfig:
     allow_partial: bool = False
     timeout_sec: float = 120.0
     ranked_clue_safe: bool = True
+    pano_sampling_mode: str = "STOCHASTIC_S2_FOOTPRINT"
+    pano_jitter_seed: int | None = None
+    pano_area_radius_m: float | None = None
+    pano_min_anchor_separation_m: float | None = None
+    pano_legacy_radius_m: float = 120.0
 
 
 def _normalize_base(url: str) -> str:
@@ -123,6 +140,14 @@ def _select_locations(cfg: BatchConfig) -> list[dict[str, Any]]:
     return rows
 
 
+def _derive_pano_jitter_seed(cfg: BatchConfig, location_id: str) -> int | None:
+    if cfg.pano_jitter_seed is not None:
+        return int(cfg.pano_jitter_seed)
+    if cfg.shuffle_seed is not None:
+        return zlib.adler32(f"{cfg.shuffle_seed}:{location_id}".encode("utf-8")) & 0x7FFFFFFF
+    return None
+
+
 def _pano_sample(
     client: httpx.Client,
     pano_base: str,
@@ -130,24 +155,50 @@ def _pano_sample(
     lat: float,
     lon: float,
     count: int,
+    location_id: str,
+    cfg: BatchConfig,
 ) -> dict[str, Any]:
     base = _normalize_base(pano_base)
-    body = {
+    body: dict[str, Any] = {
         "request_id": str(uuid.uuid4()),
         "center": {"lat": lat, "lon": lon},
         "count": count,
-        "radius_m": 120,
-        "heading_mode": "RADIAL_OR_RANDOM",
+        "sampling_mode": cfg.pano_sampling_mode,
         "image_width": 640,
         "image_height": 640,
     }
+    js = _derive_pano_jitter_seed(cfg, location_id)
+    if js is not None:
+        body["jitter_seed"] = js
+    if cfg.pano_area_radius_m is not None:
+        body["area_radius_m"] = float(cfg.pano_area_radius_m)
+    if cfg.pano_min_anchor_separation_m is not None:
+        body["min_anchor_separation_m"] = float(cfg.pano_min_anchor_separation_m)
+    if cfg.pano_sampling_mode == "LEGACY_RADIAL_OFFSET":
+        body["radius_m"] = float(cfg.pano_legacy_radius_m)
     primary = urljoin(base, "api/v1/panos/sample")
     legacy = urljoin(base, "v1/panos/sample")
-    r1 = client.post(primary, json=body, headers=_hmac_headers("POST", primary))
+    hdr = _hmac_headers("POST", primary)
+    last_body: dict[str, Any] = body
+    r1 = client.post(primary, json=body, headers=hdr)
+    if r1.status_code == 503 and cfg.pano_sampling_mode == "STOCHASTIC_S2_FOOTPRINT":
+        body_retry: dict[str, Any] = {
+            "request_id": str(uuid.uuid4()),
+            "center": dict(body["center"]),
+            "count": count,
+            "sampling_mode": "LEGACY_RADIAL_OFFSET",
+            "radius_m": float(cfg.pano_legacy_radius_m),
+            "image_width": int(body.get("image_width", 640)),
+            "image_height": int(body.get("image_height", 640)),
+        }
+        if js is not None:
+            body_retry["jitter_seed"] = js
+        last_body = body_retry
+        r1 = client.post(primary, json=body_retry, headers=hdr)
     if r1.status_code != 404:
         r1.raise_for_status()
         return r1.json()
-    r2 = client.post(legacy, json=body, headers=_hmac_headers("POST", legacy))
+    r2 = client.post(legacy, json=last_body, headers=_hmac_headers("POST", legacy))
     r2.raise_for_status()
     return r2.json()
 
@@ -190,7 +241,7 @@ def _validate_pack_suggestions(raw: list[dict[str, Any]]) -> list[dict[str, Any]
             raise ValueError("; ".join(v.format_line() for v in viol))
         out.append({"text": text, "viewpoint_id": vid, "rank": rank})
     out.sort(key=lambda x: (x["rank"], x["viewpoint_id"]))
-    return out
+    return [{**item, "rank": i} for i, item in enumerate(out, start=1)]
 
 
 def _optional_narrative(
@@ -263,7 +314,7 @@ def _try_health_json(client: httpx.Client, base: str) -> dict[str, Any]:
         return {}
 
 
-def _pano_model_pin(pano_health: dict[str, Any]) -> dict[str, Any]:
+def _pano_model_pin(pano_health: dict[str, Any], *, sampling_mode: str) -> dict[str, Any]:
     prov = str(pano_health.get("streetview_provider", "stub"))
     gcfg = str(pano_health.get("google_configured", "no"))
     uses_real_google = prov == "google" or (prov == "auto" and gcfg == "yes")
@@ -272,6 +323,9 @@ def _pano_model_pin(pano_health: dict[str, Any]) -> dict[str, Any]:
         "streetview_provider": prov,
         "google_configured": gcfg,
         "stub_jpeg": not uses_real_google,
+        "sampling_mode": sampling_mode,
+        "s2_area_policy_version": S2_AREA_POLICY_VERSION,
+        "streetview_sampling_version": S2_AREA_POLICY_VERSION,
     }
     return pin
 
@@ -356,6 +410,8 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                 lat=lat,
                 lon=lon,
                 count=cfg.sv_screenshots_per_location,
+                location_id=lid,
+                cfg=cfg,
             )
             frames_raw = pano_json.get("frames")
             if not isinstance(frames_raw, list) or not frames_raw:
@@ -416,7 +472,10 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                                 satellite_side["raw"] = sat
 
             model_pins: dict[str, Any] = {
-                "streetview_pano_service": _pano_model_pin(pano_health),
+                "streetview_pano_service": _pano_model_pin(
+                    pano_health,
+                    sampling_mode=cfg.pano_sampling_mode,
+                ),
                 "lfm_vl_hint_service": _lfm_model_pin(lfm_health, prompt_template_version=cfg.prompt_template_version),
             }
             if sat_pin is not None:
@@ -490,6 +549,31 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--allow-partial", action="store_true")
     p.add_argument("--timeout-sec", type=float, default=120.0)
     p.add_argument("--unsafe-ranked-clue-safe-off", action="store_true", help="Set ranked_clue_safe=false (lab only).")
+    p.add_argument(
+        "--pano-sampling-mode",
+        type=str,
+        default="STOCHASTIC_S2_FOOTPRINT",
+        help="Forwarded to pano service: STOCHASTIC_S2_FOOTPRINT | LEGACY_RADIAL_OFFSET | OMNI_SINGLE_PANO",
+    )
+    p.add_argument(
+        "--pano-jitter-seed",
+        type=int,
+        default=None,
+        help="Explicit jitter_seed for every POI; else derived from --shuffle-seed + location_id when shuffle set.",
+    )
+    p.add_argument("--pano-area-radius-m", type=float, default=None, help="Optional area_radius_m disk radius (meters).")
+    p.add_argument(
+        "--pano-min-anchor-separation-m",
+        type=float,
+        default=None,
+        help="Optional min_anchor_separation_m for stochastic sampling.",
+    )
+    p.add_argument(
+        "--pano-legacy-radius-m",
+        type=float,
+        default=120.0,
+        help="radius_m sent only when --pano-sampling-mode LEGACY_RADIAL_OFFSET.",
+    )
     args = p.parse_args(argv)
 
     lfm_url = args.lfm_vl_url or args.lfm_service_url
@@ -525,6 +609,13 @@ def main(argv: list[str] | None = None) -> int:
         allow_partial=args.allow_partial,
         timeout_sec=args.timeout_sec,
         ranked_clue_safe=not args.unsafe_ranked_clue_safe_off,
+        pano_sampling_mode=str(args.pano_sampling_mode).strip(),
+        pano_jitter_seed=args.pano_jitter_seed,
+        pano_area_radius_m=float(args.pano_area_radius_m) if args.pano_area_radius_m is not None else None,
+        pano_min_anchor_separation_m=float(args.pano_min_anchor_separation_m)
+        if args.pano_min_anchor_separation_m is not None
+        else None,
+        pano_legacy_radius_m=float(args.pano_legacy_radius_m),
     )
 
     factory = _build_client(cfg.timeout_sec)

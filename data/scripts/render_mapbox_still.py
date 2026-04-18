@@ -193,6 +193,7 @@ def process_location(
     rel_out = f"files/maps/{location_id}.jpg"
     dest_path = compose_maps_dir / f"{location_id}.jpg"
     meta_path = meta_stills_dir / f"{location_id}.meta.json"
+    cache_jpeg_path = meta_stills_dir / f"{location_id}.jpg"
 
     center_lat = truth_lat
     center_lon = truth_lon
@@ -251,10 +252,15 @@ def process_location(
     sha = _sha256_hex(jpeg)
     wpx, hpx = img.size
 
+    try:
+        bundle_rel = dest_path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        bundle_rel = rel_out.replace("\\", "/")
+
     record = {
         "location_id": location_id,
         "map_id": map_id,
-        "still_bundled_resource": rel_out.replace("\\", "/"),
+        "still_bundled_resource": bundle_rel,
         "still_bundle_id": f"nutonic.still.v1.{location_id}",
         "still_sha256": sha,
         "width_px": wpx,
@@ -272,7 +278,9 @@ def process_location(
 
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_stills_dir.mkdir(parents=True, exist_ok=True)
     dest_path.write_bytes(jpeg)
+    cache_jpeg_path.write_bytes(jpeg)
     meta_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return record
 

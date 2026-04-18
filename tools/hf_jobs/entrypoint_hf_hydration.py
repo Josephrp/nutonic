@@ -5,7 +5,8 @@ artifacts to a Hub **dataset** (``NUTONIC_HYDRATION_OUTPUT_DATASET``).
 
 Modes:
   ``sv-lfm`` — catalog import, geo + stills + useful_hints, pano + LFM-VL services, Street View batch, upload cache.
-  ``llm-sidecars`` — import catalog from mount, run ``narrative_llm_batch`` (stub or live), upload ``narrative/`` only.
+  ``llm-sidecars`` — import catalog from mount, run ``narrative_llm_batch`` (dry-run or live via vLLM / OpenAI HTTP /
+  in-process ``transformers`` / optional Ollama), upload ``narrative/`` only.
 
 Environment (typical):
   ``CONTENT_VERSION`` — cache segment / run id (required).
@@ -16,17 +17,33 @@ Environment (typical):
   ``NUTONIC_POI_LIMIT`` — if set (positive int), import **only** ``geoguessr_poi_12`` (first N by sorted
   ``poi_*`` order) and pass the same limit to the Street View batch (skips the dual 120+12 merge).
   ``NUTONIC_SKIP_GEO_HINTS`` — if ``1``, skip ``build_poi_geo_context`` / ``compile_useful_hint_tiers``
+  ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL`` — if not ``0``/``false``/``no`` (default: allow), ``build_poi_geo_context`` is run with ``--allow-partial`` so one bad POI does not fail the Job.
   (still runs Mapbox stills + batch without useful-hints injection).
   ``NUTONIC_POIDATA_REPO`` — dataset id for fallback ``snapshot_download`` (default ``NuTonic/poidata``).
   ``NUTONIC_NO_POIDATA_SNAPSHOT`` — if ``1``, do not pull missing trees from Hub (fail fast instead).
   ``NUTONIC_SKIP_CREATE_OUTPUT_DATASET`` — if ``1``, do not ``create_repo`` before upload (Hub 404 if missing).
   ``NUTONIC_HYDRATION_OUTPUT_PUBLIC`` — if ``1``, create output dataset as public when auto-creating; default private.
+
+  **LFM-VL (``sv-lfm`` only):** ``LFM_VL_BACKEND`` (default ``transformers`` if unset), ``LFM_VL_MODEL_ID``,
+  ``LFM_OPENAI_BASE_URL`` / ``LFM_OPENAI_MODEL`` when using ``openai_compatible`` (vLLM sidecar), etc.
+
+  **Narrative LLM (``llm-sidecars`` live):**   ``NUTONIC_NARRATIVE_LLM_LIVE=1``, ``NUTONIC_NARRATIVE_BACKEND`` one of
+  ``transformers`` (default when unset), ``vllm``, ``openai``, ``ollama``; ``NUTONIC_VLLM_MODEL``, ``NUTONIC_VLLM_AUTOSTART``,
+  ``NUTONIC_VLLM_PORT``, ``NUTONIC_NARRATIVE_OPENAI_*``, ``NUTONIC_NARRATIVE_TRANSFORMERS_MODEL``, ``OLLAMA_HOST``.
+
+  **Street View sampling (optional, see ``tools/hf_jobs/pano_batch_env.py``):**
+  ``NUTONIC_SHUFFLE_SEED``, ``NUTONIC_PANO_SAMPLING_MODE``, ``NUTONIC_PANO_JITTER_SEED``,
+  ``NUTONIC_PANO_AREA_RADIUS_M``, ``NUTONIC_PANO_MIN_ANCHOR_SEPARATION_M``, ``NUTONIC_PANO_LEGACY_RADIUS_M``
+  → forwarded as ``batch_streetview_hints.py`` CLI flags. Pano worker may read ``STREETVIEW_S2_*`` and
+  ``STREETVIEW_EXPOSE_SAMPLING_DEBUG`` if set in the Job environment.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -40,6 +57,15 @@ if str(_HF_JOBS_DIR) not in sys.path:
 import hf_output_dataset  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+_DS = str(REPO_ROOT / "data" / "scripts")
+if _DS not in sys.path:
+    sys.path.insert(0, _DS)
+try:
+    from liquid_ai_defaults import DEFAULT_LFM_TEXT_HF_MODEL_ID, DEFAULT_LFM_VL_HF_MODEL_ID
+except ImportError:
+    DEFAULT_LFM_TEXT_HF_MODEL_ID = "LiquidAI/LFM2.5-1.2B-Instruct"
+    DEFAULT_LFM_VL_HF_MODEL_ID = "LiquidAI/LFM2.5-VL-450M"
 
 
 def _poi_limit_argv() -> list[str]:
@@ -57,6 +83,13 @@ def _poi_limit_argv() -> list[str]:
 
 def _skip_geo_hints() -> bool:
     return os.environ.get("NUTONIC_SKIP_GEO_HINTS", "").strip() == "1"
+
+
+def _geo_context_allow_partial_argv() -> list[str]:
+    v = os.environ.get("NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL", "1").strip().lower()
+    if v in ("0", "false", "no"):
+        return []
+    return ["--allow-partial"]
 
 
 def _load_hub_token_into_env() -> None:
@@ -181,6 +214,44 @@ def _run_script(argv: list[str], *, env: dict[str, str] | None = None) -> None:
         raise RuntimeError(f"command failed rc={rc}: {' '.join(argv)}")
 
 
+def _wait_openai_v1_models(v1_base: str, *, timeout_sec: float) -> None:
+    """Poll OpenAI-compatible ``GET {v1_base}/models`` (vLLM / OpenAI)."""
+    deadline = time.monotonic() + timeout_sec
+    last_err: str | None = None
+    root = v1_base.rstrip("/")
+    if not root.endswith("/v1"):
+        root = root + "/v1"
+    url = f"{root}/models"
+    while time.monotonic() < deadline:
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                r = client.get(url)
+            if r.status_code == 200:
+                return
+            last_err = f"HTTP {r.status_code}"
+        except httpx.HTTPError as e:
+            last_err = str(e)
+        time.sleep(2.0)
+    raise RuntimeError(f"OpenAI-compatible /v1/models did not become ready at {url} (last: {last_err})")
+
+
+def _wait_ollama_ready(*, timeout_sec: float) -> None:
+    deadline = time.monotonic() + timeout_sec
+    last_err: str | None = None
+    base = (os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").strip().rstrip("/")) + "/api/tags"
+    while time.monotonic() < deadline:
+        try:
+            with httpx.Client(timeout=5.0) as client:
+                r = client.get(base)
+            if r.status_code == 200:
+                return
+            last_err = f"HTTP {r.status_code}"
+        except httpx.HTTPError as e:
+            last_err = str(e)
+        time.sleep(1.0)
+    raise RuntimeError(f"ollama did not become ready at {base} (last: {last_err})")
+
+
 def _wait_health(url: str, *, label: str, timeout_sec: float) -> None:
     deadline = time.monotonic() + timeout_sec
     last_err: str | None = None
@@ -218,11 +289,75 @@ def _upload_folder(local_dir: Path, *, path_in_repo: str) -> None:
     print(f"entrypoint: uploaded {local_dir} -> dataset:{repo_id}/{path_in_repo}", file=sys.stderr)
 
 
+def _ensure_vllm_openai_server() -> tuple[subprocess.Popen[bytes] | None, str, str]:
+    """
+    For narrative ``openai`` backend: optionally start vLLM OpenAI server, then wait for ``/v1/models``.
+
+    ``NUTONIC_VLLM_AUTOSTART=0`` — do not spawn; only wait on ``NUTONIC_VLLM_BASE`` /
+    ``NUTONIC_NARRATIVE_OPENAI_BASE``. Chat ``model`` defaults to Liquid **LFM** text id when unset
+    (see ``data/scripts/liquid_ai_defaults.py``).
+
+    Returns ``(server_process_or_none, openai_v1_base, chat_model_id)``.
+    """
+    port = int(os.environ.get("NUTONIC_VLLM_PORT", "8000").strip() or "8000")
+    autostart_raw = os.environ.get("NUTONIC_VLLM_AUTOSTART", "1").strip().lower()
+    autostart = autostart_raw not in ("0", "false", "no", "")
+    chat_model = (
+        os.environ.get("NUTONIC_NARRATIVE_OPENAI_MODEL", "").strip()
+        or os.environ.get("NUTONIC_VLLM_MODEL", "").strip()
+        or DEFAULT_LFM_TEXT_HF_MODEL_ID
+    )
+    proc: subprocess.Popen[bytes] | None = None
+
+    if not autostart:
+        v1 = (
+            os.environ.get("NUTONIC_VLLM_BASE", "").strip()
+            or os.environ.get("NUTONIC_NARRATIVE_OPENAI_BASE", "").strip()
+            or f"http://127.0.0.1:{port}/v1"
+        ).rstrip("/")
+        if not v1.endswith("/v1"):
+            v1 = f"{v1}/v1"
+        _wait_openai_v1_models(v1, timeout_sec=float(os.environ.get("NUTONIC_VLLM_READY_SEC", "900")))
+        return None, v1, chat_model
+
+    serve_model = os.environ.get("NUTONIC_VLLM_MODEL", "").strip() or chat_model
+    chat_model = os.environ.get("NUTONIC_NARRATIVE_OPENAI_MODEL", "").strip() or serve_model
+    custom = os.environ.get("NUTONIC_VLLM_SERVE_CMD", "").strip()
+    if custom:
+        proc = subprocess.Popen(
+            shlex.split(custom),
+            env={**os.environ},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    else:
+        proc = subprocess.Popen(
+            [
+                sys.executable,
+                "-m",
+                "vllm.entrypoints.openai.api_server",
+                "--model",
+                serve_model,
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(port),
+            ],
+            env={**os.environ},
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    v1 = f"http://127.0.0.1:{port}/v1"
+    _wait_openai_v1_models(v1, timeout_sec=float(os.environ.get("NUTONIC_VLLM_READY_SEC", "900")))
+    return proc, v1, chat_model
+
+
 def mode_llm_sidecars(cv: str) -> int:
     mount = Path(os.environ.get("POIDATA_MOUNT", "/mnt/poidata"))
     _ensure_poi_trees(mount, required=_required_poi_trees())
     py = sys.executable
     lim = _poi_limit_argv()
+    server_procs: list[subprocess.Popen[bytes]] = []
     if lim:
         _run_script(
             [
@@ -270,8 +405,13 @@ def mode_llm_sidecars(cv: str) -> int:
             ]
         )
     out_narr = REPO_ROOT / "data" / "cache" / cv / "narrative"
-    _run_script(
-        [
+    try:
+        want_live = os.environ.get("NUTONIC_NARRATIVE_LLM_LIVE", "").strip() == "1"
+        narr_backend = os.environ.get("NUTONIC_NARRATIVE_BACKEND", "").strip().lower()
+        if want_live and not narr_backend:
+            # In-container Hugging Face causal LM (see data/scripts/liquid_ai_defaults.py). Avoids vLLM HTTP unless opted in.
+            narr_backend = "transformers"
+        narr = [
             py,
             str(REPO_ROOT / "data" / "scripts" / "narrative_llm_batch.py"),
             "--content-version",
@@ -281,12 +421,80 @@ def mode_llm_sidecars(cv: str) -> int:
             "--output-dir",
             str(out_narr),
         ]
-    )
+        if want_live:
+            if narr_backend == "ollama":
+                if shutil.which("ollama"):
+                    op = subprocess.Popen(
+                        ["ollama", "serve"],
+                        env={**os.environ},
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.PIPE,
+                    )
+                    server_procs.append(op)
+                    _wait_ollama_ready(timeout_sec=float(os.environ.get("NUTONIC_OLLAMA_READY_SEC", "180")))
+                    if os.environ.get("NUTONIC_OLLAMA_PULL", "").strip() == "1":
+                        model = os.environ.get("NUTONIC_OLLAMA_MODEL", "llama3.2").strip()
+                        subprocess.run(["ollama", "pull", model], env={**os.environ}, check=False, timeout=3600)
+                    narr += [
+                        "--no-dry-run",
+                        "--backend",
+                        "ollama",
+                        "--ollama-url",
+                        (os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").strip().rstrip("/") or "http://127.0.0.1:11434"),
+                        "--ollama-model",
+                        os.environ.get("NUTONIC_OLLAMA_MODEL", "llama3.2").strip(),
+                    ]
+                else:
+                    print(
+                        "entrypoint: NUTONIC_NARRATIVE_BACKEND=ollama but `ollama` not on PATH; "
+                        "writing dry-run sidecar",
+                        file=sys.stderr,
+                    )
+            elif narr_backend == "transformers":
+                tm = (
+                    os.environ.get("NUTONIC_NARRATIVE_TRANSFORMERS_MODEL", "").strip()
+                    or DEFAULT_LFM_TEXT_HF_MODEL_ID
+                )
+                mtoks = os.environ.get("NUTONIC_NARRATIVE_TRANSFORMERS_MAX_NEW", "512").strip()
+                narr += [
+                    "--no-dry-run",
+                    "--backend",
+                    "transformers",
+                    "--transformers-model",
+                    tm,
+                    "--transformers-max-new-tokens",
+                    mtoks,
+                ]
+            else:
+                # Explicit ``vllm`` / ``openai``: OpenAI-compatible HTTP (vLLM or remote server).
+                vproc, v1_base, chat_model = _ensure_vllm_openai_server()
+                if vproc is not None:
+                    server_procs.append(vproc)
+                narr += [
+                    "--no-dry-run",
+                    "--backend",
+                    "openai",
+                    "--openai-base",
+                    v1_base,
+                    "--openai-model",
+                    chat_model,
+                ]
+        _run_script(narr)
+    finally:
+        for sp in reversed(server_procs):
+            if sp.poll() is None:
+                sp.terminate()
+                try:
+                    sp.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    sp.kill()
     _upload_folder(out_narr, path_in_repo=f"runs/{cv}/narrative")
     return 0
 
 
 def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
+    import pano_batch_env  # noqa: PLC0415 — only ``sv-lfm`` image ships ``pano_batch_env.py``; ``llm-sidecars`` omits it.
+
     if not (os.environ.get("GOOGLE_MAPS_API_KEY") or os.environ.get("GOOGLE_STREETVIEW_API_KEY")):
         print("entrypoint sv-lfm: missing GOOGLE_MAPS_API_KEY / GOOGLE_STREETVIEW_API_KEY", file=sys.stderr)
         return 2
@@ -358,6 +566,7 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
                 str(REPO_ROOT / "data" / "catalog"),
                 "--content-version",
                 cv,
+                *_geo_context_allow_partial_argv(),
             ]
         )
         geo_dir = REPO_ROOT / "data" / "cache" / cv / "geo_context"
@@ -399,13 +608,18 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
         "STREETVIEW_PROVIDER": "google",
         "PYTHONPATH": str(pano_src)
         + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""),
+        **pano_batch_env.pano_service_env_pass_through(),
     }
-    lfm_env = {
-        **os.environ,
-        "LFM_VL_BACKEND": "transformers",
-        "PYTHONPATH": str(lfm_src)
-        + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""),
-    }
+    lfm_env = dict(os.environ)
+    if not (lfm_env.get("LFM_VL_BACKEND") or "").strip():
+        lfm_env["LFM_VL_BACKEND"] = "transformers"
+    if not (lfm_env.get("LFM_VL_MODEL_ID") or "").strip():
+        lfm_env["LFM_VL_MODEL_ID"] = DEFAULT_LFM_VL_HF_MODEL_ID
+    lfm_pp = str(lfm_src)
+    if lfm_env.get("PYTHONPATH"):
+        lfm_env["PYTHONPATH"] = lfm_pp + os.pathsep + lfm_env["PYTHONPATH"]
+    else:
+        lfm_env["PYTHONPATH"] = lfm_pp
     pano_proc = subprocess.Popen(
         [
             py,
@@ -462,6 +676,7 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
             idx = batch.index("--still-index") + 2
             batch.insert(idx, "--useful-hints-dir")
             batch.insert(idx + 1, str(hints_dir))
+        batch.extend(pano_batch_env.pano_batch_cli_extras_from_environ())
         _run_script(batch)
     finally:
         for proc in (lfm_proc, pano_proc):

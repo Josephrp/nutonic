@@ -4,7 +4,7 @@ Submit Hugging Face Jobs for full cache hydration (sequential):
 
 1. **sv-lfm** — Street View + LFM-VL batch (GPU), uploads under ``runs/<content_version>/``.
 2. **tim** — TerraMind TiM STAC batch (GPU), uploads ``runs/<content_version>/tim/``.
-3. **llm-sidecars** — narrative stub batch (CPU), uploads ``runs/<content_version>/narrative/``.
+3. **llm-sidecars** — narrative batch (GPU + vLLM / transformers / optional Ollama), uploads ``runs/<content_version>/narrative/``.
 
 Then optionally ``snapshot_download`` the output dataset locally. No model weights load on your laptop.
 
@@ -17,8 +17,11 @@ Environment (after loading ``.env``):
   ``GOOGLE_MAPS_API_KEY``, ``MAPBOX_ACCESS_TOKEN`` — Job **secrets** for ``sv-lfm`` only.
 
 CLI ``--poi-limit N`` sets ``NUTONIC_POI_LIMIT`` for Jobs (single-tree ``geoguessr_poi_12`` slice; TiM uses
-the matching bundled YAML when ``N`` is 5). Use ``--skip-geo-hints`` if ``build_poi_geo_context`` fails
-for some POI coordinates.
+the matching bundled YAML when ``N`` is 5). Geo context uses ``--allow-partial`` in the sv-lfm Job by default;
+use ``--skip-geo-hints`` to skip geo + useful_hints, or set ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL=0`` for strict failure.
+
+Optional **Street View** flags (``--shuffle-seed``, ``--pano-sampling-mode``, …) are merged into the
+**sv-lfm** Job environment only (see ``tools/hf_jobs/pano_batch_env.py``).
 
 This script does not print secret values.
 """
@@ -37,8 +40,13 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _TOOLS_DIR = Path(__file__).resolve().parent
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
+_HFJ = REPO_ROOT / "tools" / "hf_jobs"
+if str(_HFJ) not in sys.path:
+    sys.path.insert(0, str(_HFJ))
 
 from hf_hub_tokens import apply_hf_read_token, apply_hf_tokens_for_hub
+import pano_batch_env  # noqa: E402
+import inference_job_env  # noqa: E402
 from submit_nutonic_hydration_job import _load_dotenv, submit_hydration_job
 
 DEFAULT_TIM_CONFIG = (
@@ -108,7 +116,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--sv-flavor", default=os.environ.get("NUTONIC_HYDRATION_SV_FLAVOR", "a10g_small"))
     p.add_argument("--tim-flavor", default=os.environ.get("NUTONIC_HYDRATION_TIM_FLAVOR", "a10g_small"))
-    p.add_argument("--llm-flavor", default=os.environ.get("NUTONIC_HYDRATION_LLM_FLAVOR", "cpu_basic"))
+    p.add_argument(
+        "--llm-flavor",
+        default=os.environ.get("NUTONIC_HYDRATION_LLM_FLAVOR", "t4-medium"),
+        help="HF Job hardware for llm-sidecars (GPU recommended for vLLM / transformers).",
+    )
     p.add_argument(
         "--tim-config-in-container",
         default=None,
@@ -126,12 +138,39 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Set NUTONIC_SKIP_GEO_HINTS=1 for sv-lfm / llm (skips geo_context + useful_hints; still runs Mapbox stills + batch).",
     )
+    p.add_argument(
+        "--shuffle-seed",
+        type=int,
+        default=None,
+        metavar="N",
+        help="sv-lfm only: NUTONIC_SHUFFLE_SEED for catalog shuffle + per-POI pano jitter derivation.",
+    )
+    p.add_argument(
+        "--pano-sampling-mode",
+        type=str,
+        default=None,
+        help="sv-lfm only: e.g. STOCHASTIC_S2_FOOTPRINT (default in batch), LEGACY_RADIAL_OFFSET, OMNI_SINGLE_PANO.",
+    )
+    p.add_argument("--pano-jitter-seed", type=int, default=None, help="sv-lfm only: fixed --pano-jitter-seed for every POI.")
+    p.add_argument("--pano-area-radius-m", type=float, default=None, help="sv-lfm only: disk radius override.")
+    p.add_argument("--pano-min-anchor-separation-m", type=float, default=None, help="sv-lfm only: min anchor separation (m).")
+    p.add_argument(
+        "--pano-legacy-radius-m",
+        type=float,
+        default=None,
+        help="sv-lfm only: radius_m when sampling mode is LEGACY_RADIAL_OFFSET.",
+    )
     p.add_argument("--timeout", default=os.environ.get("NUTONIC_HYDRATION_JOB_TIMEOUT", "12h"))
     p.add_argument("--poll-seconds", type=float, default=45.0)
     p.add_argument("--max-wait-minutes", type=float, default=720.0)
     p.add_argument("--skip-download", action="store_true")
     p.add_argument("--skip-tim", action="store_true", help="Do not submit the TerraMind TiM GPU job.")
     p.add_argument("--dry-run-submit", action="store_true", help="Print job specs only (no submit / wait / download).")
+    p.add_argument(
+        "--narrative-llm-live",
+        action="store_true",
+        help="llm-sidecars Job only: set NUTONIC_NARRATIVE_LLM_LIVE=1 (in-process transformers narrative by default; see tools/hf_jobs/README.md).",
+    )
     args = p.parse_args(argv)
 
     if not args.sv_image:
@@ -154,6 +193,18 @@ def main(argv: list[str] | None = None) -> int:
         env_common["NUTONIC_POI_LIMIT"] = str(args.poi_limit)
     if args.skip_geo_hints:
         env_common["NUTONIC_SKIP_GEO_HINTS"] = "1"
+
+    env_sv_lfm = {
+        **env_common,
+        **pano_batch_env.pano_sv_job_env_from_argparse(args),
+        **inference_job_env.lfm_vl_hint_env_from_environ(),
+        **inference_job_env.geo_pipeline_env_from_environ(),
+    }
+    env_llm = {
+        **env_common,
+        **({"NUTONIC_NARRATIVE_LLM_LIVE": "1"} if args.narrative_llm_live else {}),
+        **inference_job_env.narrative_llm_job_env_from_environ(),
+    }
 
     cli_tim = (args.tim_config_in_container or "").strip()
     env_tim = os.environ.get("NUTONIC_TIM_HF_CONFIG", "").strip()
@@ -201,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset_volume="NuTonic/poidata",
             dataset_mount_path="/mnt/poidata",
             dataset_revision=None,
-            env={**env_common},
+            env={**env_sv_lfm},
             secrets=_collect_secrets_for_sv(),
             labels=None,
             dry_run=True,
@@ -229,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset_volume="NuTonic/poidata",
             dataset_mount_path="/mnt/poidata",
             dataset_revision=None,
-            env={**env_common},
+            env={**env_llm},
             secrets=_collect_secrets_for_tim_llm(),
             labels=None,
             dry_run=True,
@@ -267,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset_volume="NuTonic/poidata",
         dataset_mount_path="/mnt/poidata",
         dataset_revision=None,
-        env={**env_common},
+        env={**env_sv_lfm},
         secrets=sv_secrets,
         labels=None,
         dry_run=False,
@@ -312,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
         dataset_volume="NuTonic/poidata",
         dataset_mount_path="/mnt/poidata",
         dataset_revision=None,
-        env={**env_common},
+        env={**env_llm},
         secrets=tim_llm_secrets,
         labels=None,
         dry_run=False,

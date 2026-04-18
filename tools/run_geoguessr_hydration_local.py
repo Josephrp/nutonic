@@ -23,6 +23,11 @@ from typing import Any
 import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_HFJ = REPO_ROOT / "tools" / "hf_jobs"
+if str(_HFJ) not in sys.path:
+    sys.path.insert(0, str(_HFJ))
+import pano_batch_env  # noqa: E402
+
 CATALOG_ROOT = REPO_ROOT / "data" / "cache" / "hydration_geoguessr_3" / "catalog"
 LOCATIONS = CATALOG_ROOT / "locations"
 
@@ -87,6 +92,9 @@ def main() -> int:
     p.add_argument("--pano-service-url", type=str, default=None)
     p.add_argument("--lfm-vl-url", type=str, default=None)
     p.add_argument("--ready-timeout-sec", type=float, default=300.0)
+    p.add_argument("--shuffle-seed", type=int, default=None, help="Optional --shuffle-seed for batch_streetview_hints.")
+    p.add_argument("--pano-sampling-mode", type=str, default=None)
+    p.add_argument("--pano-jitter-seed", type=int, default=None)
     args = p.parse_args()
 
     _load_dotenv(REPO_ROOT / ".env")
@@ -110,6 +118,7 @@ def main() -> int:
                 "STREETVIEW_PROVIDER": "google",
                 "PYTHONPATH": pano_src
                 + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""),
+                **pano_batch_env.pano_service_env_pass_through(),
             }
             lfm_env = {
                 **os.environ,
@@ -149,6 +158,7 @@ def main() -> int:
         _wait_health(pano_url, label="pano", timeout_sec=args.ready_timeout_sec)
         _wait_health(lfm_url, label="lfm_vl_hint_service", timeout_sec=args.ready_timeout_sec)
 
+        pano_batch_env.apply_pano_argparse_to_environ(args)
         batch = [
             sys.executable,
             str(REPO_ROOT / "tools" / "batch_streetview_hints.py"),
@@ -173,6 +183,7 @@ def main() -> int:
             "--timeout-sec",
             "600",
         ]
+        batch.extend(pano_batch_env.pano_batch_cli_extras_from_environ())
         return int(subprocess.run(batch, cwd=str(REPO_ROOT)).returncode)
     finally:
         for proc in (lfm_proc, pano_proc):

@@ -90,15 +90,20 @@ plans/
   "request_id": "uuid",
   "center": { "lat": -33.86, "lon": 151.20 },
   "count": 6,
+  "sampling_mode": "STOCHASTIC_S2_FOOTPRINT",
+  "area_radius_m": null,
+  "jitter_seed": null,
+  "min_anchor_separation_m": null,
   "radius_m": 120,
-  "heading_mode": "PERPENDICULAR_TO_ROAD",
-  "road_bearing_deg": null,
+  "heading_mode": null,
+  "fov_deg": null,
+  "pitch_jitter_deg": null,
   "image_width": 640,
   "image_height": 640
 }
 ```
 
-**Semantics:** `heading_mode` is implemented in `streetview_pano_service` (not the batch driver). **`PERPENDICULAR_TO_ROAD`** uses an external road tangent (OSM / Mapbox / Google Roads; optional **Street View Tiles** metadata per WBS **PR-D**/**PR-J**) with **OMNI** fallback; **`OMNI`** = evenly spaced headings on a **single** panorama (**`pano=`** Static); **`LEGACY_RADIAL_OFFSET`** preserves the pre-2026-04-18 geographic offset sampling policy for regression. Optional **`road_bearing_deg`** allows trusted callers to pin bearing without invoking a provider. See WBS **PR-A** for full optional fields (`fov`, pitch spread, debug).
+**Semantics (2026-04-18):** Normative sampling is in **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)**. **`sampling_mode`**: **`STOCHASTIC_S2_FOOTPRINT`** (default) — seeded random anchors in a disk of radius **`area_radius_m`** (or server default **R** from **`STREETVIEW_S2_GSD_M`** × **`STREETVIEW_S2_CHIP_EDGE_PX`**, capped), metadata per anchor, **`pano=`** Static when Google returns a pano id, random heading per frame; optional **`min_anchor_separation_m`**. **`LEGACY_RADIAL_OFFSET`** — legacy radial offsets + spaced headings (**`radius_m`** only); deprecated **`heading_mode": "RADIAL_OR_RANDOM"`** maps here when **`sampling_mode`** is omitted. **`OMNI_SINGLE_PANO`** — one center metadata call, **`N`** static views, same pano when available, headings **`i·360/N`**. Optional **`jitter_seed`** (else derived from **`request_id`** hash). Road-bearing / perpendicular modes remain **deferred** per that WBS.
 
 Response:
 

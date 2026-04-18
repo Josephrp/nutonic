@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,13 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 EXIT_INPUT = 2
 EXIT_CATALOG_LINT = 1
 EXIT_VALIDATE = 11
+
+
+def _streetview_pack_caption_max() -> int:
+    try:
+        return max(400, int(os.environ.get("NUTONIC_STREETVIEW_PACK_CAPTION_MAX", "2400").strip()))
+    except ValueError:
+        return 2400
 
 
 def _canonical_json(obj: Any) -> str:
@@ -256,7 +264,11 @@ def assemble_manifest(
                     if not txt:
                         raise ValueError(f"{lid}: streetview_hint_pack[{j}].text empty")
                     if not skip_hint_validate:
-                        viol = validate_caption_text(txt, max_len=480, path=f"{lid}.streetview_hint_pack[{j}].text")
+                        viol = validate_caption_text(
+                            txt,
+                            max_len=_streetview_pack_caption_max(),
+                            path=f"{lid}.streetview_hint_pack[{j}].text",
+                        )
                         if viol:
                             raise ValueError(
                                 f"validate_caption_text failed for {lid} pack[{j}]: "

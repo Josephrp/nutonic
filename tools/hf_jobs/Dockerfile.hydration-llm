@@ -1,20 +1,35 @@
-# CPU-only image for narrative / LLM sidecar batch (no torch). Build from repo root:
+# GPU narrative job image: in-process **transformers** (default live path) + optional **vLLM** + batch scripts.
+# Build from repo root:
 #   docker build -f tools/hf_jobs/Dockerfile.hydration-llm -t YOUR_DOCKERHUB/nutonic-hydration-llm:TAG .
+#
+# Submit with a **GPU** flavor. Set ``NUTONIC_NARRATIVE_LLM_LIVE=1``; narrative uses Transformers + Liquid LFM text
+# default unless ``NUTONIC_NARRATIVE_BACKEND=vllm`` and ``NUTONIC_VLLM_MODEL`` (or OpenAI base URL) are set.
 
-FROM python:3.12-slim-bookworm
+FROM pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
-RUN pip install --no-cache-dir "huggingface_hub>=0.30.0" "python-dotenv>=1.0.0" "pyyaml>=6.0.0,<7" "pydantic>=2.0.0,<3" "httpx>=0.27.0,<1"
+# vLLM pulls compatible torch stack; pin loosely so builds remain reproducible enough.
+RUN pip install --no-cache-dir \
+    "vllm>=0.6.3,<0.9" \
+    "transformers>=4.44.0" \
+    "accelerate>=1.0.0" \
+    "huggingface_hub>=0.30.0" "python-dotenv>=1.0.0" "pyyaml>=6.0.0,<7" "pydantic>=2.0.0,<3" "httpx>=0.27.0,<1"
 
-COPY data/scripts/catalog_import_poi.py /workspace/data/scripts/catalog_import_poi.py
+COPY data/scripts/liquid_ai_defaults.py /workspace/data/scripts/liquid_ai_defaults.py
 COPY data/scripts/narrative_llm_batch.py /workspace/data/scripts/narrative_llm_batch.py
-RUN mkdir -p /workspace/prompts/llm
+COPY data/scripts/catalog_import_poi.py /workspace/data/scripts/catalog_import_poi.py
+COPY data/scripts/validate_hint_strings.py /workspace/data/scripts/validate_hint_strings.py
+COPY prompts/llm /workspace/prompts/llm
 COPY tools/hf_jobs/entrypoint_hf_hydration.py /workspace/tools/hf_jobs/entrypoint_hf_hydration.py
-# Sibling module imported by the entrypoint (``sys.path`` = ``.../hf_jobs``).
 COPY tools/hf_jobs/hf_output_dataset.py /workspace/tools/hf_jobs/hf_output_dataset.py
+COPY tools/hf_jobs/inference_job_env.py /workspace/tools/hf_jobs/inference_job_env.py
 
-# narrative_llm_batch imports REPO_ROOT parents[2] — keep minimal tree so parents match.
 ENV PYTHONPATH=/workspace
 ENV NUTONIC_NO_DOTENV=1
 

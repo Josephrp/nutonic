@@ -3,7 +3,8 @@
 Canonical **full** cache hydration: **Hugging Face Jobs only** (no local LFM-VL weight load).
 
 Wraps ``run_hf_hydration_full.py``, which submits **three** Jobs in order: GPU ``sv-lfm``,
-GPU TerraMind ``tim`` (STAC batch + upload), then CPU ``llm-sidecars``, waits, and downloads artifacts.
+GPU TerraMind ``tim`` (STAC batch + upload), then GPU ``llm-sidecars`` (vLLM / ``transformers`` narrative),
+waits, and downloads artifacts.
 
 Build images first (from repo root)::
 
@@ -16,11 +17,13 @@ Example submit (full catalog + geo)::
       --tim-image YOUR_DOCKERHUB/nutonic-hydration-tim:TAG \\
       --llm-image YOUR_DOCKERHUB/nutonic-hydration-llm:TAG
 
-First **five** ``geoguessr_poi_12`` POIs only (single-tree import; TiM uses ``first5`` YAML), skipping fragile geo/hints::
+First **five** ``geoguessr_poi_12`` POIs only (single-tree import; TiM uses ``first5`` YAML), skipping fragile geo/hints, with reproducible Street View jitter::
 
     python tools/run_full_hydration.py --content-version my-run-5poi \\
-      --poi-limit 5 --skip-geo-hints \\
-      --sv-image ... --tim-image ... --llm-image ...
+      --poi-limit 5 --skip-geo-hints --shuffle-seed 42 \\
+      --sv-image YOUR_DOCKERHUB/nutonic-hydration-sv-lfm:2026-04-18 \\
+      --tim-image YOUR_DOCKERHUB/nutonic-hydration-tim:2026-04-18 \\
+      --llm-image YOUR_DOCKERHUB/nutonic-hydration-llm:2026-04-18
 
 Use ``--skip-tim`` only if you intentionally omit the TiM job. See ``tools/hf_jobs/README.md`` for ``.env`` keys.
 """

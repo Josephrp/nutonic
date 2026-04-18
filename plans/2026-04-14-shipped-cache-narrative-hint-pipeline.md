@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-14  
 **Status:** Implementation plan (normative for engineering sequencing; product sign-off on catalog size vs app binary caps).  
-**Authority:** Aligns with `rules/00-product-intent.md`, `rules/13-client-cache-and-data-plane.md`, `docs/GAME-ENGINE.md` §9–§10, `docs/NARRATIVE-AND-PROMPTS.md`, `docs/RANKED-MODE.md` §3–§4, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`, existing inference plans (`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`), and backlog items **IMP-081**, **IMP-082**, **IMP-120** / architecture **S3**, **S6**.
+**Authority:** Aligns with `rules/00-product-intent.md`, `rules/13-client-cache-and-data-plane.md`, `docs/GAME-ENGINE.md` §9–§10, `docs/NARRATIVE-AND-PROMPTS.md`, `docs/RANKED-MODE.md` §3–§4, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`, existing inference plans (`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`, **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** for **IMP-110** Street View sampling WBS), and backlog items **IMP-081**, **IMP-082**, **IMP-120** / architecture **S3**, **S6**.
 
 **Intent (shipped builds):** Store builds ship **as much precomputed SCAN content as practical**: Mapbox (or equivalent) **reference stills**, **three-tier coordinate-scoped useful hints**, **optional Street View description packs** (batch LFM-VL), **precomputed AI marker coordinates**, **authorial + LLM narrative** keyed by `mission_id` / `map_id` / slots, and **catalog metadata**—so **gameplay never depends on live inference** on the hot path. **Ranked** ships the **same clue assets and assists** on-device **except** the **golden answer** (WGS84 truth): truth remains **server-held** until `submit`; hints that materially narrow search space remain **behind ranked forfeit** UX per `docs/RANKED-MODE.md`.
 
@@ -203,11 +203,13 @@ Phases are **ordered**; later phases depend on stable IDs from earlier ones.
 
 ### Phase D — Street View + LFM-VL batch (optional per map, ranked-safe)
 
+**Sampling / pano policy (normative WBS):** **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)** — **`streetview_pano_service`** implements **`heading_mode`**, **`pano=`** Static single-pano capture, road-bearing providers, retries, and optional Tile graph walk; **`tools/batch_streetview_hints.py`** forwards CLI flags and **`model_pins`** per **PR-F**.
+
 | Script / task | Input | Output | Notes |
 |---------------|-------|--------|-------|
-| **`tools/batch_streetview_hints.py`** (new, monorepo `tools/`) | Configurable **`--poi-limit`** / location subset; **`--sv-screenshots-per-location`**; **`--poi-root`**; **`--model-profile tiny`** | **`streetview_pano_service`** → **K** frames → **`lfm_vl_hint_service`** captioning → optional **text-only** narrative pass (`streetview_assist_narrative`) | Writes `streetview_hint_pack` (+ optional narrative field) per `SPEC-batch-streetview-hints.md` §1.1; **default local run: 12 POIs** before 120. |
+| **`tools/batch_streetview_hints.py`** (new, monorepo `tools/`) | Configurable **`--poi-limit`** / location subset; **`--sv-screenshots-per-location`**; **`--poi-root`**; **`--model-profile tiny`**; **`--pano-heading-mode`** / **`--pano-road-bearing-deg`** (per **IMP-110** WBS **PR-F**) | **`streetview_pano_service`** → **K** frames → **`lfm_vl_hint_service`** captioning → optional **text-only** narrative pass (`streetview_assist_narrative`) | Writes `streetview_hint_pack` (+ optional narrative field) per `SPEC-batch-streetview-hints.md` §1.1; **default local run: 12 POIs** before 120. |
 | **Optional same driver** | **`render_mapbox_still`** index + **`lfm_vl_satellite_caption_service`** URL | **Separate** caption lines / Intel sidecar with **`pipeline: satellite_lfm_vl_specialist`** | **Not** mixed into `streetview_hint_pack` without provenance (`docs/GAME-ENGINE.md` §5.2). |
-| **CI matrix** | HF_TOKEN, GPU | publishes Dataset shard or commits **pinned** `data/cache/<version>/` | Per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` |
+| **CI matrix** | HF_TOKEN, GPU | publishes Dataset shard or commits **pinned** `data/cache/<version>/` | Per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` §2 + **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** (**PR-H**/**PR-G**) |
 
 **Ranked:** Same generated packs ship **on device**; ranked integrity unchanged because **truth** is not in pack.
 
@@ -302,6 +304,7 @@ They receive:
 | 0.7 | 2026-04-14 | Phase **D** row: configurable POI count + **K** SV screenshots per POI + optional **LFM LLM** narrative pass (`streetview_assist_narrative`) per **`SPEC-batch-streetview-hints.md`** §1.1 |
 | 0.8 | 2026-04-14 | **§4 / §7:** `streetview_hint_pack` **landed** on OpenAPI, Kotlin, server ranked clues, **`assemble_manifest`**, bundled **`ranked_clue_pack.json`** merge, **AssistDock** wiring, **fail-closed** non-ranked gameplay. |
 | 0.9 | 2026-04-14 | **§4:** **`:shared:validateCatalog`** + **`validate_shipped_compose_resources.py`** and **`sync_server_catalog.py`** (**codegen**) documented as **landed**; **IMP-120** SQL sync called out as remaining. |
+| 1.0 | 2026-04-18 | **Authority** + **Phase D:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; Phase D table rows for batch CLI / CI matrix aligned to **IMP-110** WBS (**PR-F**/**PR-H**/**PR-G**). |
 
 ---
 

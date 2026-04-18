@@ -22,7 +22,8 @@
 **Fifth pass:** 2026-04-14 — gap **v0.7** / **v0.8** prep: manifest route, redaction, gameplay + SCAN wiring (**IMP-080** / **IMP-083** partial).  
 **Sixth pass:** 2026-04-13 — backlog **§0.1** table re-verified vs `nutonic/` + `server/`; gap analysis **v0.8**; this memo **v0.7**.  
 **Seventh pass:** 2026-04-14 — gap analysis **v0.9** ( **`inference/streetview_pano_service/`** stub noted); **shipped-cache / narrative / hint pipeline** plan added — [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md); this memo **v0.8**.  
-**Eighth pass:** 2026-04-16 — **§2.8** + **§3** inference wording corrected (**packages present**; “stub” = **default CI / no-key** behavior, not missing repos); aligns with gap analysis **v1.2** and [`plans/2026-04-16-stub-replacement-implementation-plan.md`](2026-04-16-stub-replacement-implementation-plan.md); this memo **v0.9**.
+**Eighth pass:** 2026-04-16 — **§2.8** + **§3** inference wording corrected (**packages present**; “stub” = **default CI / no-key** behavior, not missing repos); aligns with gap analysis **v1.2** and [`plans/2026-04-16-stub-replacement-implementation-plan.md`](2026-04-16-stub-replacement-implementation-plan.md); this memo **v0.9**.  
+**Ninth pass:** 2026-04-18 — **IMP-110** normative WBS for **real Google Static** (`pano=` single-pano), **road-perpendicular `heading_mode`**, optional **Tile API** graph walk — [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md); gap analysis **v1.3**; **implementation still open** until WBS closes.
 
 ---
 
@@ -166,4 +167,5 @@
 | 0.7 | 2026-04-13 | **Sixth pass** header; §2.4 repo reality extended (**cache/manifest**, redaction, client wiring); §3 spine gap narrowed; aligns with gap analysis **v0.8** + backlog **§0.1** refresh |
 | 0.8 | 2026-04-14 | **Seventh pass** header; §3 **`inference/*`** row: **streetview** stub nuance + **shipped-cache plan** link; §3 spine gap row: **embed** manifest / ranked clue pack; aligns with gap **v0.9** + backlog **§0.1** **0.7** |
 | 0.9 | 2026-04-16 | **Eighth pass** header; **§2.8** repo reality + **§3** gap row: inference packages **landed**; production hardening per **stub-replacement plan**; gap analysis **v1.2** cross-ref. |
+| 1.0 | 2026-04-18 | **Ninth pass** header; **IMP-110** WBS cross-ref [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md); gap analysis **v1.3**. |
 

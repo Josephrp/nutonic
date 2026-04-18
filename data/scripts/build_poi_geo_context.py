@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -432,6 +433,22 @@ def load_layers(geo_root: Path) -> dict[str, gpd.GeoDataFrame]:
     return out
 
 
+def _truth_finite_in_range(lat: float, lon: float) -> bool:
+    if not math.isfinite(lat) or not math.isfinite(lon):
+        return False
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return False
+    return True
+
+
+def _bbox_km_half_sane(bh: float | None) -> bool:
+    if bh is None:
+        return True
+    if not math.isfinite(float(bh)) or float(bh) <= 0.0:
+        return False
+    return True
+
+
 def run_build(
     catalog_root: Path,
     geo_root: Path,
@@ -439,6 +456,7 @@ def run_build(
     *,
     r_max_km: float,
     r_scale_k: float,
+    allow_partial: bool = False,
 ) -> int:
     try:
         layers = load_layers(geo_root)
@@ -464,11 +482,17 @@ def run_build(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    written = 0
+    skipped = 0
+
     for ypath in loc_files:
         try:
             row = _load_location_yaml(ypath)
         except Exception as e:
             print(f"{ypath}: {e}", file=sys.stderr)
+            if allow_partial:
+                skipped += 1
+                continue
             return 7
 
         lid = str(row.get("location_id") or ypath.stem)
@@ -477,10 +501,26 @@ def run_build(
             lon = float(row["truth_lon"])
         except (KeyError, TypeError, ValueError) as e:
             print(f"{ypath}: invalid truth_lat/truth_lon: {e}", file=sys.stderr)
+            if allow_partial:
+                skipped += 1
+                continue
+            return 7
+
+        if not _truth_finite_in_range(lat, lon):
+            print(f"{ypath}: truth coordinates out of range or non-finite (lat={lat!r}, lon={lon!r})", file=sys.stderr)
+            if allow_partial:
+                skipped += 1
+                continue
             return 7
 
         bbox_half = row.get("bbox_km_half")
         bh = float(bbox_half) if bbox_half is not None else None
+        if not _bbox_km_half_sane(bh):
+            print(f"{ypath}: invalid bbox_km_half {bbox_half!r}", file=sys.stderr)
+            if allow_partial:
+                skipped += 1
+                continue
+            return 7
         ciso = row.get("country_iso")
         ciso_s = str(ciso) if ciso else None
 
@@ -502,12 +542,28 @@ def run_build(
             )
         except Exception as e:
             print(f"{ypath}: geometry error: {e}", file=sys.stderr)
+            if allow_partial:
+                skipped += 1
+                continue
             return 7
 
         out_path = output_dir / f"{lid}.json"
         out_path.write_text(json.dumps(ctx, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         print(out_path.as_posix())
+        written += 1
 
+    if written == 0:
+        print(
+            "build_poi_geo_context: no geo_context files written "
+            f"(locations={len(loc_files)}, skipped={skipped}, allow_partial={allow_partial})",
+            file=sys.stderr,
+        )
+        return 9
+    if skipped:
+        print(
+            f"build_poi_geo_context: wrote {written} geo_context file(s), skipped {skipped} location(s)",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -528,9 +584,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--r-max-km", type=float, default=200.0)
     parser.add_argument("--r-scale-k", type=float, default=3.0)
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="Skip locations with bad coordinates or Natural Earth geometry failures; exit 0 if at least one file is written.",
+    )
     args = parser.parse_args(argv)
 
     geo_root = _geo_root_from_env_or_default(args.geo_root)
+    allow_partial = bool(args.allow_partial) or os.environ.get(
+        "NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL", ""
+    ).strip().lower() in ("1", "true", "yes")
     if args.output_dir is not None:
         out_dir = args.output_dir
     else:
@@ -542,6 +606,7 @@ def main(argv: list[str] | None = None) -> int:
         out_dir.resolve(),
         r_max_km=args.r_max_km,
         r_scale_k=args.r_scale_k,
+        allow_partial=allow_partial,
     )
 
 

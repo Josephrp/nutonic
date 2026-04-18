@@ -25,6 +25,8 @@ def streetview_user_prompt(
     )
     return (
         f"{h}Describe this street-level photograph for viewpoint {viewpoint_label!r} with a dense, information-rich summary. "
+        "Frames from the same batch may be nearby samples around the same map context; treat them as complementary views, "
+        "not a requirement for any single camera geometry. "
         f"{safe} "
         "Synthesize observations into a cohesive description that surfaces distinctive geographic patterns and clues."
     )

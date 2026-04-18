@@ -4,6 +4,7 @@ This folder documents **Hugging Face Jobs** for **GPU** cache hydration alongsid
 
 ## Prerequisites
 
+- Repo root **``.dockerignore``** (excludes ``**/.venv/``, ``data/cache/``, ``.git/``, …) so ``docker build`` for **TiM** does not upload a multi‑gigabyte context (local ``inference/terramind_tim_local/.venv`` is the usual culprit). If you still see ``rpc error: code = Unavailable`` / EOF while **transferring context**, confirm the ignore file exists and retry ``docker build``.
 - Hub account with **Jobs** enabled (see [Run and manage Jobs](https://huggingface.co/docs/huggingface_hub/guides/jobs)).
 - `pip install -r tools/hf_jobs/requirements.txt`
 - Hub tokens in `.env` (recommended):
@@ -36,6 +37,23 @@ python tools/pull_poidata_from_hub.py --local-dir data/downloads --allow-pattern
 
 Then run `build_poi_geo_context` → `compile_useful_hint_tiers` → `render_mapbox_still` → Street View batch → TiM ingest → `assemble_manifest` / `assemble_ranked_clue_pack` per `data/scripts/README.md`.
 
+## Street View sampling env (sv-lfm Job)
+
+The container entrypoint forwards optional **environment variables** to ``batch_streetview_hints.py`` (see ``tools/hf_jobs/pano_batch_env.py``):
+
+| Variable | Effect |
+|----------|--------|
+| ``NUTONIC_SHUFFLE_SEED`` | ``--shuffle-seed`` — reproducible catalog order and per-POI ``jitter_seed`` derivation |
+| ``NUTONIC_PANO_SAMPLING_MODE`` | ``--pano-sampling-mode`` (default in code: ``STOCHASTIC_S2_FOOTPRINT``) |
+| ``NUTONIC_PANO_JITTER_SEED`` | ``--pano-jitter-seed`` (same seed every POI) |
+| ``NUTONIC_PANO_AREA_RADIUS_M`` | ``--pano-area-radius-m`` |
+| ``NUTONIC_PANO_MIN_ANCHOR_SEPARATION_M`` | ``--pano-min-anchor-separation-m`` |
+| ``NUTONIC_PANO_LEGACY_RADIUS_M`` | ``--pano-legacy-radius-m`` (legacy mode only) |
+| ``STREETVIEW_S2_GSD_M``, ``STREETVIEW_S2_CHIP_EDGE_PX`` | Passed into the pano **uvicorn** worker for default disk **R** |
+| ``STREETVIEW_EXPOSE_SAMPLING_DEBUG`` | ``1`` / ``true`` — adds ``sampling_debug`` to pano responses (no secrets) |
+
+**CLI (host):** ``python tools/run_full_hydration.py`` accepts ``--shuffle-seed``, ``--pano-sampling-mode``, ``--pano-jitter-seed``, ``--pano-area-radius-m``, ``--pano-min-anchor-separation-m``, ``--pano-legacy-radius-m`` and injects them into the **sv-lfm** Job env only.
+
 ## Street View + LFM-VL on a Job (VLM in the cloud)
 
 1. Build and push a Docker image that contains:
@@ -63,14 +81,14 @@ python tools/submit_nutonic_hydration_job.py streetview-lfm \
 From the **repo root**, with Docker logged in (`docker login`):
 
 ```bash
-python tools/hf_jobs/build_and_push_images.py --namespace YOUR_DOCKERHUB_USER --tag 2026-04-16
+python tools/hf_jobs/build_and_push_images.py --namespace YOUR_DOCKERHUB_USER --tag 2026-04-18
 ```
 
 Builds and pushes three tags:
 
 - `nutonic-hydration-sv-lfm` — `Dockerfile.hydration` (Street View + LFM-VL + `data/scripts` pipeline).
 - `nutonic-hydration-tim` — `Dockerfile.hydration-tim` (TerraMind TiM STAC batch + Hub upload via `entrypoint_tim_hf.py`).
-- `nutonic-hydration-llm` — `Dockerfile.hydration-llm` (CPU narrative sidecars).
+- `nutonic-hydration-llm` — `Dockerfile.hydration-llm` (**transformers** in-process by default when live; **vLLM** optional via **`NUTONIC_NARRATIVE_BACKEND=vllm`** + **`NUTONIC_VLLM_MODEL`**; GPU flavor; **`NUTONIC_NARRATIVE_LLM_LIVE=1`**).
 
 Use `--dry-run` to print `docker build` / `docker push` commands only; `--no-push` to build locally.
 
@@ -89,13 +107,64 @@ python tools/run_full_hydration.py --content-version hf-2026-04-16 \
 
 Jobs run in order: **sv-lfm** → **TiM** → **llm-sidecars**. Override the in-container TiM YAML with `--tim-config-in-container` or env `NUTONIC_TIM_HF_CONFIG`. Use `--skip-tim` to omit the TiM job.
 
-For a **small slice** (e.g. first five ``geoguessr_poi_12`` POIs), pass ``--poi-limit 5`` and usually ``--skip-geo-hints`` on ``run_full_hydration.py`` / ``run_hf_hydration_full.py`` so Jobs set ``NUTONIC_POI_LIMIT`` and skip ``build_poi_geo_context`` when Natural Earth geometry fails on some rows. TiM automatically uses ``config.hf_job_geoguessr_poi12_first5.yaml`` when the limit is 5 (unless you override ``--tim-config-in-container``).
+For a **small slice** (e.g. first five ``geoguessr_poi_12`` POIs), pass ``--poi-limit 5`` on ``run_full_hydration.py`` / ``run_hf_hydration_full.py`` (Jobs set ``NUTONIC_POI_LIMIT``). **Geo context:** the sv-lfm entrypoint runs ``build_poi_geo_context.py`` with ``--allow-partial`` by default (skip bad coordinates / Shapely failures; still writes other POIs). Set ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL=0`` on the Job to fail fast, or ``--skip-geo-hints`` to omit geo + useful_hints entirely. TiM uses ``config.hf_job_geoguessr_poi12_first5.yaml`` when the limit is 5 (unless you override ``--tim-config-in-container``).
 
 Use `--dry-run-submit` to print resolved Job specs without calling the Hub. Use `--skip-download` if you only want Hub-side artifacts.
+
+**Narrative LLM on the llm-sidecars Job:** default sidecar is **dry-run** unless **`NUTONIC_NARRATIVE_LLM_LIVE=1`**. Live inference (set via host **`--narrative-llm-live`** on `run_hf_hydration_full.py`):
+
+| `NUTONIC_NARRATIVE_BACKEND` | Behavior |
+|-----------------------------|----------|
+| ``transformers`` (default when live, backend unset) | In-process HF causal LM on the Job GPU: **`NUTONIC_NARRATIVE_TRANSFORMERS_MODEL`** or default **Liquid LFM** text id from ``liquid_ai_defaults.py`` (+ optional **`NUTONIC_NARRATIVE_TRANSFORMERS_MAX_NEW`**). |
+| ``vllm`` | Start **`python -m vllm.entrypoints.openai.api_server`** (unless ``NUTONIC_VLLM_SERVE_CMD`` / ``NUTONIC_VLLM_AUTOSTART=0``), wait on ``/v1/models``, then ``narrative_llm_batch.py --backend openai``. |
+| ``openai`` | Same OpenAI HTTP path as ``vllm`` (external or autostarted server). |
+| ``ollama`` | Legacy **`ollama serve`** if the binary exists on ``PATH``. |
+
+Optional: **`NUTONIC_NARRATIVE_ENTRY_MAX`**, **`NUTONIC_VLLM_PORT`**, **`NUTONIC_VLLM_READY_SEC`**, **`OPENAI_API_KEY`** for remote OpenAI-compatible endpoints.
+
+**sv-lfm LFM-VL:** set **`LFM_VL_BACKEND=transformers`** (default in the entrypoint when unset) or **`LFM_VL_BACKEND=openai_compatible`** with **`LFM_OPENAI_BASE_URL`** / **`LFM_OPENAI_MODEL`** pointing at a vLLM (or compatible) server. Export these before `run_hf_hydration_full.py` so they are merged into the sv-lfm Job env (see ``inference_job_env.py``).
 
 **Do not** use `tools/run_local_full_hydration.py` for production runs: it starts local `uvicorn` + LFM-VL and downloads model weights onto your laptop or workstation.
 
 Use **`--dry-run`** to print the resolved spec without submitting.
+
+### Liquid AI defaults and copy-paste test commands
+
+Canonical Hub ids live in **`data/scripts/liquid_ai_defaults.py`** (text **LFM** for narrative / vLLM) and **`inference/lfm_vl_hint_service/.../liquid_hub_ids.py`** ( **LFM-VL** for Street View + satellite caption services). The **sv-lfm** entrypoint sets **`LFM_VL_MODEL_ID`** to the VL default when the Job env omits it.
+
+**Build all three Job images** (from repo root, Docker logged in):
+
+```bash
+python tools/hf_jobs/build_and_push_images.py --namespace YOUR_DOCKERHUB_USER --tag 2026-04-18
+```
+
+Equivalent raw **Docker** invocations:
+
+```bash
+docker build -f tools/hf_jobs/Dockerfile.hydration -t YOUR_DOCKERHUB_USER/nutonic-hydration-sv-lfm:2026-04-18 .
+docker build -f tools/hf_jobs/Dockerfile.hydration-llm -t YOUR_DOCKERHUB_USER/nutonic-hydration-llm:2026-04-18 .
+docker build -f tools/hf_jobs/Dockerfile.hydration-tim -t YOUR_DOCKERHUB_USER/nutonic-hydration-tim:2026-04-18 .
+docker push YOUR_DOCKERHUB_USER/nutonic-hydration-sv-lfm:2026-04-18
+docker push YOUR_DOCKERHUB_USER/nutonic-hydration-llm:2026-04-18
+docker push YOUR_DOCKERHUB_USER/nutonic-hydration-tim:2026-04-18
+```
+
+**Submit Jobs (or dry-run specs)** — load `.env` with `HF_API_WRITE`, `NUTONIC_HYDRATION_OUTPUT_DATASET`, map keys, then:
+
+```bash
+export NUTONIC_HYDRATION_SV_LFM_IMAGE=YOUR_DOCKERHUB_USER/nutonic-hydration-sv-lfm:2026-04-18
+export NUTONIC_HYDRATION_LLM_IMAGE=YOUR_DOCKERHUB_USER/nutonic-hydration-llm:2026-04-18
+export NUTONIC_HYDRATION_TIM_IMAGE=YOUR_DOCKERHUB_USER/nutonic-hydration-tim:2026-04-18
+# Optional explicit pins (defaults match liquid_ai_defaults / liquid_hub_ids):
+export NUTONIC_VLLM_MODEL=LiquidAI/LFM2.5-1.2B-Instruct
+export LFM_VL_MODEL_ID=LiquidAI/LFM2.5-VL-450M
+
+python tools/run_hf_hydration_full.py --content-version test-liquid-2026-04-18 \
+  --poi-limit 5 --skip-geo-hints --narrative-llm-live \
+  --dry-run-submit
+```
+
+Omit **`--dry-run-submit`** to actually submit and wait. For **LFM-VL via vLLM** on the sv-lfm Job instead of in-process transformers, export **`LFM_VL_BACKEND=openai_compatible`**, **`LFM_OPENAI_BASE_URL`**, and **`LFM_OPENAI_MODEL=LiquidAI/LFM2.5-VL-450M`** before the same command so **`inference_job_env`** forwards them.
 
 ## TerraTorch TiM on a Job
 

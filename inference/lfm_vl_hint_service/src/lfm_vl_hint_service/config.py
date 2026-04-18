@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
+from lfm_vl_hint_service.liquid_hub_ids import DEFAULT_LFM_VL_HF_MODEL_ID
+
 
 @dataclass(frozen=True)
 class LfmVlSettings:
@@ -27,12 +29,11 @@ def get_settings() -> LfmVlSettings:
         backend = "stub"
     return LfmVlSettings(
         backend=backend,
-        model_id=os.environ.get("LFM_VL_MODEL_ID", "LiquidAI/LFM2.5-VL-450M").strip(),
+        model_id=os.environ.get("LFM_VL_MODEL_ID", DEFAULT_LFM_VL_HF_MODEL_ID).strip(),
         openai_base_url=os.environ.get("LFM_OPENAI_BASE_URL", "http://127.0.0.1:8000/v1").strip().rstrip("/"),
         openai_api_key=os.environ.get("LFM_OPENAI_API_KEY", "dummy").strip(),
-        openai_model=os.environ.get("LFM_OPENAI_MODEL", "").strip() or os.environ.get(
-            "LFM_VL_MODEL_ID", "LiquidAI/LFM2.5-VL-450M"
-        ).strip(),
+        openai_model=os.environ.get("LFM_OPENAI_MODEL", "").strip()
+        or os.environ.get("LFM_VL_MODEL_ID", DEFAULT_LFM_VL_HF_MODEL_ID).strip(),
         max_new_tokens=int(os.environ.get("LFM_VL_MAX_NEW_TOKENS", "256")),
         torch_dtype=os.environ.get("LFM_VL_TORCH_DTYPE", "bfloat16").strip().lower(),
     )

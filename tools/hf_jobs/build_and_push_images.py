@@ -4,6 +4,10 @@ Build and push NU:TONIC Hugging Face Job Docker images (sv-lfm, llm, TiM).
 
 Run from the **repository root** with Docker logged in to your registry (``docker login``).
 
+The repo root **``.dockerignore``** excludes local ``**/.venv/``, ``data/cache/``, ``.git/``, etc., so the TiM image
+context stays small (a stray ``inference/terramind_tim_local/.venv`` otherwise ships ~1GB+ and can make Docker Desktop
+fail with ``rpc error: code = Unavailable`` / EOF during ``transferring context``).
+
 **Git Bash on Windows:** use Unix-style paths, e.g. ``cd /c/Users/MeMyself/nutonic`` (``cd c:\\Users\\...`` is not valid in bash).
 
 Environment (optional):

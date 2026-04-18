@@ -42,6 +42,7 @@ def _handler(request: httpx.Request) -> httpx.Response:
         p.endswith("/v1/panos/sample") or p.rstrip("/").endswith("/api/v1/panos/sample")
     ):
         body = json.loads(request.content.decode())
+        assert body.get("sampling_mode") == "STOCHASTIC_S2_FOOTPRINT"
         n = int(body["count"])
         rid = body["request_id"]
         frames = []
@@ -122,6 +123,8 @@ def test_run_batch_writes_streetview_json(tmp_path: Path) -> None:
     assert doc["streetview_assist_narrative"] is None
     pins = doc["model_pins"]
     assert pins["streetview_pano_service"]["stub_jpeg"] is True
+    assert pins["streetview_pano_service"]["sampling_mode"] == "STOCHASTIC_S2_FOOTPRINT"
+    assert pins["streetview_pano_service"]["s2_area_policy_version"] == "2026-04-18.v1"
     assert pins["lfm_vl_hint_service"]["stub"] is True
     assert pins["lfm_vl_hint_service"]["model_id"] == "stub-model"
     assert "lfm_vl_satellite_caption_service" not in pins

@@ -28,6 +28,10 @@ from pathlib import Path
 import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_HFJ = REPO_ROOT / "tools" / "hf_jobs"
+if str(_HFJ) not in sys.path:
+    sys.path.insert(0, str(_HFJ))
+import pano_batch_env  # noqa: E402
 
 
 def _load_dotenv(path: Path) -> None:
@@ -105,6 +109,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip build_poi_geo_context + compile_useful_hint_tiers (use when Natural Earth geometry fails for some POIs). Still runs Mapbox stills + batch.",
     )
+    p.add_argument("--shuffle-seed", type=int, default=None, help="Passed to batch_streetview_hints (--shuffle-seed).")
+    p.add_argument("--pano-sampling-mode", type=str, default=None)
+    p.add_argument("--pano-jitter-seed", type=int, default=None)
+    p.add_argument("--pano-area-radius-m", type=float, default=None)
+    p.add_argument("--pano-min-anchor-separation-m", type=float, default=None)
+    p.add_argument("--pano-legacy-radius-m", type=float, default=None)
     args = p.parse_args(argv)
 
     if not args.allow_local_model_weights and os.environ.get("NUTONIC_ALLOW_LOCAL_LFM_WEIGHTS") != "1":
@@ -179,6 +189,9 @@ def main(argv: list[str] | None = None) -> int:
     _run(py, [str(REPO_ROOT / "data" / "scripts" / "fetch_geo_baselines.py")])
     hints_dir = REPO_ROOT / "data" / "cache" / cv / "useful_hints"
     if not args.skip_geo_hints:
+        geo_partial: list[str] = []
+        if os.environ.get("NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL", "1").strip().lower() not in ("0", "false", "no"):
+            geo_partial = ["--allow-partial"]
         _run(
             py,
             [
@@ -187,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
                 str(catalog_root),
                 "--content-version",
                 cv,
+                *geo_partial,
             ],
         )
         geo_dir = REPO_ROOT / "data" / "cache" / cv / "geo_context"
@@ -245,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
                 "STREETVIEW_PROVIDER": "google",
                 "PYTHONPATH": str(pano_src)
                 + (os.pathsep + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""),
+                **pano_batch_env.pano_service_env_pass_through(),
             }
             lfm_env = {
                 **os.environ,
@@ -285,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         _wait_health(lfm_url, label="lfm_vl_hint_service", timeout_sec=args.ready_timeout_sec)
 
         still_index = still_meta / "still_index.json"
+        pano_batch_env.apply_pano_argparse_to_environ(args)
         batch = [
             py,
             str(REPO_ROOT / "tools" / "batch_streetview_hints.py"),
@@ -314,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
             pos = batch.index("--frame-count")
             batch.insert(pos, str(hints_dir))
             batch.insert(pos, "--useful-hints-dir")
+        batch.extend(pano_batch_env.pano_batch_cli_extras_from_environ())
         rc = subprocess.run(batch, cwd=str(REPO_ROOT)).returncode
         return int(rc)
     finally:

@@ -63,6 +63,7 @@ def test_reuse_only_writes_jpeg_and_index(tmp_path: Path) -> None:
 
     meta_one = json.loads((meta / "stills" / "loc_ci_still.meta.json").read_text(encoding="utf-8"))
     assert meta_one["still_sha256"] == row["still_sha256"]
+    assert (meta / "stills" / "loc_ci_still.jpg").is_file()
 
 
 def test_reuse_only_missing_bundled_exits_nonzero(tmp_path: Path) -> None:

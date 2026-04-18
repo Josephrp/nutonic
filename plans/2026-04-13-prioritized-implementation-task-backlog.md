@@ -1,7 +1,7 @@
 # NU:TONIC — Prioritized implementation task backlog
 
 **Date:** 2026-04-13  
-**Status:** Actionable backlog derived from verified guidance in `plans/2026-04-13-claims-verification-baseline.md`, normative phases in `plans/2026-04-07-complete-implementation-architecture.md` §9, `plans/2026-04-07-game-server-thin-orchestrator.md` §8, and repo gaps in `plans/2026-04-13-repo-state-gap-analysis.md`. **Normative shipped content (stills, per-map hints, narrative embed, ranked clue packs):** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md) — use it for **IMP-081**/**082**/**083** script phases and OpenAPI follow-ups (`streetview_hint_pack`).
+**Status:** Actionable backlog derived from verified guidance in `plans/2026-04-13-claims-verification-baseline.md`, normative phases in `plans/2026-04-07-complete-implementation-architecture.md` §9, `plans/2026-04-07-game-server-thin-orchestrator.md` §8, and repo gaps in `plans/2026-04-13-repo-state-gap-analysis.md`. **Normative shipped content (stills, per-map hints, narrative embed, ranked clue packs):** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](2026-04-14-shipped-cache-narrative-hint-pipeline.md) — use it for **IMP-081**/**082**/**083** script phases and OpenAPI follow-ups (`streetview_hint_pack`). **Street View pano sampling (IMP-110) normative WBS:** [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) (projects **PR-A–PR-J**; supersedes informal sampling todos until closed).
 
 **How to use:** Execute **waves** in order unless tasks explicitly allow parallel tracks (**∥**). Each task has acceptance criteria suitable for PR boundaries.
 
@@ -26,7 +26,7 @@
 
 ### 0.1 Repo verification (2026-04-13 reassessment)
 
-Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v0.9** and `plans/2026-04-13-claims-verification-baseline.md` **v0.8**.
+Cross-check against `plans/2026-04-13-repo-state-gap-analysis.md` **v1.3** and `plans/2026-04-13-claims-verification-baseline.md` **v1.0** (ninth pass: **IMP-110** WBS — [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)).
 
 | ID band | Status vs repo (high level) — **verified 2026-04-14** |
 |---------|------------------------------|
@@ -154,7 +154,7 @@ Execute sub-plans in **recommended** order (each is its own PR series):
 
 | ID | Task | Subtasks | Deps | Acceptance | Refs |
 |----|------|----------|------|------------|------|
-| **IMP-110** | `inference/streetview_pano_service` MVP per streetview plan P0–P1. | **2026-04-16:** **Service landed** (FastAPI + **stub/synthetic** frames + optional Google); **MVP** = production metadata/sampling/ops per **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`**. **Batch consumer:** **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5 Phase **D**. | IMP-010 | Docker build; health + one pano path. **Does not** require **IMP-092** / ranked. | `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`; **shipped-cache plan** §5 **D** |
+| **IMP-110** | `inference/streetview_pano_service` MVP per streetview plan P0–P1. | **2026-04-16:** **Service landed** (FastAPI + **stub/synthetic** frames + optional Google). **2026-04-18:** **Normative execution WBS** — [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md): real Static **`pano=`** single-pano capture, implemented **`heading_mode`** (OMNI / **PERPENDICULAR_TO_ROAD** / legacy radial), road-bearing providers (OSM / Mapbox / Google Roads + optional **Street View Tiles** graph), batch **`model_pins`**, retries, tests, docs (**PR-A–PR-J**). **Batch consumer:** **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5 Phase **D**. | IMP-010 | Docker build; health + one pano path; **close IMP-110** when WBS **§13 Definition of done** satisfied (stub + Google paths). **Does not** require **IMP-092** / ranked. | `plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`; `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` §2; **shipped-cache plan** §5 **D**; **`plans/2026-04-16-stub-replacement-implementation-plan.md`** **STUB-A** |
 | **IMP-111** | `inference/lfm_vl_hint_service` per LFM-VL master plan. | | IMP-110 (optional ordering) | GPU/ZeroGPU Space boots; JSON contract tests. | `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`; **shipped-cache plan** §5 **D** |
 | **IMP-112** | `inference/lfm_vl_satellite_caption_service` (optional Intel / EO). | | IMP-111 | Caption JSON matches OpenAPI internal stub. | Same master plan |
 | **IMP-113** | **`inference/pro_materialization_service`** per PRO materialization plan P0–P1 (Mapbox-only branch first). | | IMP-010 | `RGB_mapbox` end-to-end; no torch in container if policy holds. **Does not** require **IMP-092** / ranked. | `plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md` |
@@ -223,3 +223,4 @@ IMP-000 / IMP-001
 | 0.6 | 2026-04-13 | **§0.1 completeness pass:** cross-ref gap **v0.8** / claims **v0.7**; **IMP-072**/**080**/**082**/**083**/**084** rows rewritten from repo verification; **W5** wave table annotations; **`IMP-060+`** clarified (manifest landed; bundle + ranked still open) |
 | 0.7 | 2026-04-14 | **Shipped cache plan** (`2026-04-14-shipped-cache-narrative-hint-pipeline.md`): intro + **§0.1** cross-check bump to gap **v0.9** / claims **v0.8**; **IMP-081**/**082**/**083**/**060+** rows + **W5** (**IMP-080**–**084**) **Refs** / subtasks aligned to script+embed pipeline |
 | 0.8 | 2026-04-16 | **§0.1** **`IMP-060+`**: **IMP-090**/**IMP-092**/**IMP-114** partial landed; **W6** **IMP-092**, **W8** **IMP-114** wave rows annotated; cross-ref gap analysis **v1.2** + stub-replacement plan. |
+| 0.9 | 2026-04-18 | Intro + **IMP-110** row: normative WBS cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; **Refs** column STUB-A alignment. |

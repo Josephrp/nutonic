@@ -6,15 +6,12 @@ import httpx
 
 from lfm_vl_satellite_caption_service.config import get_settings
 from lfm_vl_satellite_caption_service.models import SatelliteInferRequest, SatelliteInferResponse
+from lfm_vl_satellite_caption_service.prompts import satellite_openai_user_prompt
 
 
 def _caption(client: httpx.Client, b64: str, *, ranked_safe: bool) -> str:
     s = get_settings()
-    safe = (
-        "Do not output latitude/longitude or place names. Describe land cover, water, and structure footprints only."
-        if ranked_safe
-        else "Avoid raw coordinate numbers."
-    )
+    user_text = satellite_openai_user_prompt(ranked_clue_safe=ranked_safe)
     url = f"{s.openai_base_url}/chat/completions"
     body = {
         "model": s.openai_model,
@@ -23,7 +20,7 @@ def _caption(client: httpx.Client, b64: str, *, ranked_safe: bool) -> str:
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                    {"type": "text", "text": f"Two short sentences about this satellite image. {safe}"},
+                    {"type": "text", "text": user_text},
                 ],
             }
         ],

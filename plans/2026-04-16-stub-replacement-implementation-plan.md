@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-16  
 **Status:** Actionable engineering plan — **all items below are in scope** per product direction to replace development stubs with **production-capable** data generation, inference surfaces, and client hooks.  
-**Authority:** `plans/2026-04-16-cached-poi-hydration-ranked-and-nonranked-plan.md` **§7**, `plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`, `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`, `plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md`, `plans/2026-04-13-prioritized-implementation-task-backlog.md` (**IMP-051**, **IMP-084**, **IMP-092**, **IMP-110–114**), `rules/06-server-vlm-tim-and-on-device-ml.md`, `rules/12-python-gradio-terramind-server.md`, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`, `docs/scripts/SPEC-*.md`.
+**Authority:** `plans/2026-04-16-cached-poi-hydration-ranked-and-nonranked-plan.md` **§7**, `plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`, `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** (**IMP-110** / **STUB-A** file-level WBS), `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`, `plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md`, `plans/2026-04-13-prioritized-implementation-task-backlog.md` (**IMP-051**, **IMP-084**, **IMP-092**, **IMP-110–114**), `rules/06-server-vlm-tim-and-on-device-ml.md`, `rules/12-python-gradio-terramind-server.md`, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`, `docs/scripts/SPEC-*.md`.
 
 **Companion:** [`plans/2026-04-16-cached-poi-hydration-ranked-and-nonranked-plan.md`](2026-04-16-cached-poi-hydration-ranked-and-nonranked-plan.md) (client manifest / ranked pack / bundle cache — this document covers **generators and services** that feed those artifacts).
 
@@ -49,7 +49,7 @@
 
 ## 2. Workstream A — `streetview_pano_service` (STUB-A, **IMP-110**)
 
-**Normative drill-down:** `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` §2.
+**Normative drill-down:** `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` §2. **File/line WBS (supersedes table granularity below until closed):** [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) (**PR-A–PR-J**). Treat **§2 A.1–A.3** in *this* document as narrative phases; implementers follow the **2026-04-18** plan for concrete modules (`road_bearing_*.py`, `heading_schedules`, `pano=` Static, batch flags).
 
 ### A.0 Current state
 
@@ -60,7 +60,7 @@
 
 | Task | Detail |
 |------|--------|
-| A1.1 | Implement **`fetch_metadata`** success path coverage: pano id, copyright, links; map **all** error codes from Google API to **HTTP 4xx/502** with stable JSON **`{ "error_code", "message" }`** (no key leakage). |
+| A1.1 | Implement **`fetch_metadata`** success path coverage: **`pano_id`**, **`location`**, **`copyright`**, **`date`**, **`status`** per [Street View Image Metadata](https://developers.google.com/maps/documentation/streetview/metadata) — **Classic Metadata does not return `links`**; graph **`links`** / native navigation only on optional **Street View Tiles** track (**`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** **PR-D**/**PR-J**). Map **all** error codes to **HTTP 4xx/502** with stable JSON **`{ "error_code", "message" }`** (no key leakage). |
 | A1.2 | Add **retry + backoff** for transient failures (`httpx` + jitter). |
 | A1.3 | **Tests:** mock `httpx` responses; assert no network in default **`pytest`**. |
 
@@ -336,3 +336,4 @@ STUB-I (share) ──► IMP-084 (orthogonal)
 |---------|------|-------|
 | 0.1 | 2026-04-16 | Initial stub-replacement implementation plan (workstreams A–I, CI dual lane, PR slices). |
 | 0.2 | 2026-04-16 | Repo doc sync: cross-refs remain valid after **`docs/openapi.yaml`**, **`server/README.md`**, **`server/docs/TOPOLOGY.md`**, gap analysis **v1.2**, claims baseline **v0.9**, backlog **§0.1 v0.8** updates. |
+| 0.3 | 2026-04-18 | **Authority** + **§2 STUB-A:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; **A1.1** corrected (Classic Metadata has no **`links`**; Tiles optional per **PR-J**). |

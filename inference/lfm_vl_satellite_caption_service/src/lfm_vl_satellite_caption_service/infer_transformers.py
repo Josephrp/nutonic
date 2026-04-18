@@ -9,6 +9,7 @@ from PIL import Image
 
 from lfm_vl_satellite_caption_service.config import get_settings
 from lfm_vl_satellite_caption_service.models import SatelliteInferRequest, SatelliteInferResponse
+from lfm_vl_satellite_caption_service.prompts import satellite_transformers_user_prompt
 from lfm_vl_satellite_caption_service.spaces_zero import apply_zero_gpu
 
 _model: Any = None
@@ -99,12 +100,7 @@ def infer_transformers(req: SatelliteInferRequest) -> SatelliteInferResponse:
     device = model.device
     raw = base64.b64decode(req.image_base64, validate=False)
     pil = Image.open(BytesIO(raw)).convert("RGB")
-    safe = (
-        "Do not output latitude/longitude or place names. Describe land cover, water, roads, and shadows only."
-        if req.ranked_clue_safe
-        else "Avoid raw coordinate numbers."
-    )
-    user = f"Describe this satellite or aerial image in two short sentences for a geography game. {safe}"
+    user = satellite_transformers_user_prompt(ranked_clue_safe=req.ranked_clue_safe)
     conversation = [{"role": "user", "content": [{"type": "image", "image": pil}, {"type": "text", "text": user}]}]
     inputs = processor.apply_chat_template(
         conversation,

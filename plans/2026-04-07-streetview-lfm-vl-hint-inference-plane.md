@@ -81,6 +81,8 @@ plans/
 
 ### 2.2 API sketch (internal REST)
 
+**Normative implementation WBS (field-level tasks, providers, tests):** [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) — projects **PR-A–PR-J**. Until that WBS is closed in code, treat the JSON below as the **contract sketch**; prefer HTTP path **`POST /api/v1/panos/sample`** (legacy **`POST /v1/panos/sample`** retained).
+
 `POST /v1/panos/sample`
 
 ```json
@@ -89,11 +91,14 @@ plans/
   "center": { "lat": -33.86, "lon": 151.20 },
   "count": 6,
   "radius_m": 120,
-  "heading_mode": "RADIAL_OR_RANDOM",
+  "heading_mode": "PERPENDICULAR_TO_ROAD",
+  "road_bearing_deg": null,
   "image_width": 640,
   "image_height": 640
 }
 ```
+
+**Semantics:** `heading_mode` is implemented in `streetview_pano_service` (not the batch driver). **`PERPENDICULAR_TO_ROAD`** uses an external road tangent (OSM / Mapbox / Google Roads; optional **Street View Tiles** metadata per WBS **PR-D**/**PR-J**) with **OMNI** fallback; **`OMNI`** = evenly spaced headings on a **single** panorama (**`pano=`** Static); **`LEGACY_RADIAL_OFFSET`** preserves the pre-2026-04-18 geographic offset sampling policy for regression. Optional **`road_bearing_deg`** allows trusted callers to pin bearing without invoking a provider. See WBS **PR-A** for full optional fields (`fov`, pitch spread, debug).
 
 Response:
 

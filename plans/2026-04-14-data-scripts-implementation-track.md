@@ -230,6 +230,8 @@ flowchart TD
 
 ## 8. Track P6 — `tools/batch_streetview_hints.py` (**landed 2026-04-14** — local full runner)
 
+**IMP-110 / pano sampling WBS:** [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) (**PR-F** forward batch/HF Jobs; **PR-H** tests).
+
 **Spec:** [SPEC-batch-streetview-hints.md](../docs/scripts/SPEC-batch-streetview-hints.md)
 
 | Item | Detail |
@@ -240,10 +242,11 @@ flowchart TD
 | **P6.4** | **Landed (partial)** — batch posts optional satellite **`POST …/v1/infer`** when **`--satellite-caption-service-url`** + **`--still-index`** resolve a still file; **separate** `satellite_caption_sidecar` object. **`inference/lfm_vl_satellite_caption_service/`** is **present** with pytest in CI; service URL may be absent in local smoke (404 tolerated). |
 | **P6.5** | **Landed** — **`useful_hints`** omitted from LFM JSON unless **`--inject-useful-hint-tone`**. |
 | **P6.6** | **Landed (stub)** — **`--enable-narrative-pass`** + **`--narrative-service-url`** → **`POST /v1/narrative/fuse`** on **`lfm_vl_hint_service`** (text-only stub); validated narrative string or **null**. |
+| **P6.7** | **Open (2026-04-18)** — Forward **`heading_mode`**, optional **`road_bearing_deg`**, and **`model_pins`** v2 per **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)** **PR-F**; fix chunked LFM **`rank`** renumbering (**F2**); update **`SPEC-batch-streetview-hints.md`** §1.1 **S1**. |
 | **Tests** | **Landed** — default CI: **`tools/tests/test_batch_streetview_hints.py`** (`httpx.MockTransport`) + **`inference/*/tests`**. Optional **`RUN_STREETVIEW_BATCH=1`** remains for live Google/GPU runs when wired. |
 | **Acceptance** | **Local:** two terminals — `uvicorn streetview_pano_service.main:app --port 7861` + `uvicorn lfm_vl_hint_service.main:app --port 7862` — then `python tools/batch_streetview_hints.py --catalog-root data/catalog --lfm-vl-url http://127.0.0.1:7862 --pano-service-url http://127.0.0.1:7861` after **`catalog_import`**. Outputs under **`data/cache/<version>/streetview/*.json`** + **`reports/streetview_failures.json`**. |
 
-**Inference (CPU pano, optional GPU LFM):** **`inference/streetview_pano_service`** — **`POST /v1/panos/sample`** (Pillow JPEG decoys until Google Static lands). **`inference/lfm_vl_hint_service`** — **`POST /v1/suggestions/from_frames`** + **`POST /v1/narrative/fuse`** with **`LFM_VL_BACKEND`**: **`stub`** (default), **`transformers`** (official **Liquid** Hugging Face LFM-VL weights), or **`openai_compatible`** (OpenAI API to vLLM/SGLang per Liquid deployment docs).
+**Inference (CPU pano, optional GPU LFM):** **`inference/streetview_pano_service`** — **`POST /api/v1/panos/sample`** (Pillow stub **or** Google Static per **`STREETVIEW_PROVIDER`**); **production sampling** (**`pano=`**, road-perpendicular **`heading_mode`**, providers) tracked in **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)**. **`inference/lfm_vl_hint_service`** — **`POST /v1/suggestions/from_frames`** + **`POST /v1/narrative/fuse`** with **`LFM_VL_BACKEND`**: **`stub`** (default), **`transformers`** (official **Liquid** Hugging Face LFM-VL weights), or **`openai_compatible`** (OpenAI API to vLLM/SGLang per Liquid deployment docs).
 
 **P8.1a streetview merge:** **`assemble_manifest`** merges optional `data/cache/.../streetview/*.json` into **`ManifestRoundLocation`** rows; OpenAPI/Kotlin **`streetview_hint_pack`** is **landed** (see **`docs/scripts/SPEC-assemble-manifest.md`** §2.1).
 
@@ -377,6 +380,7 @@ flowchart TD
 | 0.5 | 2026-04-14 | **`lfm_vl_hint_service`:** real **Liquid LFM-VL** via **`LFM_VL_BACKEND=transformers`** (HF `AutoModelForImageTextToText`) or **`openai_compatible`** (OpenAI `/v1/chat/completions` for vLLM/SGLang); default **stub** unchanged for CI. |
 | 0.6 | 2026-04-14 | **P6.4** satellite caption service **landed** in repo/CI; **P8.1a** streetview **`assemble_manifest`** merge + OpenAPI parity **landed**; stale “follow-up when OpenAPI adds SV” row **removed**. |
 | 0.7 | 2026-04-14 | **§13:** **`validateCatalog`** + **`validate_shipped_compose_resources.py`** documented as **landed** (was “parallel track”). |
+| 0.8 | 2026-04-18 | **§8 P6:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; new **P6.7** open row (batch **`heading_mode`** / **`model_pins`**); inference blurb **`/api/v1/panos/sample`**. |
 
 ---
 

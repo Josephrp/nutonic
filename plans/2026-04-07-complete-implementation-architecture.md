@@ -40,7 +40,7 @@ nutonic/                          # Gradle root (KMP client) — rules/03, 11
   webApp/
   mapview-desktop/                # or absorbed into shared jvm map actual
 inference/                        # plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md — NOT game server
-  streetview_pano_service/        # Google Street View stills / pano sampling (CPU)
+  streetview_pano_service/        # Google Street View stills / pano sampling (CPU) — IMP-110 WBS: plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md
   lfm_vl_hint_service/            # Standard LFM-VL → JSON Street View hint suggestions (GPU Space)
   lfm_vl_satellite_caption_service/  # Specialist LFM-VL → caption / VQA / grounding; Gradio demo + API (GPU Space)
   pro_materialization_service/    # PRO: Mapbox + Sentinel-2 fetch, downsample for on-device VLM + TiM contracts (CPU/IO); `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §5.3

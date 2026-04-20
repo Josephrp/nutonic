@@ -25,8 +25,8 @@ class WorldMapGameplayPersistenceTest {
         rule.setContent {
             MaterialTheme {
                 WorldMapGameplayDetail(
-                    mapId = "demo",
-                    mapTitle = "Demo",
+                    mapId = "poi_0000",
+                    mapTitle = "Shipped manifest row",
                     localLeaderboardRepository = repo,
                     onBack = {},
                 )
@@ -40,9 +40,9 @@ class WorldMapGameplayPersistenceTest {
         rule.onNodeWithTag("worldMapShareScoreStub").assertIsDisplayed()
         rule.onNodeWithTag("worldMapSuccessDismissButton").performClick()
         rule.waitUntil(timeoutMillis = 10_000) {
-            runBlocking { repo.rowsForMap("demo").isNotEmpty() }
+            runBlocking { repo.rowsForMap("poi_0000").isNotEmpty() }
         }
-        val rows = runBlocking { repo.rowsForMap("demo") }
+        val rows = runBlocking { repo.rowsForMap("poi_0000") }
         assertTrue(rows.isNotEmpty())
         assertTrue(rows.first().humanScorePoints > 0)
     }

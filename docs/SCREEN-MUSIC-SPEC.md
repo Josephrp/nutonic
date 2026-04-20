@@ -52,6 +52,7 @@ Each row is **one** primary music asset (seamlessly loopable, normalized loudnes
 ## 4. Asset pipeline
 
 - **Location (recommended):** `nutonic/shared/src/commonMain/composeResources/files/music/<track_id>.<ext>` (or repo-agreed path under `shared` resources). **Do not** reference `https://` audio in production.
+- **Repository status (2026-04-20):** The KMP tree ships **eleven** minimal **PCM `.wav`** files (one per **`track_id`** in §3) as **silence placeholders** so `PlatformBgmPlayer` can open decoders in dev/CI; **replace** with mastered, licensed loops and normalize loudness per §4 **Loudness** before store release.
 - **Format:** Prefer **Ogg Vorbis** or **AAC** depending on platform decoder support in your chosen KMP audio stack; keep **one** master format in `commonMain` if the player API allows, otherwise document per-target transcodes in `rules/03-kotlin-multiplatform-structure.md`.
 - **Loudness:** Target consistent LUFS across tracks so SETUP’s `audio.music_volume` slider feels predictable.
 - **Licensing:** Only ship tracks with **cleared** commercial use; record credits in `NOTICE.md` if required.

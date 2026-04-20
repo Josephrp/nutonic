@@ -146,3 +146,11 @@ tasks.register<Exec>("validateCatalog") {
         composeResourcesRoot.absolutePath,
     )
 }
+
+// CI runs `./gradlew test`; for this KMP module AGP's `test` is Android unit tests only.
+// Wire desktop Compose UI tests (e.g. IMP-083 local leaderboard persistence) into that graph.
+afterEvaluate {
+    tasks.named("test").configure {
+        finalizedBy(tasks.named("desktopTest"))
+    }
+}

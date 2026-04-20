@@ -63,14 +63,14 @@ The repository includes `.vscode/extensions.json` with suggested extensions:
 - **Shared logic tests** belong in **`shared/src/commonTest`** with `kotlin("test")` (see `KmpSanityTest`).
 - **Desktop Compose UI tests** stay in **`shared/src/desktopTest`** (existing pattern with `compose.desktop.uiTestJUnit4`).
 - **Platform-only** tests (Android instrumented, iOS XCTest bridges) are added only when CI and product require them; they are **not** required for every feature.
-- **`./gradlew test`** is the default **aggregate** verification command in CI for JVM-backed test tasks; KMP may add more specific tasks as modules grow.
+- **`./gradlew test`** is the default **aggregate** verification command in CI for JVM-backed test tasks. For **`:shared`**, the Android `test` task **finalizes** **`desktopTest`**, so Compose UI tests under `shared/src/desktopTest` (non-ranked gameplay persistence, etc.) run in the same CI invocation as `./gradlew test`.
 
 ### Commands
 
 ```bash
 cd nutonic
 ./gradlew test
-./gradlew :shared:desktopTest   # when you rely on desktop UI tests
+./gradlew :shared:desktopTest   # optional: run desktop UI tests alone (also runs after :shared:test)
 ```
 
 ---

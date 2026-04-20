@@ -2,7 +2,8 @@ package com.nutonic.audio
 
 /**
  * Platform decoder/output (`rules/03-kotlin-multiplatform-structure.md` §Audio).
- * Stubs until bundled loops exist under `composeResources/files/music/`.
+ * Loops live under `composeResources/files/music/<track_id>.wav` (`docs/SCREEN-MUSIC-SPEC.md` §4);
+ * playback no-ops when assets are missing or the host has no audio mixer (e.g. headless CI).
  */
 expect class PlatformBgmPlayer() {
     suspend fun applyDesiredTrack(

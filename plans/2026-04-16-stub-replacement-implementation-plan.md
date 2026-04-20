@@ -337,3 +337,4 @@ STUB-I (share) ──► IMP-084 (orthogonal)
 | 0.1 | 2026-04-16 | Initial stub-replacement implementation plan (workstreams A–I, CI dual lane, PR slices). |
 | 0.2 | 2026-04-16 | Repo doc sync: cross-refs remain valid after **`docs/openapi.yaml`**, **`server/README.md`**, **`server/docs/TOPOLOGY.md`**, gap analysis **v1.2**, claims baseline **v0.9**, backlog **§0.1 v0.8** updates. |
 | 0.3 | 2026-04-18 | **Authority** + **§2 STUB-A:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; **A1.1** corrected (Classic Metadata has no **`links`**; Tiles optional per **PR-J**). |
+| 0.4 | 2026-04-20 | Cross-ref gap analysis **v1.4** — **`inference/pro_materialization_service/`** is **present** in the tree (§3 row corrected); **STUB-D** / **IMP-113** scope unchanged (hardening remains). |

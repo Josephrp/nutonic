@@ -13,7 +13,7 @@ Offline batch driver with a **fixed multi-stage pipeline** (see §1.1). In short
 Internal HTTP services (URLs are **contracts**; backends are swappable):
 
 1. `**inference/streetview_pano_service**` — returns `**frames[]**` (image bytes + `pano_id`, headings, attribution); frame count is **operator-configurable** and must match what LFM-VL expects (bounded `max_suggestions` / token budget).
-2. **VLM captioning** — `**POST /v1/suggestions/from_frames**` (or adapter-mapped equivalent): all screenshots for that POI in **one** request (or chunked batches if `**--lfm-max-frames-per-request**` is exceeded — merge `suggestions[]` deterministically by `viewpoint_id` order). The process behind `**--lfm-vl-url**` may be `**lfm_vl_hint_service**` (`**transformers` + PyTorch**), a **vLLM** deployment exposing an OpenAI-compatible chat/completions API with a thin shim, or another approved worker — see `inference/README.md` §Runtime backends.
+2. **VLM captioning** — `**POST /v1/suggestions/from_frames**` (or adapter-mapped equivalent): all screenshots for that POI in **one** request (or chunked batches if `**--lfm-max-frames-per-request**` is exceeded — merge `suggestions[]` in **global pano frame order**, then assign **`rank`** 1…N; per-chunk LFM ranks may restart at 1). The process behind `**--lfm-vl-url**` may be `**lfm_vl_hint_service**` (`**transformers` + PyTorch**), a **vLLM** deployment exposing an OpenAI-compatible chat/completions API with a thin shim, or another approved worker — see `inference/README.md` §Runtime backends.
 
 Primary ship field remains `**streetview_hint_pack**` (see `**plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md**` §4).
 
@@ -96,7 +96,7 @@ For each `location_id`, after pano fetch:
 - Each `**streetview_hint_pack[].text**` must pass `**validate_hint_strings**` in **caption mode** (no coords, max length).
 - `**streetview_assist_narrative`:** when `**--enable-narrative-pass`** is set, a **single** fused prose string (INTEL / mission chrome); **null** otherwise. Same validator rules; **shorter** max length than sum of pack lines (policy YAML, e.g. ≤ 900 chars).
 
-`**model_pins`:** merge per-run objects for `**streetview_pano_service`**, `**lfm_vl_hint_service**`, optional `**lfm_vl_satellite_caption_service**`, and optional **narrative text backend** (`model_id`, `revision`, `prompt_template_version` / `prompt_pack_version`) into the cache reports file referenced in `**plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §8.
+`**model_pins` (per-location JSON):** same run-level object on every `**streetview/<location_id>.json**` — built from `**GET …/health**` on `**streetview_pano_service**`, `**lfm_vl_hint_service**`, and optional `**lfm_vl_satellite_caption_service**` at **batch start** (not the last successful POI). **`data/cache/<version>/reports/model_pins.json`** duplicates that `**model_pins**` object and adds **`generated_at`** (UTC ISO-8601), **`stats`** (location counts, `**lfm_max_frames_per_request**`, `**sv_screenshots_per_location**`, `**pano_sampling_mode**`), **`written_location_ids**`, and **`failed_locations**`; it is written on **every** exit path that passes health checks (including the first hard failure when `**--allow-partial**` is off). Optional narrative backend pins remain future work.
 
 ---
 
@@ -140,7 +140,8 @@ python tools/batch_streetview_hints.py
 - [SPEC-assemble-manifest.md](SPEC-assemble-manifest.md)
 - [SPEC-validate-hint-strings.md](SPEC-validate-hint-strings.md)
 - [SPEC-render-mapbox-still.md](SPEC-render-mapbox-still.md) — still bytes for optional satellite caption hop
+- [`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`](../../plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md) — after changing **`content_version`** in manifest output, re-run **`assemble_manifest`** + embed + **`sync_server_catalog --write`** so client **`mergeShippedRoundTruth`** and player-facing “catalog update” copy stay aligned (**IMP-147**).
 
 ---
 
-*Spec version: 2026-04-14e — **Implemented** local runner (`tools/` + `inference/`* stubs); optional satellite / GPU backends unchanged*
+*Spec version: 2026-04-21 — **S2 merge:** global pano frame order + **`rank`** 1…N after chunked LFM; per-run **`data/cache/<content_version>/reports/model_pins.json`**. Prior **2026-04-14e** “implemented” local runner (`tools/` + `inference/*` stubs) unchanged otherwise.*

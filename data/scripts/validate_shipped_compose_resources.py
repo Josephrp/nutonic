@@ -2,10 +2,16 @@
 """
 Verify ``manifest.full.json`` still_bundled_resource paths exist under composeResources/.
 
-Paths in the manifest are Compose Multiplatform resource paths (e.g. ``files/3.jpg``)
+Paths in the manifest are Compose Multiplatform resource paths (e.g. ``files/maps/poi_0000.jpg``)
 relative to the ``composeResources`` directory, not relative to ``composeResources/files``.
 
-Used by Gradle ``:shared:validateCatalog`` (see docs/scripts/SPEC-catalog-lint.md §Related).
+**Repo invariant:** Reference still JPEGs referenced by the shipped manifest are **committed in git**
+under ``nutonic/shared/src/commonMain/composeResources/`` (e.g. ``files/maps/*.jpg``) so
+``:shared:validateCatalog`` passes on a normal clone without a generate step. If this script
+fails locally, restore or regenerate stills (``data/scripts/render_mapbox_still.py``) and
+re-sync the manifest — do not assume the tree ships without binaries.
+
+Used by Gradle ``:shared:validateCatalog`` (see ``docs/scripts/SPEC-catalog-lint.md`` §Related).
 """
 
 from __future__ import annotations

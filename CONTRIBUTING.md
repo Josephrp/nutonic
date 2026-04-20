@@ -15,6 +15,9 @@ Thank you for helping build NU:TONIC. This guide summarizes what maintainers exp
 | 1 | [`rules/00-product-intent.md`](rules/00-product-intent.md) | Solo-first async play, client vs server authority (non-ranked vs ranked), PRO vs SCAN, marketplace posture |
 | 2 | [`rules/01-navigation-architecture.md`](rules/01-navigation-architecture.md) | Canonical tabs (**SCAN / INTEL / RANK / SETUP / PRO**), route IDs vs labels, depth limits, auth/session expectations |
 | 3 | [`rules/07-screens-checklist.md`](rules/07-screens-checklist.md) | Ship list for screens, BGM + header music toggle, stitch folder pairing |
+| 4 | [`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`](plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md), [`docs/VENDORED-UI-CONTRACT-PACK.md`](docs/VENDORED-UI-CONTRACT-PACK.md), [`docs/PUBLISHABLE-UI-EXIT-CRITERIA.md`](docs/PUBLISHABLE-UI-EXIT-CRITERIA.md), [`rules/15-publishable-ui-and-release-readiness.md`](rules/15-publishable-ui-and-release-readiness.md) | Converged SCAN hub, design-system completion, no debug copy in release, vendored parity contracts (**IMP-140**) |
+
+**Stitch reference assets:** `refs/stitch/` is optional local reference only and may be gitignored. Do **not** block implementation/review on submodule wiring; use vendored first-party contracts in `docs/` + `rules/` (see publishable plan §P0).
 
 **When sources disagree:** [`rules/README.md`](rules/README.md) § “Order of authority” — `00` / `01` and **`docs/DESIGN.md`** override older stitch naming; **`rules/02-design-system.md`** is how design lands in Compose (tokens, fonts, glass).
 

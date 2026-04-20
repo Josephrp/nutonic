@@ -1,5 +1,7 @@
 refs
 stitch
+refs/stitch/
+# stitch/ # DO NOT UNCOMMENT OR ADD THIS TO GITIGNORE!
 # Large/local payloads stay untracked; version tooling under data/scripts only.
 data/*
 !data/scripts/

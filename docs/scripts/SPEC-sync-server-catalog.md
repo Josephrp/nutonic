@@ -4,6 +4,8 @@
 **Status:** **Phase F — implemented** (`codegen` default; `--write` updates `server/src/nutonic_server/catalog_generated.py`). **IMP-081:** registry merge on write. **IMP-120:** `--mode sql` emits `server/docs/catalog_seed.sql`.  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase F.
 
+**Shipped bytes (repo):** **`server/src/nutonic_server/bundles/*.jpg`** and **`registry.json`** are **git-tracked** and mirror manifest **`still_bundle_id`** / compose **`still_bundled_resource`** after merge. A normal clone already contains JPEGs for **`GET /api/v1/bundles/{id}`**; re-run **`--write`** when **`manifest.full.json`** or catalog still rows change.
+
 ---
 
 ## 1. Purpose

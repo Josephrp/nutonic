@@ -170,6 +170,8 @@ If OpenAPI or analytics still carry **`difficulty_profile_id`**, map it to **`ch
 
 **Human phase progression** (when to leave **`PLAY`** for resolution) is driven by **player submit** or **explicit** product actions (e.g. abandon control if shipped)—**not** by reaching **`play_budget_ms`**.
 
+**Shipped UI:** Any HUD that surfaces **`elapsed_play_ms`** or **`play_budget_ms`** must use **player-facing** copy that states the timer is **not scored** (see **`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`** §2.5). **Internal** phase names (`PLAY`, `AI_GUESS`, …) belong in **debug** tooling only (`rules/15-publishable-ui-and-release-readiness.md`).
+
 ---
 
 ## 8. State machines
@@ -399,6 +401,8 @@ Normative contracts live with the reference server. Illustrative endpoints (REST
 | [`RANKED-MODE.md`](RANKED-MODE.md) | Ranked missions: server-secret rounds, verified scores, round_ticket |
 | [`docs/DESIGN.md`](DESIGN.md) | Shipped visual system (chat, HUD, typography) |
 | [`refs/stitch/nu_tonic_interface_design_specification.html`](refs/stitch/nu_tonic_interface_design_specification.html) | UX footguns and flows |
+| [`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`](../plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md) | Store-ready client UI: cosmetic timer copy, offline/manifest messaging, debug vs release |
+| [`docs/PUBLISHABLE-UI-EXIT-CRITERIA.md`](PUBLISHABLE-UI-EXIT-CRITERIA.md) | Release checklist tying engine UX to shippable builds |
 
 ---
 
@@ -427,6 +431,7 @@ Normative contracts live with the reference server. Illustrative endpoints (REST
 | 0.19 | 2026-04-12 | **Solo-first / transport:** §1.1 / §6.2 / §8.1 / §12.1 / §14–§15 / §17 — **REST + local state** for players; **no** player-facing realtime session channel; **`match_id`** = optional correlation only; engine events = **in-process** naming |
 | 0.20 | 2026-04-12 | Cross-links: **`docs/RANKED-MODE.md`** (renamed from `RANKED-AND-PRO-MODE.md`)—ranked vs **PRO** tab vocabulary |
 | 0.21 | 2026-04-14 | **§9 useful hints:** up to **six** coordinate-free tiers; OpenAPI optional **`tier_4`–`tier_6`**; pipeline **`hint_compile_facts`** + **`compile_useful_hint_tiers`** |
+| 0.22 | 2026-04-21 | **§20** related docs: publishable UI plan + exit criteria (player-facing copy for timer §7.3 and manifest offline states). |
 
 ---
 

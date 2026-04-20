@@ -342,6 +342,9 @@ Mandatory alignment with **`rules/08-ux-and-performance-footguns.md`**:
 | `rules/06-server-vlm-tim-and-on-device-ml.md` | Server **TiM**, VLM, on-device ML rules |
 | `docs/INTEL-TAB-SPEC.md` | **INTEL** (dashboard) product and layout spec beyond stitch tokens |
 | `plans/2026-04-07-gradio-terramind-backend.md` | Reference server architecture |
+| `plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md` | Store-ready UI phases, **IMP-140–149**, theme parameters, manifest copy matrix |
+| `docs/PUBLISHABLE-UI-EXIT-CRITERIA.md` | Release **ship / no-ship** checklist for player-facing builds |
+| `rules/15-publishable-ui-and-release-readiness.md` | Debug-copy bans, SCAN convergence, timer labeling rules |
 
 ---
 

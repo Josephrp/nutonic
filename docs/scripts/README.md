@@ -1,7 +1,8 @@
 # NU:TONIC — Data and cache pipeline script specifications
 
 **Purpose:** Normative **per-script** specifications for the shipped-cache / catalog / hint production pipeline. **Orchestration plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md).  
-**Implementation plans:** [`plans/2026-04-14-data-scripts-implementation-track.md`](../../plans/2026-04-14-data-scripts-implementation-track.md) (ordered tracks + PR boundaries), [`plans/2026-04-14-data-scripts-testing-and-ci.md`](../../plans/2026-04-14-data-scripts-testing-and-ci.md) (fixtures, pytest, CI).
+**Implementation plans:** [`plans/2026-04-14-data-scripts-implementation-track.md`](../../plans/2026-04-14-data-scripts-implementation-track.md) (ordered tracks + PR boundaries), [`plans/2026-04-14-data-scripts-testing-and-ci.md`](../../plans/2026-04-14-data-scripts-testing-and-ci.md) (fixtures, pytest, CI).  
+**Client UI ship criteria (manifest copy, offline strings, release gates):** [`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`](../../plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md), [`docs/PUBLISHABLE-UI-EXIT-CRITERIA.md`](../PUBLISHABLE-UI-EXIT-CRITERIA.md) — align catalog **`content_version`** bumps with embedded `manifest.full.json` to avoid **IMP-147** user-visible skew.
 
 **Authority:** Complements `docs/GAME-ENGINE.md` §9, `docs/NARRATIVE-AND-PROMPTS.md`, `rules/13-client-cache-and-data-plane.md`, `docs/openapi.yaml`.
 
@@ -42,4 +43,4 @@
 
 ---
 
-*Index version: 2026-04-14g — Gradle validate path + `sync_server_catalog` + `terramind_tim_local` cross-links; optional LLM stub note*
+*Index version: 2026-04-21 — Cross-link publishable UI plan + exit criteria (`content_version` / embedded manifest alignment).*

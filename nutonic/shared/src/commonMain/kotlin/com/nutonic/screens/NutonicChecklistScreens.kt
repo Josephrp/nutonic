@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -16,11 +16,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nutonic.navigation.ShellDetail
+import com.nutonic.style.NutonicGhostButton
+import com.nutonic.style.NutonicPrimaryButton
 
 @Composable
 fun ChecklistScreenChrome(
     title: String,
-    checklistRef: String,
+    supportText: String,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     extra: @Composable () -> Unit = {},
@@ -39,7 +41,7 @@ fun ChecklistScreenChrome(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = checklistRef,
+            text = supportText,
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
             textAlign = TextAlign.Center,
@@ -47,7 +49,7 @@ fun ChecklistScreenChrome(
         extra()
         if (onBack != null) {
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onBack) { Text("Back") }
+            NutonicGhostButton(text = "Back", onClick = onBack, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -59,12 +61,12 @@ fun SplashScreenPlaceholder(
 ) {
     ChecklistScreenChrome(
         title = "NU:TONIC",
-        checklistRef = "Splash — rules/07 #1 · `music_splash`",
+        supportText = "Initialize uplink and enter the SCAN shell.",
         modifier = modifier,
         onBack = null,
         extra = {
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onInitialize) { Text("Initialize") }
+            NutonicPrimaryButton(text = "Initialize", onClick = onInitialize, modifier = Modifier.fillMaxWidth())
         },
     )
 }
@@ -79,23 +81,25 @@ fun RoleSelectionScreenPlaceholder(
 ) {
     ChecklistScreenChrome(
         title = "Choose your role",
-        checklistRef = "Role selection — rules/07 #3 · Human / Astronaut / Alien",
+        supportText = "Pick the protocol identity for this session.",
         modifier = modifier,
         onBack = null,
         extra = {
             Spacer(modifier = Modifier.height(16.dp))
             GameRolePicker(selectedRole = selectedRole, onSelectRole = onSelectRole)
             Spacer(modifier = Modifier.height(16.dp))
-            Button(
+            NutonicPrimaryButton(
+                text = "Continue",
                 onClick = onContinue,
                 enabled = selectedRole != null,
-            ) {
-                Text("Continue")
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(onClick = onOpenOptionalAuth) {
-                Text("Sign in (optional)")
-            }
+            NutonicGhostButton(
+                text = "Sign in (optional)",
+                onClick = onOpenOptionalAuth,
+                modifier = Modifier.fillMaxWidth(),
+            )
         },
     )
 }
@@ -110,8 +114,18 @@ fun GameRolePicker(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf("HUMAN" to "Human", "ASTRONAUT" to "Astronaut", "ALIEN" to "Alien").forEach { (id, label) ->
             val sel = selectedRole == id
-            Button(onClick = { onSelectRole(id) }) {
-                Text(if (sel) "★ $label" else label)
+            if (sel) {
+                NutonicPrimaryButton(
+                    text = "★ $label",
+                    onClick = { onSelectRole(id) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                NutonicGhostButton(
+                    text = label,
+                    onClick = { onSelectRole(id) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
@@ -124,12 +138,12 @@ fun AuthenticationScreenPlaceholder(
 ) {
     ChecklistScreenChrome(
         title = "Authentication",
-        checklistRef = "rules/07 #2 · skippable optional path",
+        supportText = "Sign in is optional for casual SCAN play.",
         modifier = modifier,
         onBack = null,
         extra = {
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onSkip) { Text("Skip for now") }
+            NutonicPrimaryButton(text = "Skip for now", onClick = onSkip, modifier = Modifier.fillMaxWidth())
         },
     )
 }
@@ -148,7 +162,7 @@ fun ShellDetailPlaceholder(
     val (title, ref) = detailMeta(detail)
     ChecklistScreenChrome(
         title = title,
-        checklistRef = ref,
+        supportText = ref,
         modifier = modifier,
         onBack = onBack,
         extra = {
@@ -162,9 +176,11 @@ fun ShellDetailPlaceholder(
             }
             if (detail == ShellDetail.FinalResults && onNavigateToRankForMap != null) {
                 Spacer(modifier = Modifier.height(24.dp))
-                Button(onClick = { onNavigateToRankForMap(rankNavigationMapId) }) {
-                    Text("Open RANK for map: $rankNavigationMapId")
-                }
+                NutonicPrimaryButton(
+                    text = "Open RANK for map: $rankNavigationMapId",
+                    onClick = { onNavigateToRankForMap(rankNavigationMapId) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
     )
@@ -172,13 +188,13 @@ fun ShellDetailPlaceholder(
 
 private fun detailMeta(detail: ShellDetail): Pair<String, String> =
     when (detail) {
-        ShellDetail.MissionSelection -> "Mission selection" to "rules/07 #4c · SCAN hub"
-        ShellDetail.MapLevelSelection -> "Map / level selection" to "rules/07 #4b · `map_id`"
-        ShellDetail.WorldMapGameplay -> "World map gameplay" to "rules/07 #5"
-        ShellDetail.SuccessOverlay -> "Success overlay" to "rules/07 #6"
-        ShellDetail.FinalResults -> "Final results" to "rules/07 #7 · deep-link to RANK"
-        ShellDetail.IntelDashboard -> "INTEL dashboard" to "rules/07 #4"
-        ShellDetail.RankGlobal -> "RANK · global + map pick" to "rules/07 · RANK tab"
-        ShellDetail.SetupProtocol -> "SETUP · protocol" to "rules/07 #8"
-        ShellDetail.ProCoordinateDashboard -> "PRO · coordinate dashboard" to "rules/07 #9 · VLM tools"
+        ShellDetail.MissionSelection -> "Mission selection" to "Select a mission profile and launch from SCAN."
+        ShellDetail.MapLevelSelection -> "Map / level selection" to "Select map context used by gameplay and ranks."
+        ShellDetail.WorldMapGameplay -> "World map gameplay" to "Map, still clue, assists, and one primary submit."
+        ShellDetail.SuccessOverlay -> "Success overlay" to "Round-complete summary before full results."
+        ShellDetail.FinalResults -> "Final results" to "Mission summary, progression, and rank handoff."
+        ShellDetail.IntelDashboard -> "INTEL dashboard" to "Session progress, XP lane, and daily protocol status."
+        ShellDetail.RankGlobal -> "RANK · global + map pick" to "Browse map-scoped and global rank slices."
+        ShellDetail.SetupProtocol -> "SETUP · protocol" to "Profile, accessibility, and audio protocol controls."
+        ShellDetail.ProCoordinateDashboard -> "PRO · coordinate dashboard" to "Advanced coordinate tooling and VLM surfaces."
     }

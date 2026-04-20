@@ -14,6 +14,7 @@ import os
 import random
 import sys
 import time
+from datetime import datetime, timezone
 import zlib
 import uuid
 from dataclasses import dataclass
@@ -24,6 +25,14 @@ from urllib.parse import urljoin
 import httpx
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _safe_repo_relative(path: Path) -> Path:
+    """``Path.relative_to(REPO_ROOT)`` when under repo; else absolute (e.g. pytest ``tmp_path``)."""
+    try:
+        return path.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        return path.resolve()
 _SCRIPTS = REPO_ROOT / "data" / "scripts"
 _TOOLS = REPO_ROOT / "tools"
 if str(_SCRIPTS) not in sys.path:
@@ -327,9 +336,25 @@ def _lfm_suggestions(
 
 
 def _validate_pack_suggestions(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep every suggestion; attach ``caption_validation`` metadata when checks fail (no drops)."""
+    """Keep every suggestion; attach ``caption_validation`` metadata when checks fail (no drops).
+
+    When ``_batch_frame_seq`` is present (chunked LFM merges), sort into **pano frame order** before
+    renumbering ``rank`` 1..N so per-chunk ``rank`` collisions do not reorder captions
+    (``plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`` PR-F4;
+    ``docs/scripts/SPEC-batch-streetview-hints.md`` §1.1 S2).
+    """
+    has_seq = any(isinstance(s.get("_batch_frame_seq"), int) for s in raw)
+    ordered = list(raw)
+    if has_seq:
+        ordered.sort(
+            key=lambda x: (
+                int(x.get("_batch_frame_seq", 10**9)),
+                int(x.get("rank", 0)) if isinstance(x.get("rank"), (int, float)) else 0,
+                str(x.get("viewpoint_id", "")),
+            )
+        )
     out: list[dict[str, Any]] = []
-    for s in raw:
+    for s in ordered:
         text = str(s.get("text", "")).strip()
         vid = str(s.get("viewpoint_id", "decoy"))
         rank = int(s.get("rank", len(out) + 1))
@@ -343,8 +368,9 @@ def _validate_pack_suggestions(raw: list[dict[str, Any]]) -> list[dict[str, Any]
                 file=sys.stderr,
             )
         out.append(item)
-    out.sort(key=lambda x: (x["rank"], x["viewpoint_id"]))
-    return [{**item, "rank": i} for i, item in enumerate(out, start=1)]
+    if not has_seq:
+        out.sort(key=lambda x: (x["rank"], x["viewpoint_id"]))
+    return [{**{k: v for k, v in item.items() if k != "_batch_frame_seq"}, "rank": i} for i, item in enumerate(out, start=1)]
 
 
 def _optional_narrative(
@@ -468,6 +494,53 @@ def _satellite_service_pin(sat_health: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def _shared_model_pins_for_run(
+    pano_health: dict[str, Any],
+    lfm_health: dict[str, Any],
+    *,
+    sampling_mode: str,
+    prompt_template_version: str,
+    sat_pin: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Run-level pins from worker ``/health`` (identical for every POI in one batch invocation)."""
+    pins: dict[str, Any] = {
+        "streetview_pano_service": _pano_model_pin(pano_health, sampling_mode=sampling_mode),
+        "lfm_vl_hint_service": _lfm_model_pin(lfm_health, prompt_template_version=prompt_template_version),
+    }
+    if sat_pin is not None:
+        pins["lfm_vl_satellite_caption_service"] = sat_pin
+    return pins
+
+
+def _write_model_pins_report(
+    rep_dir: Path,
+    cfg: BatchConfig,
+    shared_pins: dict[str, Any],
+    *,
+    locations_selected: int,
+    locations_written: int,
+    written_location_ids: list[str],
+    failures: list[dict[str, Any]],
+) -> None:
+    """Aggregate observability artifact (``plans/2026-04-18`` §13.4, ``SPEC-batch-streetview-hints`` §4)."""
+    doc: dict[str, Any] = {
+        "content_version": cfg.content_version,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "model_pins": shared_pins,
+        "stats": {
+            "locations_selected": locations_selected,
+            "locations_written": locations_written,
+            "locations_failed": len(failures),
+            "lfm_max_frames_per_request": cfg.lfm_max_frames_per_request,
+            "sv_screenshots_per_location": cfg.sv_screenshots_per_location,
+            "pano_sampling_mode": cfg.pano_sampling_mode,
+        },
+        "written_location_ids": written_location_ids,
+        "failed_locations": failures,
+    }
+    rep_dir.joinpath("model_pins.json").write_text(json.dumps(doc, indent=2), encoding="utf-8")
+
+
 def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
     if cfg.skip_streetview_hints:
         return EXIT_OK
@@ -496,6 +569,14 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
         sat_health = _try_health_json(client, cfg.satellite_caption_service_url)
         sat_pin = _satellite_service_pin(sat_health)
 
+    shared_model_pins = _shared_model_pins_for_run(
+        pano_health,
+        lfm_health,
+        sampling_mode=cfg.pano_sampling_mode,
+        prompt_template_version=cfg.prompt_template_version,
+        sat_pin=sat_pin,
+    )
+
     out_root = cfg.output_dir or (REPO_ROOT / "data" / "cache" / cfg.content_version)
     sv_dir = out_root / "streetview"
     rep_dir = out_root / "reports"
@@ -512,6 +593,7 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
         print("No catalog locations selected.", file=sys.stderr)
         return EXIT_USAGE
 
+    written_location_ids: list[str] = []
     n_locs = len(locations)
     for idx, row in enumerate(locations):
         lid = str(row["location_id"])
@@ -550,7 +632,9 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
             max_chunk = max(1, cfg.lfm_max_frames_per_request)
             chunks = list(_chunk(frames_api, max_chunk))
             chunk_gap = _inter_lfm_chunk_sleep_sec()
+            frame_cursor = 0
             for ci, chunk in enumerate(chunks):
+                chunk_start = frame_cursor
                 part = _lfm_suggestions(
                     client,
                     lfm_base,
@@ -560,7 +644,12 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                     useful_hints=useful,
                     inject_tone=cfg.inject_useful_hint_tone,
                 )
-                merged_suggestions.extend(part)
+                for j, s in enumerate(part):
+                    if isinstance(s, dict):
+                        tagged = dict(s)
+                        tagged["_batch_frame_seq"] = chunk_start + j
+                        merged_suggestions.append(tagged)
+                frame_cursor += len(chunk)
                 if chunk_gap > 0 and ci < len(chunks) - 1:
                     time.sleep(chunk_gap)
             pack = _validate_pack_suggestions(merged_suggestions)
@@ -593,21 +682,11 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                             if not satellite_side["caption"]:
                                 satellite_side["raw"] = sat
 
-            model_pins: dict[str, Any] = {
-                "streetview_pano_service": _pano_model_pin(
-                    pano_health,
-                    sampling_mode=cfg.pano_sampling_mode,
-                ),
-                "lfm_vl_hint_service": _lfm_model_pin(lfm_health, prompt_template_version=cfg.prompt_template_version),
-            }
-            if sat_pin is not None:
-                model_pins["lfm_vl_satellite_caption_service"] = sat_pin
-
             out_doc: dict[str, Any] = {
                 "location_id": lid,
                 "streetview_hint_pack": pack,
                 "streetview_assist_narrative": narrative,
-                "model_pins": model_pins,
+                "model_pins": shared_model_pins,
             }
             if narrative_validation:
                 out_doc["streetview_assist_narrative_metadata"] = {
@@ -618,7 +697,8 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
 
             out_path = sv_dir / f"{lid}.json"
             out_path.write_text(json.dumps(out_doc, indent=2), encoding="utf-8")
-            print(f"Wrote {out_path.relative_to(REPO_ROOT)}")
+            written_location_ids.append(lid)
+            print(f"Wrote {_safe_repo_relative(out_path)}")
         except Exception as e:  # noqa: BLE001 — batch driver aggregates per-POI errors
             failures.append({"location_id": lid, "error": str(e), "type": type(e).__name__})
             print(f"[fail] {lid}: {e}", file=sys.stderr)
@@ -626,6 +706,15 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                 rep_dir.joinpath("streetview_failures.json").write_text(
                     json.dumps(failures, indent=2),
                     encoding="utf-8",
+                )
+                _write_model_pins_report(
+                    rep_dir,
+                    cfg,
+                    shared_model_pins,
+                    locations_selected=n_locs,
+                    locations_written=len(written_location_ids),
+                    written_location_ids=written_location_ids,
+                    failures=failures,
                 )
                 return EXIT_HARD
         finally:
@@ -636,6 +725,15 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
     rep_dir.joinpath("streetview_failures.json").write_text(
         json.dumps(failures, indent=2),
         encoding="utf-8",
+    )
+    _write_model_pins_report(
+        rep_dir,
+        cfg,
+        shared_model_pins,
+        locations_selected=n_locs,
+        locations_written=len(written_location_ids),
+        written_location_ids=written_location_ids,
+        failures=failures,
     )
     if failures and not cfg.allow_partial:
         return EXIT_HARD

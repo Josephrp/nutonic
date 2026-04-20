@@ -12,10 +12,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.nutonic.model.TOAST_DURATION
-import com.nutonic.style.NutonicPhotoGalleryColors
+import com.nutonic.style.NutonicColors
 import kotlinx.coroutines.delay
 
 sealed interface ToastState {
@@ -36,11 +35,11 @@ fun Toast(state: MutableState<ToastState>) {
         ) {
             Surface(
                 modifier = Modifier.size(300.dp, 70.dp),
-                color = NutonicPhotoGalleryColors.ToastBackground,
+                color = NutonicColors.toastBackground,
                 shape = RoundedCornerShape(4.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(value.message, color = Color.White)
+                    Text(value.message, color = NutonicColors.onStillImagePlaceholder)
                 }
                 LaunchedEffect(value.message) {
                     delay(TOAST_DURATION)

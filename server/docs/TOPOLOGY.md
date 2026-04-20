@@ -15,6 +15,8 @@
 
 ## Environment (future URLs — TBD)
 
+**Local batch / HF Jobs (not wired through the game server yet):** operators run `tools/batch_streetview_hints.py` with explicit bases, for example `http://127.0.0.1:7861` for `inference/streetview_pano_service` and `http://127.0.0.1:7862` for `inference/lfm_vl_hint_service` (ports are examples — match your `uvicorn` / Space ports). Optional `--satellite-caption-service-url` for Mapbox-still captions. **`data/cache/<content_version>/reports/model_pins.json`** is written every run (including hard-fail exits without `--allow-partial`): **`model_pins`** from pano/LFM/satellite **`/health`** at batch start, plus **`generated_at`**, **`stats`** (selected/written/failed counts, chunk/frame policy), **`written_location_ids`**, and **`failed_locations`** (mirror of `streetview_failures.json`).
+
 | Variable | Role |
 |----------|------|
 | `STREETVIEW_PANO_SERVICE_URL` | Internal pano / still URL builder |

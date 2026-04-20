@@ -7,11 +7,11 @@ These documents define **design patterns and non-negotiable constraints** for im
 They tie together:
 
 - `docs/DESIGN.md` — visual and interaction system
-- `refs/stitch/nu_tonic_interface_design_specification.html` — product UX and flows
-- `refs/stitch/*/code.html` and `screen.png` — per-screen layout and copy targets
+- `refs/stitch/nu_tonic_interface_design_specification.html` — optional local UX reference (**not required for release gating**)
+- `refs/stitch/*/code.html` and `screen.png` — optional local per-screen references; publishable checks use vendored first-party contracts
 - Kotlin Multiplatform + Compose Multiplatform app under `nutonic/`
 
-**How to use:** Read `00-product-intent.md` first, then `01-navigation-architecture.md` (canonical IA: **SCAN / INTEL / RANK / SETUP / PRO** tabs, route IDs vs labels, **SCAN** default after shell). Implement features only against the checklist in `07-screens-checklist.md` unless product explicitly changes scope.
+**How to use:** Read `00-product-intent.md` first, then `01-navigation-architecture.md` (canonical IA: **SCAN / INTEL / RANK / SETUP / PRO** tabs, route IDs vs labels, **SCAN** default after shell). Implement features only against the checklist in `07-screens-checklist.md` unless product explicitly changes scope. **Store-ready UI hygiene and debug-copy bans:** read **`15-publishable-ui-and-release-readiness.md`** with **`docs/PUBLISHABLE-UI-EXIT-CRITERIA.md`** and **`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`** before calling a build publishable.
 
 **Screen music:** One bundled BGM loop per primary route, **header music on/off on every checklist screen**, prefs in **`docs/CLIENT-SETTINGS-SPEC.md`** §6.7 — read **`docs/SCREEN-MUSIC-SPEC.md`**.
 

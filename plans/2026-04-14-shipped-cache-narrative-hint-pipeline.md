@@ -99,7 +99,7 @@ nutonic/shared/src/commonMain/composeResources/files/
 
 **Remaining / polish:**
 
-1. **Shipped compose validation (landed):** **`:shared:validateCatalog`** runs **`data/scripts/validate_shipped_compose_resources.py`** against embedded **`manifest.full.json`** and resolves **`still_bundled_resource`** paths under **`nutonic/shared/.../composeResources/`** (see [`docs/scripts/SPEC-catalog-lint.md`](../docs/scripts/SPEC-catalog-lint.md) §5). **`data/scripts/sync_server_catalog.py`** (**`--write`**) emits **`server/src/nutonic_server/catalog_generated.py`** from that manifest for static server hydration — see [`docs/scripts/SPEC-sync-server-catalog.md`](../docs/scripts/SPEC-sync-server-catalog.md). **Still ahead:** **`sync_server_catalog --mode sql`** (**IMP-120**) and any **full bundle registry / bytes pipeline** polish beyond manifest + still paths (**IMP-081** nuances in gap analysis). **Street View batch (Phase D)** consumes **`streetview_pano_service`**; core **§13.1–§13.3** sampling is **landed** in **`inference/streetview_pano_service`** per **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) v0.3** — track **§13.4**/**§14** polish under **IMP-110**, not road-bearing research.
+1. **Shipped compose validation (landed):** **`:shared:validateCatalog`** runs **`data/scripts/validate_shipped_compose_resources.py`** against embedded **`manifest.full.json`** and resolves **`still_bundled_resource`** paths under **`nutonic/shared/.../composeResources/`** (see [`docs/scripts/SPEC-catalog-lint.md`](../docs/scripts/SPEC-catalog-lint.md) §5). **`git`** tracks the referenced **`files/maps/*.jpg`** and the embedded manifest so **normal clones** pass validation without a generate step. **`data/scripts/sync_server_catalog.py`** (**`--write`**) emits **`server/src/nutonic_server/catalog_generated.py`** from that manifest for static server hydration — see [`docs/scripts/SPEC-sync-server-catalog.md`](../docs/scripts/SPEC-sync-server-catalog.md); matching **JPEGs** under **`server/src/nutonic_server/bundles/`** are also **tracked** for **`GET /api/v1/bundles/{id}`**. **Still ahead:** **`sync_server_catalog --mode sql`** (**IMP-120**) and **workflow** docs for re-running **`render_mapbox_still`** / **`assemble_manifest`** / **`sync_server_catalog --write`** when **`data/catalog/`** or still policy changes (**IMP-081** maintenance, not first-time asset creation). **Street View batch (Phase D)** consumes **`streetview_pano_service`**; core **§13.1–§13.3** sampling is **landed** in **`inference/streetview_pano_service`** per **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) v0.3** — track remaining **§13.4**/**§14** polish under **IMP-110**, not road-bearing research.
 2. **Public** manifest redaction unchanged (**`locations`** / **`ai_guesses`** empty by default); **shipped** **`composeResources/files/cache/manifest.full.json`** + **`mergeShippedRoundTruth`** and **`files/ranked/ranked_clue_pack.json`** + client **`mergeRankedClueWithPack`** keep SCAN/ranked assists coherent when the wire slice is thin.
 3. **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH`** remains for **lab** and **contract tests** only.
 
@@ -282,7 +282,7 @@ They receive:
 
 | Wave | This plan feeds |
 |------|-----------------|
-| **IMP-081** | Phases B, F + server bundle registry |
+| **IMP-081** | Phases B, F + server bundle registry (**shipped JPEGs + `registry.json` are git-tracked** — maintenance is re-running scripts when catalog changes) |
 | **IMP-082** | Phase E + F + client `AiGuessStore` from embedded pack |
 | **IMP-083** exit | Phase A–**C2** minimum (deterministic hints on **`geoguessr_poi_12`**, no SV, no LLM) + §7 fail-closed UX + E2E |
 | **IMP-090** | §1 ranked pack + §7 merge resolver + stable idempotency |
@@ -305,6 +305,7 @@ They receive:
 | 0.8 | 2026-04-14 | **§4 / §7:** `streetview_hint_pack` **landed** on OpenAPI, Kotlin, server ranked clues, **`assemble_manifest`**, bundled **`ranked_clue_pack.json`** merge, **AssistDock** wiring, **fail-closed** non-ranked gameplay. |
 | 0.9 | 2026-04-14 | **§4:** **`:shared:validateCatalog`** + **`validate_shipped_compose_resources.py`** and **`sync_server_catalog.py`** (**codegen**) documented as **landed**; **IMP-120** SQL sync called out as remaining. |
 | 1.0 | 2026-04-18 | **Authority** + **Phase D:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; Phase D table rows for batch CLI / CI matrix aligned to **IMP-110** WBS (**PR-F**/**PR-H**/**PR-G**). |
+| 1.1 | 2026-04-21 | **§4:** Clarify **git-tracked** **`files/maps/*.jpg`**, **`manifest.full.json`**, and **`server/.../bundles/*.jpg`**; **IMP-081** = workflow maintenance + **IMP-120** SQL; **§9** IMP-081 row note; gap analysis **v1.6** cross-ref. |
 
 ---
 

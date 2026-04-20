@@ -56,9 +56,26 @@ class ContentCacheRepository(
     }
 
     suspend fun cachedDocument(): CacheManifestDocument? {
+        return cachedDocumentWithMergeOutcome()?.document
+    }
+
+    suspend fun cachedDocumentWithMergeOutcome(): CachedDocumentWithMergeOutcome? {
         val shipped = readShippedFullManifest()
-        val env = store.loadEnvelope() ?: return shipped
-        return mergeShippedRoundTruth(env.document, shipped)
+        val env = store.loadEnvelope()
+        if (env == null) {
+            val doc = shipped ?: return null
+            return CachedDocumentWithMergeOutcome(
+                document = doc,
+                mergeOutcome = ShippedManifestMergeOutcome.OVERLAID_FROM_SHIPPED,
+                shippedContentVersion = shipped.contentVersion,
+            )
+        }
+        val merged = mergeShippedRoundTruthDetailed(env.document, shipped)
+        return CachedDocumentWithMergeOutcome(
+            document = merged.document,
+            mergeOutcome = merged.outcome,
+            shippedContentVersion = merged.shippedContentVersion,
+        )
     }
 
     suspend fun cachedMapsOrNull(): List<MapSummary>? = cachedDocument()?.maps
@@ -77,6 +94,12 @@ class ContentCacheRepository(
             ManifestSyncResult.Failed(message)
         }
 }
+
+data class CachedDocumentWithMergeOutcome(
+    val document: CacheManifestDocument,
+    val mergeOutcome: ShippedManifestMergeOutcome,
+    val shippedContentVersion: String? = null,
+)
 
 sealed class ManifestSyncResult {
     data class Updated(

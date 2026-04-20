@@ -29,7 +29,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -50,7 +49,9 @@ import com.nutonic.api.UsefulHintsTiers
 import com.nutonic.audio.LocalNutonicBgmOverlay
 import com.nutonic.audio.NutonicBgmTrack
 import com.nutonic.cache.AiGuessStore
+import com.nutonic.cache.CachedDocumentWithMergeOutcome
 import com.nutonic.cache.ContentCacheRepository
+import com.nutonic.cache.ShippedManifestMergeOutcome
 import com.nutonic.cache.locationForMap
 import com.nutonic.cache.mergeRankedClueWithPack
 import com.nutonic.cache.readShippedFullManifest
@@ -64,8 +65,11 @@ import com.nutonic.map.MapCameraState
 import com.nutonic.map.MapGuessState
 import com.nutonic.map.MapViewport
 import com.nutonic.map.SelfGuessMarker
+import com.nutonic.filter.PlatformContext
+import com.nutonic.filter.getPlatformContext
 import com.nutonic.map.ViewportBounds
 import com.nutonic.resources.Res
+import com.nutonic.style.NutonicColors
 import com.nutonic.toImageBitmap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -74,7 +78,6 @@ import kotlin.math.PI
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.pow
-import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -83,6 +86,7 @@ private val demoPeerHint = LatLon(latitude = 50.8503, longitude = 4.3517)
 
 private const val NON_RANKED_CONTENT_BLOCKED_MESSAGE =
     "Round data is unavailable for this map (missing catalog row). Refresh the SCAN hub manifest or update the app."
+private const val SHOW_ENGINE_DEBUG_LABELS = false
 
 private val rankedBounds =
     ViewportBounds(
@@ -141,14 +145,38 @@ fun WorldMapGameplayDetail(
 ) {
     val scope = rememberCoroutineScope()
     var manifestSnapshot by remember { mutableStateOf<CacheManifestDocument?>(null) }
+    var manifestVersionNotice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(mapId, contentCacheRepository) {
-        manifestSnapshot =
+        val cached: CachedDocumentWithMergeOutcome? =
             when (val repo = contentCacheRepository) {
-                null -> readShippedFullManifest()
+                null -> {
+                    val shipped = readShippedFullManifest()
+                    shipped?.let {
+                        CachedDocumentWithMergeOutcome(
+                            document = it,
+                            mergeOutcome = ShippedManifestMergeOutcome.OVERLAID_FROM_SHIPPED,
+                            shippedContentVersion = it.contentVersion,
+                        )
+                    }
+                }
                 else -> {
                     repo.refreshManifest()
-                    repo.cachedDocument()
+                    repo.cachedDocumentWithMergeOutcome()
                 }
+            }
+        manifestSnapshot = cached?.document
+        manifestVersionNotice =
+            when (cached?.mergeOutcome) {
+                ShippedManifestMergeOutcome.VERSION_MISMATCH ->
+                    buildString {
+                        append("Catalog versions differ. ")
+                        append("Server ")
+                        append(cached.document.contentVersion)
+                        append(" and bundled ")
+                        append(cached.shippedContentVersion ?: "unknown")
+                        append(" are different. You can keep playing; guesses are saved and sent when possible.")
+                    }
+                else -> null
             }
     }
 
@@ -169,7 +197,10 @@ fun WorldMapGameplayDetail(
     }
     val rankedForUi = mergedRankedSession ?: rankedSession
 
+    val isRanked = rankedForUi != null
     val catalogLocation = remember(manifestSnapshot, mapId) { manifestSnapshot?.locationForMap(mapId) }
+    val fallbackLocation = remember(manifestSnapshot) { manifestSnapshot?.locations?.firstOrNull() }
+    val playableLocation = if (catalogLocation != null || isRanked) catalogLocation else fallbackLocation
     val rankedStillSource =
         remember(rankedForUi) {
             rankedForUi?.let { rs ->
@@ -190,20 +221,19 @@ fun WorldMapGameplayDetail(
                 )
             }
         }
-    val stillLocation = catalogLocation ?: rankedStillSource
-    val isRanked = rankedForUi != null
-    val nonRankedContentBlocked = !isRanked && catalogLocation == null
+    val stillLocation = playableLocation ?: rankedStillSource
+    val nonRankedContentBlocked = !isRanked && playableLocation == null
     val groundTruth =
-        remember(catalogLocation, isRanked) {
+        remember(playableLocation, isRanked) {
             if (isRanked) {
                 null
             } else {
-                catalogLocation?.truthLatLon()
+                playableLocation?.truthLatLon()
             }
         }
     val locationId =
         rankedForUi?.clue?.locationId
-            ?: catalogLocation?.locationId
+            ?: playableLocation?.locationId
             ?: mapId
     val stillResourcePath = stillLocation?.stillBundledResource ?: REFERENCE_STILL_RESOURCE
     val playBudgetSeconds =
@@ -249,9 +279,9 @@ fun WorldMapGameplayDetail(
         }
     }
 
-    LaunchedEffect(nonRankedContentBlocked) {
+    LaunchedEffect(nonRankedContentBlocked, manifestVersionNotice) {
         if (nonRankedContentBlocked) {
-            gameplayStatus = NON_RANKED_CONTENT_BLOCKED_MESSAGE
+            gameplayStatus = manifestVersionNotice ?: NON_RANKED_CONTENT_BLOCKED_MESSAGE
         }
     }
 
@@ -437,7 +467,7 @@ fun WorldMapGameplayDetail(
                 guessLat = guess.latitude,
                 guessLon = guess.longitude,
                 savedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
-                rulesetVersion = catalogLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
+                rulesetVersion = playableLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
             ),
         )
     }
@@ -449,7 +479,7 @@ fun WorldMapGameplayDetail(
         distanceKm,
         mapId,
         locationId,
-        catalogLocation,
+        playableLocation,
         stillLocation,
         guessesRecordEnabled,
         rankedForUi,
@@ -474,7 +504,7 @@ fun WorldMapGameplayDetail(
                 guessLat = guess.latitude,
                 guessLon = guess.longitude,
                 clientDistanceKm = km,
-                rulesetVersion = catalogLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
+                rulesetVersion = playableLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
             )
         api.postGuessRecord(mapId, body, token, idem)
     }
@@ -483,6 +513,8 @@ fun WorldMapGameplayDetail(
     LaunchedEffect(mapId) {
         hideSuccessOverlay = false
     }
+
+    val platformContext = getPlatformContext()
 
     val showSuccessOverlay =
         lockedGuess != null && !hideSuccessOverlay && (rankedServerOutcome != null || !isRanked)
@@ -518,9 +550,13 @@ fun WorldMapGameplayDetail(
         }
         if (showSuccessOverlay) {
             RoundSuccessOverlay(
+                mapId = mapId,
+                mapTitle = mapTitle,
+                locationId = locationId,
                 scorePoints = scorePoints,
                 distanceKm = distanceKm,
                 serverVerified = rankedServerOutcome != null,
+                platformContext = platformContext,
                 onDismiss = { hideSuccessOverlay = true },
                 modifier =
                     Modifier
@@ -544,6 +580,20 @@ fun WorldMapGameplayDetail(
                         modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.body2,
                         color = MaterialTheme.colors.error,
+                    )
+                }
+            }
+            manifestVersionNotice?.let { notice ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("worldMapManifestVersionBanner"),
+                    backgroundColor = MaterialTheme.colors.secondary.copy(alpha = 0.12f),
+                    elevation = 2.dp,
+                ) {
+                    Text(
+                        text = notice,
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.body2,
+                        color = MaterialTheme.colors.secondary,
                     )
                 }
             }
@@ -579,16 +629,18 @@ fun WorldMapGameplayDetail(
                     )
                     if (isRanked) {
                         Text(
-                            text = "Ranked: local distance hidden; assists require server forfeit first (`docs/GAME-ENGINE.md` §12.4).",
+                            text = "Ranked: local distance is hidden; opening assists records a ranked forfeit.",
                             style = MaterialTheme.typography.caption,
                             color = MaterialTheme.colors.secondary,
                         )
                     }
-                    Text(
-                        text = "Engine phase: $enginePhaseLabel (`docs/GAME-ENGINE.md` §8 / §10)",
-                        style = MaterialTheme.typography.caption,
-                        color = MaterialTheme.colors.onBackground,
-                    )
+                    if (SHOW_ENGINE_DEBUG_LABELS) {
+                        Text(
+                            text = "Engine phase: $enginePhaseLabel",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onBackground,
+                        )
+                    }
                 }
                 Button(modifier = Modifier.testTag("worldMapBackButton"), onClick = onBack) {
                     Text("Back")
@@ -621,7 +673,7 @@ fun WorldMapGameplayDetail(
                     scorePoints = scorePoints,
                     distanceKm = distanceKm,
                     aiDistanceToTruthKm = if (lockedGuess != null) aiVsTruthKm else null,
-                    phaseLabel = enginePhaseLabel,
+                    phaseLabel = if (SHOW_ENGINE_DEBUG_LABELS) enginePhaseLabel else null,
                     modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
                 )
 
@@ -654,7 +706,7 @@ fun WorldMapGameplayDetail(
                                     streetAssistExpanded = true
                                     gameplayStatus = "Ranked: assist forfeit recorded (server)."
                                 } else {
-                                    gameplayStatus = "Ranked forfeit failed — Street View assist stayed closed."
+                                    gameplayStatus = "Ranked forfeit failed — location assist stayed closed."
                                 }
                             }
                         }
@@ -868,7 +920,7 @@ private fun GameplayHudCard(
     scorePoints: Int?,
     distanceKm: Double?,
     aiDistanceToTruthKm: Double?,
-    phaseLabel: String,
+    phaseLabel: String?,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -879,9 +931,11 @@ private fun GameplayHudCard(
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("HUD", style = MaterialTheme.typography.caption, color = MaterialTheme.colors.primary)
-            Text("Phase: $phaseLabel", style = MaterialTheme.typography.caption)
+            phaseLabel?.let {
+                Text("Phase: $it", style = MaterialTheme.typography.caption)
+            }
             Text("Elapsed: ${elapsedSeconds}s", style = MaterialTheme.typography.body2)
-            Text("Budget: ${remainingSeconds}s", style = MaterialTheme.typography.body2)
+            Text("Sector time (not scored): ${remainingSeconds}s", style = MaterialTheme.typography.body2)
             if (scorePoints != null && distanceKm != null) {
                 Text("Distance: ${distanceKm.format(2)} km", style = MaterialTheme.typography.caption)
                 Text("Score: $scorePoints", style = MaterialTheme.typography.caption)
@@ -896,43 +950,6 @@ private fun GameplayHudCard(
                     "Submit one guess to resolve distance and score (ranked: server verifies).",
                     style = MaterialTheme.typography.caption,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RoundSuccessOverlay(
-    scorePoints: Int?,
-    distanceKm: Double?,
-    serverVerified: Boolean,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Card(
-        modifier = modifier,
-        backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.95f),
-        elevation = 8.dp,
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Round complete", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            if (serverVerified) {
-                Text("Server-verified ranked score", style = MaterialTheme.typography.caption, color = MaterialTheme.colors.secondary)
-            }
-            if (scorePoints != null && distanceKm != null) {
-                Text("$scorePoints pts · ${distanceKm.format(2)} km from truth", style = MaterialTheme.typography.body2)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(
-                    modifier = Modifier.testTag("worldMapShareScoreStub"),
-                    onClick = { /* IMP-084 share hook stub */ },
-                ) {
-                    Text("Share scorecard")
-                }
-                TextButton(modifier = Modifier.testTag("worldMapSuccessDismissButton"), onClick = onDismiss) {
-                    Text("Dismiss")
-                }
             }
         }
     }
@@ -956,7 +973,7 @@ private fun ReferenceStillCard(
                 Image(
                     bitmap = referenceStill,
                     contentDescription = "Bundled map reference still",
-                    modifier = Modifier.fillMaxWidth().height(128.dp).background(Color(0xFF0F1214)),
+                    modifier = Modifier.fillMaxWidth().height(128.dp).background(NutonicColors.stillImageMatte),
                     contentScale = ContentScale.Crop,
                 )
             } else {
@@ -965,13 +982,13 @@ private fun ReferenceStillCard(
                         Modifier
                             .fillMaxWidth()
                             .height(128.dp)
-                            .background(Color(0xFF2B2D30), shape = RoundedCornerShape(8.dp)),
+                            .background(NutonicColors.stillImagePlaceholder, shape = RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = if (loadFailed) "Still unavailable (bundle/resource miss)" else "Loading still…",
                         style = MaterialTheme.typography.caption,
-                        color = Color.White,
+                        color = NutonicColors.onStillImagePlaceholder,
                     )
                 }
             }
@@ -1018,14 +1035,14 @@ private fun AssistDock(
             }
 
             AssistSection(
-                title = "Street View description",
+                title = "Location assist (text)",
                 expanded = streetAssistExpanded,
                 onExpandedChange = onStreetAssistExpandedChange,
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (streetviewPack.isNullOrEmpty()) {
                         Text(
-                            "No Street View description pack for this round.",
+                            "No location assist text pack for this round.",
                             style = MaterialTheme.typography.caption,
                         )
                     } else {
@@ -1192,7 +1209,7 @@ private fun NarrativeOverlay(
         modifier =
             Modifier
                 .fillMaxSize()
-                .background(Color(0xAA000000))
+                .background(NutonicColors.overlayScrim)
                 .testTag("worldMapNarrativeOverlay"),
         contentAlignment = Alignment.Center,
     ) {
@@ -1314,9 +1331,3 @@ private fun haversineKm(
 }
 
 private fun Double.toRadians(): Double = this / 180.0 * PI
-
-private fun Double.format(decimals: Int = 4): String {
-    val factor = 10.0.pow(decimals)
-    val rounded = round(this * factor) / factor
-    return rounded.toString()
-}

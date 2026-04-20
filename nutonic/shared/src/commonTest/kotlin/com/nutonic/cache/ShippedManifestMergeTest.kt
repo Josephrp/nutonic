@@ -39,13 +39,16 @@ class ShippedManifestMergeTest {
                 aiGuesses = listOf(AiGuessRow(mapId = "demo", locationId = "demo-vienna-001", aiLat = 1.0, aiLon = 2.0)),
             )
         val merged = mergeShippedRoundTruth(public, shipped)
+        val detailed = mergeShippedRoundTruthDetailed(public, shipped)
         assertEquals(1, merged.locations.size)
         assertEquals(48.2082, merged.locations[0].truthLat)
         assertEquals(1, merged.aiGuesses.size)
+        assertEquals(ShippedManifestMergeOutcome.OVERLAID_FROM_SHIPPED, detailed.outcome)
+        assertEquals("nutonic.manifest.v2", detailed.shippedContentVersion)
     }
 
     @Test
-    fun merge_skips_when_content_version_mismatches() {
+    fun merge_overlays_when_content_version_mismatches_and_network_is_redacted() {
         val public =
             CacheManifestDocument(
                 contentVersion = "nutonic.manifest.v3",
@@ -67,7 +70,11 @@ class ShippedManifestMergeTest {
                     ),
             )
         val merged = mergeShippedRoundTruth(public, shipped)
-        assertTrue(merged.locations.isEmpty())
+        val detailed = mergeShippedRoundTruthDetailed(public, shipped)
+        assertEquals(1, merged.locations.size)
+        assertEquals("x", merged.locations.single().locationId)
+        assertEquals(ShippedManifestMergeOutcome.VERSION_MISMATCH, detailed.outcome)
+        assertEquals("nutonic.manifest.v2", detailed.shippedContentVersion)
     }
 
     @Test
@@ -100,6 +107,47 @@ class ShippedManifestMergeTest {
                     ),
             )
         val merged = mergeShippedRoundTruth(public, shipped)
+        val detailed = mergeShippedRoundTruthDetailed(public, shipped)
         assertEquals("from-server", merged.locations.single().locationId)
+        assertEquals(ShippedManifestMergeOutcome.NETWORK_HAS_ROUND_TRUTH, detailed.outcome)
+    }
+
+    @Test
+    fun merge_keeps_server_locations_when_versions_mismatch_but_network_has_round_truth() {
+        val serverLocation =
+            ManifestRoundLocation(
+                mapId = "demo",
+                locationId = "from-server-v3",
+                truthLat = 10.0,
+                truthLon = 20.0,
+            )
+        val public =
+            CacheManifestDocument(
+                contentVersion = "nutonic.manifest.v3",
+                maps = listOf(MapSummary(mapId = "demo", title = "Demo mission")),
+                locations = listOf(serverLocation),
+                aiGuesses = emptyList(),
+            )
+        val shipped =
+            CacheManifestDocument(
+                contentVersion = "nutonic.manifest.v2",
+                maps = public.maps,
+                locations =
+                    listOf(
+                        ManifestRoundLocation(
+                            mapId = "demo",
+                            locationId = "from-bundle-v2",
+                            truthLat = 99.0,
+                            truthLon = 99.0,
+                        ),
+                    ),
+                aiGuesses = listOf(AiGuessRow(mapId = "demo", locationId = "from-server-v3", aiLat = 1.0, aiLon = 2.0)),
+            )
+
+        val detailed = mergeShippedRoundTruthDetailed(public, shipped)
+
+        assertEquals("from-server-v3", detailed.document.locations.single().locationId)
+        assertEquals(1, detailed.document.aiGuesses.size)
+        assertEquals(ShippedManifestMergeOutcome.VERSION_MISMATCH, detailed.outcome)
     }
 }

@@ -12,7 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
@@ -24,7 +23,6 @@ import com.nutonic.audio.resolveNutonicBgmTrack
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.cache.createManifestBlobStore
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
-import com.nutonic.model.PictureData
 import com.nutonic.navigation.NutonicRoute
 import com.nutonic.navigation.decodeNutonicRoute
 import com.nutonic.navigation.encode
@@ -38,7 +36,6 @@ import com.nutonic.style.NutonicTheme
 
 @Composable
 fun NutonicApp(
-    pictures: SnapshotStateList<PictureData>,
     nutonicApiClient: NutonicApiClient? = null,
 ) {
     var routeToken by rememberSaveable { mutableStateOf(NutonicRoute.Splash.encode()) }
@@ -120,7 +117,6 @@ fun NutonicApp(
 
                         is NutonicRoute.Shell -> {
                             NutonicMainShell(
-                                pictures = pictures,
                                 shell = route,
                                 onChangeShell = { navigate(it) },
                                 settingsRepository = settingsRepo,

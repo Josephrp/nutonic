@@ -1,22 +1,6 @@
 package com.nutonic
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.coroutines.Dispatchers
-import java.util.UUID
+import kotlinx.coroutines.CoroutineDispatcher
 
-class AndroidStorableImage(
-    val imageBitmap: ImageBitmap,
-)
-
-actual typealias PlatformStorableImage = AndroidStorableImage
-
-actual fun createUUID(): String = UUID.randomUUID().toString()
-
-actual val ioDispatcher = Dispatchers.IO
-
-actual val isShareFeatureSupported: Boolean = true
-
-actual val shareIcon: ImageVector = Icons.Filled.Share
+actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO

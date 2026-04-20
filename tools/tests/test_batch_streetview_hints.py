@@ -178,3 +178,99 @@ def test_run_batch_satellite_sidecar_and_service_pin(tmp_path: Path) -> None:
     doc = json.loads((tmp_path / "streetview" / "asm_fix_a.json").read_text(encoding="utf-8"))
     assert doc["satellite_caption_sidecar"]["caption"].startswith("Ortho still")
     assert doc["model_pins"]["lfm_vl_satellite_caption_service"]["model_id"] == "sat-fixture"
+
+
+def _handler_chunked_duplicate_ranks(request: httpx.Request) -> httpx.Response:
+    """LFM returns per-chunk ranks starting at 1 (exposes merge ordering bugs)."""
+    p = request.url.path
+    if request.method == "GET" and p.rstrip("/").endswith("/health"):
+        host = (request.url.host or "").lower()
+        if host.startswith("pano"):
+            return httpx.Response(
+                200,
+                json={"status": "ok", "streetview_provider": "stub", "google_configured": "no"},
+            )
+        return httpx.Response(
+            200,
+            json={"status": "ok", "lfm_backend": "stub", "model_id": "stub-model"},
+        )
+    if request.method == "POST" and (
+        p.endswith("/v1/panos/sample") or p.rstrip("/").endswith("/api/v1/panos/sample")
+    ):
+        body = json.loads(request.content.decode())
+        n = int(body["count"])
+        rid = body["request_id"]
+        frames = []
+        for i in range(n):
+            frames.append(
+                {
+                    "pano_id": f"stub-{i}",
+                    "heading_deg": float(i * 40),
+                    "pitch_deg": 0.0,
+                    "image_base64": "abc",
+                    "attribution": "stub",
+                }
+            )
+        return httpx.Response(
+            200,
+            json={"request_id": rid, "frames": frames, "cache_key": "sha256:test", "terms_version": "2026-04"},
+        )
+    if request.method == "POST" and p.endswith("/v1/suggestions/from_frames"):
+        body = json.loads(request.content.decode())
+        sug = []
+        for i, fr in enumerate(body["frames"]):
+            pid = fr.get("pano_id") or f"decoy-{i}"
+            sug.append(
+                {
+                    "text": f"Caption for {pid}; no coordinates here.",
+                    "viewpoint_id": str(pid),
+                    "rank": i + 1,
+                }
+            )
+        return httpx.Response(200, json={"suggestions": sug})
+    return httpx.Response(404, json={"detail": "not found"})
+
+
+def test_run_batch_chunk_merge_preserves_pano_frame_order(tmp_path: Path) -> None:
+    """Second LFM chunk repeats rank=1; pack must follow stub-0, stub-1, stub-2 (IMP-110 PR-F4)."""
+    catalog = REPO_ROOT / "data" / "scripts" / "tests" / "fixtures" / "assemble_manifest" / "catalog"
+    transport = httpx.MockTransport(_handler_chunked_duplicate_ranks)
+    cfg = BatchConfig(
+        catalog_root=catalog,
+        poi_root=REPO_ROOT / "data" / "downloads" / "geoguessr_poi_12",
+        pano_service_url="http://pano.test",
+        lfm_vl_url="http://lfm.test",
+        content_version="pytest-sv-chunk",
+        output_dir=tmp_path,
+        poi_limit=1,
+        location_ids=frozenset({"asm_fix_a"}),
+        location_ids_file=None,
+        shuffle_seed=None,
+        sv_screenshots_per_location=3,
+        lfm_max_frames_per_request=2,
+        satellite_caption_service_url=None,
+        still_index_path=None,
+        useful_hints_dir=None,
+        inject_useful_hint_tone=False,
+        prompt_template_version="stub-v1",
+        enable_narrative_pass=False,
+        narrative_service_url=None,
+        skip_streetview_hints=False,
+        allow_partial=True,
+        timeout_sec=30.0,
+    )
+    with httpx.Client(transport=transport) as client:
+        assert run_batch(cfg, client) == 0
+    doc = json.loads((tmp_path / "streetview" / "asm_fix_a.json").read_text(encoding="utf-8"))
+    pack = doc["streetview_hint_pack"]
+    assert [p["viewpoint_id"] for p in pack] == ["stub-0", "stub-1", "stub-2"]
+    assert [p["rank"] for p in pack] == [1, 2, 3]
+    pins_path = tmp_path / "reports" / "model_pins.json"
+    assert pins_path.is_file()
+    agg = json.loads(pins_path.read_text(encoding="utf-8"))
+    assert agg["content_version"] == "pytest-sv-chunk"
+    assert agg["stats"]["locations_written"] == 1
+    assert agg["written_location_ids"] == ["asm_fix_a"]
+    assert agg["failed_locations"] == []
+    assert "generated_at" in agg
+    assert "streetview_pano_service" in agg["model_pins"]

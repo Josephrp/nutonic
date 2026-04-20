@@ -84,6 +84,8 @@ From the **repo root**, with Docker logged in (`docker login`):
 python tools/hf_jobs/build_and_push_images.py --namespace YOUR_DOCKERHUB_USER --tag 2026-04-18
 ```
 
+The helper stages a **minimal temp build context per image** (`data/scripts`, relevant `inference/*`, `tools/*`, prompts when needed) before invoking Docker. This is the recommended path and avoids brittle root-context issues.
+
 Builds and pushes three tags:
 
 - `nutonic-hydration-sv-lfm` — `Dockerfile.hydration` (Street View + LFM-VL + `data/scripts` pipeline).
@@ -113,6 +115,8 @@ Use `--dry-run-submit` to print resolved Job specs without calling the Hub. Use 
 
 **Narrative LLM on the llm-sidecars Job:** default sidecar is **dry-run** unless **`NUTONIC_NARRATIVE_LLM_LIVE=1`**. Live inference (set via host **`--narrative-llm-live`** on `run_hf_hydration_full.py`):
 
+If the llm-sidecars Job exits **137** (`SIGKILL`), the container was almost certainly **OOM-killed** while loading or running the text LM (large **`NUTONIC_NARRATIVE_TRANSFORMERS_MAX_NEW`**, many catalog rows, or a small GPU flavor). Lower max-new tokens, use a larger Job flavor, or shorten the catalog slice (`--poi-limit`).
+
 | `NUTONIC_NARRATIVE_BACKEND` | Behavior |
 |-----------------------------|----------|
 | ``transformers`` (default when live, backend unset) | In-process HF causal LM on the Job GPU: **`NUTONIC_NARRATIVE_TRANSFORMERS_MODEL`** or default **Liquid LFM** text id from ``liquid_ai_defaults.py`` (+ optional **`NUTONIC_NARRATIVE_TRANSFORMERS_MAX_NEW`**). |
@@ -120,7 +124,9 @@ Use `--dry-run-submit` to print resolved Job specs without calling the Hub. Use 
 | ``openai`` | Same OpenAI HTTP path as ``vllm`` (external or autostarted server). |
 | ``ollama`` | Legacy **`ollama serve`** if the binary exists on ``PATH``. |
 
-Optional: **`NUTONIC_NARRATIVE_ENTRY_MAX`**, **`NUTONIC_VLLM_PORT`**, **`NUTONIC_VLLM_READY_SEC`**, **`OPENAI_API_KEY`** for remote OpenAI-compatible endpoints.
+Optional: **`NUTONIC_NARRATIVE_ENTRY_MAX`** (stored text cap after optional markdown strip), **`NUTONIC_NARRATIVE_OPENAI_MAX_TOKENS`**, **`NUTONIC_NARRATIVE_OPENAI_TEMPERATURE`**, **`NUTONIC_NARRATIVE_TRANSFORMERS_MAX_NEW`**, **`NUTONIC_NARRATIVE_TRANSFORMERS_TEMPERATURE`**, **`NUTONIC_NARRATIVE_TRANSFORMERS_TOP_P`**, **`NUTONIC_NARRATIVE_OLLAMA_NUM_PREDICT`**, **`NUTONIC_NARRATIVE_STRIP_MARKDOWN`** (`0` to disable), **`NUTONIC_VLLM_PORT`**, **`NUTONIC_VLLM_READY_SEC`**, **`OPENAI_API_KEY`** for remote OpenAI-compatible endpoints.
+
+Narrative **clue composition** (before ``--clue-inject-max-chars``): **`NUTONIC_NARRATIVE_STREET_CLUE_CHARS`** (default ``1100``), **`NUTONIC_NARRATIVE_SAT_CLUE_CHARS`** (default ``750``) — sentence-aware excerpts from long VLM packs. **QA retry:** **`NUTONIC_NARRATIVE_QA_REGENERATE`** (default ``1``) runs one extra generation when heuristics flag brochure-style blurbs; set ``0`` to save GPU time.
 
 **sv-lfm LFM-VL:** set **`LFM_VL_BACKEND=transformers`** (default in the entrypoint when unset) or **`LFM_VL_BACKEND=openai_compatible`** with **`LFM_OPENAI_BASE_URL`** / **`LFM_OPENAI_MODEL`** pointing at a vLLM (or compatible) server. Export these before `run_hf_hydration_full.py` so they are merged into the sv-lfm Job env (see ``inference_job_env.py``).
 
@@ -138,7 +144,7 @@ Canonical Hub ids live in **`data/scripts/liquid_ai_defaults.py`** (text **LFM**
 python tools/hf_jobs/build_and_push_images.py --namespace YOUR_DOCKERHUB_USER --tag 2026-04-18
 ```
 
-Equivalent raw **Docker** invocations:
+Equivalent raw **Docker** invocations (repo-root context; use the helper above for safer staged contexts):
 
 ```bash
 docker build -f tools/hf_jobs/Dockerfile.hydration -t YOUR_DOCKERHUB_USER/nutonic-hydration-sv-lfm:2026-04-18 .

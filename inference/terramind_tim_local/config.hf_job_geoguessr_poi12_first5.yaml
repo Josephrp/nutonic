@@ -6,9 +6,17 @@ content_version: nutonic.tim_local.hf_job.poi12_first5.v1
 paths:
   repo_root: /workspace
 
-model_id: terramind_v1_tiny_tim
+model_id: terramind_v1_base_tim
 pretrained: true
 merge_method: mean
+
+# Ten forwards with identical inputs; per-pass ``seed_base + i`` reseeds torch/CUDA/random/numpy
+# before each forward so sampler RNG can differ. Mean WGS84 uses only finite decodes.
+location_ensemble:
+  n_samples: 10
+  seed_base: 42
+  input_noise_std: 0.0
+  include_sample_coordinates: false
 
 modalities:
   - RGB

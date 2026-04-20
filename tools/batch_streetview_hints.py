@@ -13,6 +13,7 @@ import json
 import os
 import random
 import sys
+import time
 import zlib
 import uuid
 from dataclasses import dataclass
@@ -32,7 +33,7 @@ if str(_TOOLS) not in sys.path:
 
 from generate_ai_guess_fixture import iter_catalog_locations  # noqa: E402
 from nutonic_hmac import nutonic_hmac_headers_from_env  # noqa: E402
-from validate_hint_strings import validate_caption_text  # noqa: E402
+from validate_hint_strings import validate_caption_text, violations_to_jsonable  # noqa: E402
 
 EXIT_OK = 0
 EXIT_HARD = 9
@@ -46,6 +47,101 @@ def _int_env(name: str, default: int) -> int:
         return int(os.environ.get(name, str(default)).strip())
     except ValueError:
         return default
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)).strip())
+    except ValueError:
+        return default
+
+
+def _batch_http_max_attempts() -> int:
+    return max(1, _int_env("NUTONIC_BATCH_HTTP_MAX_ATTEMPTS", 8))
+
+
+def _batch_http_backoff_cap_sec() -> float:
+    return max(0.5, _float_env("NUTONIC_BATCH_HTTP_BACKOFF_CAP_SEC", 24.0))
+
+
+def _batch_http_503_backoff_mult() -> float:
+    return max(1.0, _float_env("NUTONIC_BATCH_HTTP_503_BACKOFF_MULT", 1.75))
+
+
+def _parse_retry_after_sec(resp: httpx.Response | None) -> float | None:
+    if resp is None:
+        return None
+    raw = (resp.headers.get("retry-after") or "").strip()
+    if not raw:
+        return None
+    try:
+        sec = float(raw)
+    except ValueError:
+        return None
+    if sec <= 0:
+        return None
+    return min(sec, 300.0)
+
+
+def _sleep_backoff_http(
+    attempt: int,
+    *,
+    status: int | None = None,
+    retry_after_sec: float | None = None,
+) -> None:
+    cap = _batch_http_backoff_cap_sec()
+    if retry_after_sec is not None:
+        base = min(cap, retry_after_sec)
+    else:
+        base = min(cap, 0.5 * (2**attempt))
+        if status == 503:
+            base *= _batch_http_503_backoff_mult()
+    jitter = random.uniform(0.0, min(3.0, max(0.05, base * 0.35)))
+    time.sleep(base + jitter)
+
+
+def _inter_poi_sleep_sec() -> float:
+    return max(0.0, _float_env("NUTONIC_BATCH_INTER_POI_SLEEP_SEC", 0.0))
+
+
+def _pano_to_lfm_sleep_sec() -> float:
+    return max(0.0, _float_env("NUTONIC_BATCH_PANO_TO_LFM_SLEEP_SEC", 0.0))
+
+
+def _inter_lfm_chunk_sleep_sec() -> float:
+    return max(0.0, _float_env("NUTONIC_BATCH_INTER_LFM_CHUNK_SLEEP_SEC", 0.0))
+
+
+def _post_with_retry(
+    client: httpx.Client,
+    url: str,
+    *,
+    json_body: dict[str, Any],
+    headers: dict[str, str] | None = None,
+) -> httpx.Response:
+    """Retry pano/LFM HTTP posts on transient errors (HF Jobs ↔ sidecars)."""
+    max_a = _batch_http_max_attempts()
+    retryable = (408, 429, 500, 502, 503, 504)
+    last: httpx.Response | None = None
+    for attempt in range(max_a):
+        try:
+            r = client.post(url, json=json_body, headers=headers)
+        except httpx.RequestError:
+            if attempt + 1 >= max_a:
+                raise
+            _sleep_backoff_http(attempt, status=None, retry_after_sec=None)
+            continue
+        last = r
+        if r.status_code in retryable:
+            if attempt + 1 < max_a:
+                ra = _parse_retry_after_sec(r)
+                _sleep_backoff_http(attempt, status=r.status_code, retry_after_sec=ra)
+                continue
+            r.raise_for_status()
+            return r
+        return r
+    assert last is not None
+    return last
 
 
 # Caps are soft policy; override with NUTONIC_STREETVIEW_* env for long-caption pipelines.
@@ -180,7 +276,7 @@ def _pano_sample(
     legacy = urljoin(base, "v1/panos/sample")
     hdr = _hmac_headers("POST", primary)
     last_body: dict[str, Any] = body
-    r1 = client.post(primary, json=body, headers=hdr)
+    r1 = _post_with_retry(client, primary, json_body=body, headers=hdr)
     if r1.status_code == 503 and cfg.pano_sampling_mode == "STOCHASTIC_S2_FOOTPRINT":
         body_retry: dict[str, Any] = {
             "request_id": str(uuid.uuid4()),
@@ -194,11 +290,11 @@ def _pano_sample(
         if js is not None:
             body_retry["jitter_seed"] = js
         last_body = body_retry
-        r1 = client.post(primary, json=body_retry, headers=hdr)
+        r1 = _post_with_retry(client, primary, json_body=body_retry, headers=hdr)
     if r1.status_code != 404:
         r1.raise_for_status()
         return r1.json()
-    r2 = client.post(legacy, json=last_body, headers=_hmac_headers("POST", legacy))
+    r2 = _post_with_retry(client, legacy, json_body=last_body, headers=_hmac_headers("POST", legacy))
     r2.raise_for_status()
     return r2.json()
 
@@ -221,7 +317,7 @@ def _lfm_suggestions(
     }
     if inject_tone and useful_hints:
         payload["useful_hints"] = useful_hints
-    r = client.post(url, json=payload, headers=_hmac_headers("POST", url))
+    r = _post_with_retry(client, url, json_body=payload, headers=_hmac_headers("POST", url))
     r.raise_for_status()
     data = r.json()
     sug = data.get("suggestions")
@@ -231,15 +327,22 @@ def _lfm_suggestions(
 
 
 def _validate_pack_suggestions(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep every suggestion; attach ``caption_validation`` metadata when checks fail (no drops)."""
     out: list[dict[str, Any]] = []
     for s in raw:
         text = str(s.get("text", "")).strip()
         vid = str(s.get("viewpoint_id", "decoy"))
         rank = int(s.get("rank", len(out) + 1))
         viol = validate_caption_text(text, max_len=MAX_PACK_CAPTION, path="streetview_hint_pack.text")
+        item: dict[str, Any] = {"text": text, "viewpoint_id": vid, "rank": rank}
         if viol:
-            raise ValueError("; ".join(v.format_line() for v in viol))
-        out.append({"text": text, "viewpoint_id": vid, "rank": rank})
+            item["caption_validation"] = violations_to_jsonable(viol)
+            print(
+                "batch_streetview_hints: warning: pack caption validation: "
+                + "; ".join(v.format_line() for v in viol),
+                file=sys.stderr,
+            )
+        out.append(item)
     out.sort(key=lambda x: (x["rank"], x["viewpoint_id"]))
     return [{**item, "rank": i} for i, item in enumerate(out, start=1)]
 
@@ -248,9 +351,14 @@ def _optional_narrative(
     client: httpx.Client,
     url: str,
     pack: list[dict[str, Any]],
-) -> str | None:
+) -> tuple[str | None, list[dict[str, str]] | None]:
+    """
+    Returns ``(narrative_text, caption_validation)``.
+
+    Validation never drops text: violations are returned as metadata for the streetview JSON doc.
+    """
     if not url:
-        return None
+        return None, None
     endpoint = url.rstrip("/") + "/v1/narrative/fuse"
     body = {
         "captions": [{"viewpoint_id": p["viewpoint_id"], "text": p["text"]} for p in pack],
@@ -259,18 +367,23 @@ def _optional_narrative(
     try:
         r = client.post(endpoint, json=body, timeout=60.0, headers=_hmac_headers("POST", endpoint))
         if r.status_code >= 400:
-            return None
+            return None, None
         data = r.json()
         text = data.get("narrative") or data.get("text")
         if not isinstance(text, str):
-            return None
+            return None, None
         text = text.strip()
         viol = validate_caption_text(text, max_len=MAX_NARRATIVE, path="streetview_assist_narrative")
         if viol:
-            return None
-        return text
+            print(
+                "batch_streetview_hints: warning: assist narrative validation: "
+                + "; ".join(v.format_line() for v in viol),
+                file=sys.stderr,
+            )
+            return text, violations_to_jsonable(viol)
+        return text, None
     except httpx.HTTPError:
-        return None
+        return None, None
 
 
 def _optional_satellite(
@@ -399,7 +512,8 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
         print("No catalog locations selected.", file=sys.stderr)
         return EXIT_USAGE
 
-    for row in locations:
+    n_locs = len(locations)
+    for idx, row in enumerate(locations):
         lid = str(row["location_id"])
         lat = float(row["truth_lat"])
         lon = float(row["truth_lon"])
@@ -428,10 +542,15 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                         "pitch_deg": fr.get("pitch_deg", 0.0),
                     }
                 )
+            gap_p_l = _pano_to_lfm_sleep_sec()
+            if gap_p_l > 0:
+                time.sleep(gap_p_l)
             useful = _load_useful_hints(lid, cfg.useful_hints_dir) if cfg.inject_useful_hint_tone else None
             merged_suggestions: list[dict[str, Any]] = []
             max_chunk = max(1, cfg.lfm_max_frames_per_request)
-            for chunk in _chunk(frames_api, max_chunk):
+            chunks = list(_chunk(frames_api, max_chunk))
+            chunk_gap = _inter_lfm_chunk_sleep_sec()
+            for ci, chunk in enumerate(chunks):
                 part = _lfm_suggestions(
                     client,
                     lfm_base,
@@ -442,11 +561,14 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                     inject_tone=cfg.inject_useful_hint_tone,
                 )
                 merged_suggestions.extend(part)
+                if chunk_gap > 0 and ci < len(chunks) - 1:
+                    time.sleep(chunk_gap)
             pack = _validate_pack_suggestions(merged_suggestions)
 
             narrative: str | None = None
+            narrative_validation: list[dict[str, str]] | None = None
             if cfg.enable_narrative_pass and cfg.narrative_service_url:
-                narrative = _optional_narrative(client, cfg.narrative_service_url, pack)
+                narrative, narrative_validation = _optional_narrative(client, cfg.narrative_service_url, pack)
 
             satellite_side: dict[str, Any] | None = None
             if cfg.satellite_caption_service_url and lid in still_by_loc:
@@ -481,12 +603,16 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
             if sat_pin is not None:
                 model_pins["lfm_vl_satellite_caption_service"] = sat_pin
 
-            out_doc = {
+            out_doc: dict[str, Any] = {
                 "location_id": lid,
                 "streetview_hint_pack": pack,
                 "streetview_assist_narrative": narrative,
                 "model_pins": model_pins,
             }
+            if narrative_validation:
+                out_doc["streetview_assist_narrative_metadata"] = {
+                    "caption_validation": narrative_validation,
+                }
             if satellite_side is not None:
                 out_doc["satellite_caption_sidecar"] = satellite_side
 
@@ -502,6 +628,10 @@ def run_batch(cfg: BatchConfig, client: httpx.Client) -> int:
                     encoding="utf-8",
                 )
                 return EXIT_HARD
+        finally:
+            gap = _inter_poi_sleep_sec()
+            if gap > 0 and idx + 1 < n_locs:
+                time.sleep(gap)
 
     rep_dir.joinpath("streetview_failures.json").write_text(
         json.dumps(failures, indent=2),

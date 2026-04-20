@@ -5,11 +5,9 @@ from __future__ import annotations
 _NON_RANKED_SAFE = "You may include any geographic clues that help identify the location."
 
 _RANKED_SAFE_TRANSFORMERS = (
-    "Do not output latitude/longitude or place names. "
     "Focus on detailed visual clues such as vegetation types, land use, road patterns, water bodies, terrain, and shadows."
 )
 _RANKED_SAFE_OPENAI = (
-    "Do not output latitude/longitude or place names. "
     "Focus on detailed visual clues such as vegetation, land cover, built structures, road layouts, and geographic context."
 )
 

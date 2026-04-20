@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+import pandas as pd
 import yaml
 from fetch_geo_baselines import ne_50m_artifacts
 from shapely.geometry import Point
@@ -26,6 +27,53 @@ DEFAULT_GEO_ROOT = REPO_ROOT / "data" / "geo"
 DEFAULT_CONTENT_VERSION = "dev"
 SCHEMA_VERSION = "nutonic.geo_context.v1"
 HINT_FACTS_SCHEMA = "nutonic.hint_compile_facts.v1"
+
+
+def _geom_bounds_finite(geom: Any) -> bool:
+    try:
+        b = getattr(geom, "bounds", None)
+        if b is None:
+            return False
+        return all(math.isfinite(float(x)) for x in b)
+    except Exception:
+        return False
+
+
+def _sanitize_ne_layer(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Drop null/empty geometries and repair invalid Natural Earth features (avoids NaN/Inf predicate noise)."""
+    g = gdf.loc[gdf.geometry.notna()].copy()
+    if g.empty:
+        return g
+    try:
+        from shapely import make_valid
+    except ImportError:
+        make_valid = None  # type: ignore[misc, assignment]
+
+    def _repair(geom: Any) -> Any:
+        if geom is None or getattr(geom, "is_empty", True):
+            return None
+        try:
+            if make_valid is not None and hasattr(geom, "is_valid") and not geom.is_valid:
+                geom = make_valid(geom)
+        except Exception:
+            return None
+        if geom is None or getattr(geom, "is_empty", True):
+            return None
+        if not _geom_bounds_finite(geom):
+            return None
+        return geom
+
+    g["geometry"] = g.geometry.apply(_repair)
+    return g.loc[g.geometry.notna()].copy()
+
+
+def _series_idxmin_safe(series: Any) -> Any | None:
+    """``Series.idxmin`` without raising when every value is NaN."""
+    s = pd.to_numeric(series, errors="coerce")
+    s = s.replace([float("inf"), float("-inf")], pd.NA).dropna()
+    if s.empty:
+        return None
+    return s.idxmin()
 
 
 def _hemisphere(lat: float) -> str:
@@ -275,7 +323,8 @@ def _pick_admin0(
     if not hits.empty:
         if len(hits) > 1:
             areas = hits.geometry.area
-            hits = hits.loc[[areas.idxmin()]]
+            idx = _series_idxmin_safe(areas)
+            hits = hits.loc[[idx]] if idx is not None else hits.iloc[[0]]
         return hits.iloc[0]
 
     if country_iso:
@@ -283,7 +332,9 @@ def _pick_admin0(
         cand = a0[a0.apply(lambda r: (_iso_a2(r) == iso), axis=1)]
         if not cand.empty:
             dists = cand.geometry.centroid.distance(pt_metric)
-            return cand.loc[dists.idxmin()]
+            idx_d = _series_idxmin_safe(dists)
+            if idx_d is not None:
+                return cand.loc[idx_d]
 
     return None
 
@@ -302,7 +353,8 @@ def _pick_admin1(
         return None
     if len(hits) > 1:
         areas = hits.geometry.area
-        hits = hits.loc[[areas.idxmin()]]
+        idx = _series_idxmin_safe(areas)
+        hits = hits.loc[[idx]] if idx is not None else hits.iloc[[0]]
     return hits.iloc[0]
 
 
@@ -322,9 +374,13 @@ def _nearest_linear_feature(
         dists = nearby.geometry.distance(pt_metric)
     except Exception:
         return None, None
-    idx = dists.idxmin()
+    idx = _series_idxmin_safe(dists)
+    if idx is None:
+        return None, None
     row = nearby.loc[idx]
     d_m = float(dists.loc[idx])
+    if not math.isfinite(d_m):
+        return None, None
     return _line_name(row), d_m / 1000.0
 
 
@@ -339,6 +395,8 @@ def _coast_distance_km(
     try:
         d_m = float(c.geometry.distance(pt_metric).min())
     except Exception:
+        return None
+    if not math.isfinite(d_m):
         return None
     return d_m / 1000.0
 
@@ -364,6 +422,15 @@ def build_context_for_location(
     pt_metric = gpd.GeoDataFrame(geometry=[pt], crs="EPSG:4326").to_crs(metric_crs).geometry.iloc[0]
     r_m = _radius_meters(truth_lat, truth_lon, bbox_km_half, r_max_km=r_max_km, r_scale_k=r_scale_k)
     buf = pt_metric.buffer(r_m)
+    if hasattr(buf, "is_valid") and not buf.is_valid:
+        try:
+            from shapely import make_valid
+
+            buf = make_valid(buf)
+        except Exception as e:
+            raise ValueError(f"invalid search buffer: {e}") from e
+    if not _geom_bounds_finite(buf):
+        raise ValueError("search buffer has non-finite bounds")
 
     admin0_row = _pick_admin0(admin0, pt_metric, metric_crs, country_iso)
     admin1_row = _pick_admin1(admin1, pt_metric, metric_crs)
@@ -429,7 +496,7 @@ def load_layers(geo_root: Path) -> dict[str, gpd.GeoDataFrame]:
         p = resolve_vector_path(geo_root, art.extract_name)
         if p is None:
             raise FileNotFoundError(f"Missing vector layer for {key}: expected under {geo_root}/natural_earth/50m/{art.extract_name}/")
-        out[key] = gpd.read_file(p)
+        out[key] = _sanitize_ne_layer(gpd.read_file(p))
     return out
 
 

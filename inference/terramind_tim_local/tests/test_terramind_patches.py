@@ -76,6 +76,19 @@ def test_parse_double_lat_missing_lon() -> None:
     assert lon == pytest.approx(-38.53)
 
 
+def test_parse_double_lat_one_lon_stutter() -> None:
+    """HF job log: ``lat=31.50 lat=43.00 lon=-66.75`` — pair last lat with lon."""
+    lat, lon = _parse_lat_lon_from_coord_text("lat=31.50 lat=43.00 lon=-66.75")
+    assert lat == pytest.approx(43.00)
+    assert lon == pytest.approx(-66.75)
+
+
+def test_parse_double_lon_one_lat_stutter() -> None:
+    lat, lon = _parse_lat_lon_from_coord_text("lon=-66.75 lon=-66.80 lat=43.00")
+    assert lat == pytest.approx(43.00)
+    assert lon == pytest.approx(-66.80)
+
+
 def test_coord_decode_lon_before_lat_in_string() -> None:
     pytest.importorskip("terratorch", **_TERRA_SKIP)
     apply_terramind_coord_decode_hotfix()

@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,14 @@ DEFAULT_OUT = REPO_ROOT / "server" / "src" / "nutonic_server" / "catalog_generat
 DEFAULT_SQL_OUT = REPO_ROOT / "server" / "docs" / "catalog_seed.sql"
 BUNDLES_DIR = REPO_ROOT / "server" / "src" / "nutonic_server" / "bundles"
 REGISTRY_PATH = BUNDLES_DIR / "registry.json"
+COMPOSE_RESOURCES_ROOT = (
+    REPO_ROOT
+    / "nutonic"
+    / "shared"
+    / "src"
+    / "commonMain"
+    / "composeResources"
+)
 
 EXIT_INPUT = 2
 EXIT_SCHEMA = 13
@@ -74,7 +83,7 @@ def _parse_manifest(manifest_path: Path) -> Any:
 
 
 def _bundle_registry_misses(doc: object) -> list[str]:
-    """Return ``still_bundle_id`` values from the manifest that are missing from ``bundles/registry.json``."""
+    """Return ``still_bundle_id`` values that are missing from registry and cannot be auto-resolved."""
     if not REGISTRY_PATH.is_file():
         return []
     reg = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
@@ -85,9 +94,21 @@ def _bundle_registry_misses(doc: object) -> list[str]:
     missing: list[str] = []
     for loc in getattr(doc, "locations", []) or []:
         bid = (getattr(loc, "still_bundle_id", None) or "").strip()
-        if bid and bid not in known:
-            missing.append(bid)
+        if not bid or bid in known:
+            continue
+        if (BUNDLES_DIR / f"{bid}.jpg").is_file():
+            continue
+        if _resolve_still_jpeg_for_bundle_sync(loc) is not None:
+            continue
+        missing.append(bid)
     return sorted(frozenset(missing))
+
+
+def _location_for_still_bundle_id(doc: object, bid: str) -> object | None:
+    for loc in getattr(doc, "locations", []) or []:
+        if (getattr(loc, "still_bundle_id", None) or "").strip() == bid:
+            return loc
+    return None
 
 
 def _verify_registry_files(doc: object) -> None:
@@ -106,13 +127,45 @@ def _verify_registry_files(doc: object) -> None:
     bad: list[str] = []
     for bid in bids:
         fname = bundles.get(bid)
-        if not isinstance(fname, str) or not fname.strip():
-            bad.append(f"{bid!r} (missing filename in registry)")
+        if isinstance(fname, str) and fname.strip():
+            if not (BUNDLES_DIR / fname.strip()).is_file():
+                bad.append(f"{bid!r} -> {fname!r} (file missing under bundles/)")
             continue
-        if not (BUNDLES_DIR / fname.strip()).is_file():
-            bad.append(f"{bid!r} -> {fname!r} (file missing under bundles/)")
+        # Dry-run (no --write yet): registry not merged; accept default bundle on disk or Compose JPEG.
+        default_path = BUNDLES_DIR / f"{bid}.jpg"
+        if default_path.is_file():
+            continue
+        loc = _location_for_still_bundle_id(doc, bid)
+        if loc is not None and _resolve_still_jpeg_for_bundle_sync(loc) is not None:
+            continue
+        bad.append(f"{bid!r} (missing filename in registry)")
     if bad:
         raise BundleRegistrySyncError("Bundle registry file problems (IMP-081): " + "; ".join(bad))
+
+
+def _resolve_still_jpeg_for_bundle_sync(loc: object) -> Path | None:
+    """
+    Find a JPEG on disk for ``still_bundled_resource`` (Compose resources or repo-relative path).
+
+    Hydration ships stills under ``composeResources/files/maps/*.jpg`` while IMP-081 expects
+    ``server/.../bundles/{still_bundle_id}.jpg`` — copy source when the default bundle name is missing.
+    """
+    rel = getattr(loc, "still_bundled_resource", None)
+    if not rel or not isinstance(rel, str):
+        return None
+    rel = rel.strip().replace("\\", "/")
+    if not rel or rel.startswith("..") or rel.startswith("/"):
+        return None
+    roots = (COMPOSE_RESOURCES_ROOT.resolve(), REPO_ROOT.resolve())
+    for root in roots:
+        candidate = (root / rel).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if candidate.is_file() and candidate.suffix.lower() in (".jpg", ".jpeg"):
+            return candidate
+    return None
 
 
 def merge_bundle_registry_from_manifest(doc: object) -> None:
@@ -121,7 +174,9 @@ def merge_bundle_registry_from_manifest(doc: object) -> None:
 
     - Preserves existing ``bundles`` entries not touched by the manifest (extra dev aliases).
     - For each manifest ``still_bundle_id``: keeps existing mapping if the target file exists;
-      otherwise registers ``{id}.jpg`` when that file exists.
+      otherwise registers ``{id}.jpg`` when that file exists under ``bundles/``.
+    - If ``bundles/{id}.jpg`` is missing but ``still_bundled_resource`` resolves to a JPEG under
+      Compose resources (or repo root), copies that file to ``bundles/{id}.jpg`` then registers it.
     """
     BUNDLES_DIR.mkdir(parents=True, exist_ok=True)
     prev: dict[str, str] = {}
@@ -145,6 +200,10 @@ def merge_bundle_registry_from_manifest(doc: object) -> None:
             continue
         default_name = f"{bid}.jpg"
         default_path = BUNDLES_DIR / default_name
+        if not default_path.is_file():
+            src_jpg = _resolve_still_jpeg_for_bundle_sync(loc)
+            if src_jpg is not None:
+                shutil.copy2(src_jpg, default_path)
         if default_path.is_file():
             merged[bid] = default_name
         else:

@@ -16,6 +16,31 @@ Environment → ``batch_streetview_hints`` CLI
 Pano **uvicorn** subprocess (optional pass-through if set in the container)
 --------------------------------------------------------------------------
 ``STREETVIEW_S2_GSD_M``, ``STREETVIEW_S2_CHIP_EDGE_PX``, ``STREETVIEW_EXPOSE_SAMPLING_DEBUG``
+
+Google Street View **HTTP** tuning (``streetview_pano_service.google_static``)
+------------------------------------------------------------------------------
+``STREETVIEW_GOOGLE_HTTP_MAX_ATTEMPTS`` — per-request GET retries (HTTP 408/429/5xx + transport errors; default ``5``).
+``NUTONIC_GOOGLE_STREETVIEW_HTTP_MAX_ATTEMPTS`` — alias when the pano-specific name is unset.
+
+``STREETVIEW_GOOGLE_METADATA_JSON_MAX_ATTEMPTS`` — extra rounds when metadata JSON ``status`` is
+``OVER_QUERY_LIMIT`` / ``UNKNOWN_ERROR`` (default ``5``).
+
+``STREETVIEW_GOOGLE_STATIC_VALIDATION_RETRIES`` — retries when Static returns HTTP 200 but a non-JPEG body (default ``3``).
+
+Batch driver (``batch_streetview_hints.py`` → pano + LFM HTTP):
+
+- ``NUTONIC_BATCH_HTTP_MAX_ATTEMPTS`` (default ``8``) — retries on 408/429/5xx and transport errors.
+- ``NUTONIC_BATCH_HTTP_BACKOFF_CAP_SEC`` (default ``24``) — max seconds per backoff sleep (exponential + jitter).
+- ``NUTONIC_BATCH_HTTP_503_BACKOFF_MULT`` (default ``1.75``) — extra multiplier when the status is HTTP 503.
+- ``NUTONIC_BATCH_INTER_POI_SLEEP_SEC`` — optional pause between POIs (HF entrypoint sets a default if unset).
+- ``NUTONIC_BATCH_PANO_TO_LFM_SLEEP_SEC`` — optional pause after pano sampling before LFM chunk posts.
+- ``NUTONIC_BATCH_INTER_LFM_CHUNK_SLEEP_SEC`` — optional pause between LFM ``from_frames`` chunk requests.
+
+**sv-lfm entrypoint** (also forward from host when submitting Jobs):
+
+- ``NUTONIC_PANO_READY_SEC`` — uvicorn pano worker health wait (default ``600``).
+- ``NUTONIC_LFM_READY_SEC`` — LFM-VL hint service health wait (default ``900``).
+- ``NUTONIC_BATCH_TIMEOUT_SEC`` — per-request timeout passed to ``batch_streetview_hints.py`` (default ``600``).
 """
 
 from __future__ import annotations
@@ -68,6 +93,20 @@ def pano_service_env_pass_through() -> dict[str, str]:
         "STREETVIEW_S2_GSD_M",
         "STREETVIEW_S2_CHIP_EDGE_PX",
         "STREETVIEW_EXPOSE_SAMPLING_DEBUG",
+        "STREETVIEW_GOOGLE_HTTP_MAX_ATTEMPTS",
+        "NUTONIC_GOOGLE_STREETVIEW_HTTP_MAX_ATTEMPTS",
+        "STREETVIEW_GOOGLE_METADATA_JSON_MAX_ATTEMPTS",
+        "STREETVIEW_GOOGLE_STATIC_VALIDATION_RETRIES",
+        "NUTONIC_BATCH_HTTP_MAX_ATTEMPTS",
+        "NUTONIC_BATCH_HTTP_BACKOFF_CAP_SEC",
+        "NUTONIC_BATCH_HTTP_503_BACKOFF_MULT",
+        "NUTONIC_BATCH_INTER_POI_SLEEP_SEC",
+        "NUTONIC_BATCH_PANO_TO_LFM_SLEEP_SEC",
+        "NUTONIC_BATCH_INTER_LFM_CHUNK_SLEEP_SEC",
+        # sv-lfm entrypoint health waits + batch driver timeout (forward from host Job ``env``).
+        "NUTONIC_PANO_READY_SEC",
+        "NUTONIC_LFM_READY_SEC",
+        "NUTONIC_BATCH_TIMEOUT_SEC",
     )
     return {k: os.environ[k].strip() for k in keys if os.environ.get(k, "").strip()}
 

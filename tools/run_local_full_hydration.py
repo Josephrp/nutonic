@@ -32,6 +32,7 @@ _HFJ = REPO_ROOT / "tools" / "hf_jobs"
 if str(_HFJ) not in sys.path:
     sys.path.insert(0, str(_HFJ))
 import pano_batch_env  # noqa: E402
+from hydration_cache_finalize import finalize_hydration_cache_post_streetview  # noqa: E402
 
 
 def _load_dotenv(path: Path) -> None:
@@ -332,6 +333,13 @@ def main(argv: list[str] | None = None) -> int:
             batch.insert(pos, "--useful-hints-dir")
         batch.extend(pano_batch_env.pano_batch_cli_extras_from_environ())
         rc = subprocess.run(batch, cwd=str(REPO_ROOT)).returncode
+        if rc == 0:
+            cache_cv = REPO_ROOT / "data" / "cache" / cv
+            finalize_hydration_cache_post_streetview(
+                cache_cv=cache_cv,
+                catalog_locations_dir=catalog_root / "locations",
+                content_version=cv,
+            )
         return int(rc)
     finally:
         for proc in (lfm_proc, pano_proc):

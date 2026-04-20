@@ -66,24 +66,40 @@ def ensure_transformers_model_loaded() -> tuple[Any, Any]:
     settings = get_settings()
     mid = settings.model_id
     dt_name = settings.torch_dtype
-    torch_dtype: Any = None
+    resolved_dtype: Any = None
     if dt_name != "auto":
         import torch as T
 
-        torch_dtype = getattr(T, dt_name, None)
-        if torch_dtype is None:
-            torch_dtype = T.bfloat16
+        resolved_dtype = getattr(T, dt_name, None)
+        if resolved_dtype is None:
+            resolved_dtype = T.bfloat16
 
     _processor = AutoProcessor.from_pretrained(mid, trust_remote_code=True)
     base_kw: dict[str, Any] = {"trust_remote_code": True}
-    if torch_dtype is not None:
-        base_kw["torch_dtype"] = torch_dtype
+    if resolved_dtype is not None:
+        base_kw["dtype"] = resolved_dtype
     try:
+        _model = AutoModelForImageTextToText.from_pretrained(mid, device_map="auto", **base_kw)
+    except TypeError:
+        if resolved_dtype is None:
+            raise
+        base_kw.pop("dtype", None)
+        base_kw["torch_dtype"] = resolved_dtype
         _model = AutoModelForImageTextToText.from_pretrained(mid, device_map="auto", **base_kw)
     except ValueError as e:
         if "accelerate" not in str(e).lower():
             raise
-        _model = AutoModelForImageTextToText.from_pretrained(mid, **base_kw)
+        kw2: dict[str, Any] = {"trust_remote_code": True}
+        if resolved_dtype is not None:
+            kw2["dtype"] = resolved_dtype
+        try:
+            _model = AutoModelForImageTextToText.from_pretrained(mid, **kw2)
+        except TypeError:
+            if resolved_dtype is None:
+                raise
+            kw2.pop("dtype", None)
+            kw2["torch_dtype"] = resolved_dtype
+            _model = AutoModelForImageTextToText.from_pretrained(mid, **kw2)
         dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         _model = _model.to(dev)
 

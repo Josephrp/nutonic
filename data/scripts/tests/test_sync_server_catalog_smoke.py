@@ -6,20 +6,55 @@ import sys
 from pathlib import Path
 
 
-def test_sync_server_catalog_dry_run_diff_exits_zero() -> None:
+def _manifest_demo_still_only(path: Path) -> None:
+    """
+    Minimal manifest whose ``still_bundle_id`` is always in committed ``bundles/registry.json``
+    and backed by ``nutonic.bundle.v1.demo_still.jpg`` (see ``server/pyproject.toml``).
+
+    Shipped ``composeResources/.../manifest.full.json`` tracks product hydration and may list
+    POI still ids without compose JPEGs or bundle rows on CI — do not use it for this smoke test.
+    """
+    path.write_text(
+        json.dumps(
+            {
+                "content_version": "nutonic.manifest.smoke.sync_catalog.v1",
+                "engine_version": "0.1.0",
+                "maps": [
+                    {
+                        "map_id": "demo",
+                        "title": "Demo mission",
+                        "engine_version": "0.1.0",
+                        "content_version": None,
+                    },
+                ],
+                "locations": [
+                    {
+                        "map_id": "demo",
+                        "location_id": "demo-vienna-001",
+                        "truth_lat": 48.2082,
+                        "truth_lon": 16.3738,
+                        "ruleset_version": "nutonic.ruleset.v1",
+                        "still_bundle_id": "nutonic.bundle.v1.demo_still",
+                        "still_bundled_resource": "files/3.jpg",
+                        "still_http_url": None,
+                        "useful_hints": {"tier_1": "a", "tier_2": "b", "tier_3": "c"},
+                        "play_budget_ms": 180_000,
+                        "ai_marker_phase_enabled": True,
+                    },
+                ],
+                "ai_guesses": [],
+            },
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_sync_server_catalog_dry_run_diff_exits_zero(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[3]
     script = repo / "data" / "scripts" / "sync_server_catalog.py"
-    manifest = (
-        repo
-        / "nutonic"
-        / "shared"
-        / "src"
-        / "commonMain"
-        / "composeResources"
-        / "files"
-        / "cache"
-        / "manifest.full.json"
-    )
+    manifest = tmp_path / "manifest.full.json"
+    _manifest_demo_still_only(manifest)
     r = subprocess.run(
         [sys.executable, str(script), "--manifest", str(manifest)],
         cwd=repo,
@@ -63,20 +98,11 @@ def test_sync_server_catalog_rejects_unknown_still_bundle_id(tmp_path: Path) -> 
     assert "not listed" in err or "missing filename" in err or "Bundle registry file problems" in err
 
 
-def test_sync_server_catalog_sql_mode_prints_ddl() -> None:
+def test_sync_server_catalog_sql_mode_prints_ddl(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[3]
     script = repo / "data" / "scripts" / "sync_server_catalog.py"
-    manifest = (
-        repo
-        / "nutonic"
-        / "shared"
-        / "src"
-        / "commonMain"
-        / "composeResources"
-        / "files"
-        / "cache"
-        / "manifest.full.json"
-    )
+    manifest = tmp_path / "manifest.full.json"
+    _manifest_demo_still_only(manifest)
     r = subprocess.run(
         [sys.executable, str(script), "--manifest", str(manifest), "--mode", "sql"],
         cwd=repo,

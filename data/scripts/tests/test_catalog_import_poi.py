@@ -70,6 +70,21 @@ def test_plan_import_poi_limit(tmp_path):
     assert maps[0]["map_id"] == "poi_test_0"
 
 
+def test_plan_import_warns_when_poi_limit_exceeds_discovered(tmp_path: Path) -> None:
+    locs, maps, warns = plan_import(
+        FIXTURE_LAYOUT_B,
+        REPO_ROOT,
+        tmp_path / "catalog",
+        force=True,
+        map_overrides={},
+        ranked_split=None,
+        poi_limit=50,
+    )
+    assert len(locs) == 2
+    assert len(maps) == 2
+    assert any("Discovered 2" in w and "50" in w for w in warns)
+
+
 def test_import_layout_a_dry_run(tmp_path):
     catalog = tmp_path / "catalog"
     rc = run_import(

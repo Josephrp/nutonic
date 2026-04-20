@@ -3,8 +3,13 @@
 Submit Hugging Face Jobs for full cache hydration (sequential):
 
 1. **sv-lfm** — Street View + LFM-VL batch (GPU), uploads under ``runs/<content_version>/``.
-2. **tim** — TerraMind TiM STAC batch (GPU), uploads ``runs/<content_version>/tim/``.
+2. **tim** — TerraMind TiM STAC batch (GPU), uploads ``runs/<content_version>/tim/``. TiM merges
+   ``runs/<content_version>/reports/tim_batch_seed.json`` from the sv-lfm upload so batch rows match
+   every finalized POI (``hydration_included_location_ids.json``), not only the 3/5-row hf_job templates.
 3. **llm-sidecars** — narrative batch (GPU + vLLM / transformers / optional Ollama), uploads ``runs/<content_version>/narrative/``.
+
+After ``sv-lfm`` completes, **TiM** and **llm-sidecars** are submitted and waited on **in parallel** when both run
+(Hugging Face Jobs tolerate independent jobs per `https://huggingface.co/docs/huggingface_hub/en/guides/jobs`).
 
 Then optionally ``snapshot_download`` the output dataset locally. No model weights load on your laptop.
 
@@ -16,8 +21,24 @@ Environment (after loading ``.env``):
   ``NUTONIC_HYDRATION_OUTPUT_DATASET`` — Hub dataset id for uploads.
   ``GOOGLE_MAPS_API_KEY``, ``MAPBOX_ACCESS_TOKEN`` — Job **secrets** for ``sv-lfm`` only.
 
-CLI ``--poi-limit N`` sets ``NUTONIC_POI_LIMIT`` for Jobs (single-tree ``geoguessr_poi_12`` slice; TiM uses
-the matching bundled YAML when ``N`` is 5). Geo context uses ``--allow-partial`` in the sv-lfm Job by default;
+**Orchestrator (this script, host process)** — optional tuning without extra CLI flags:
+
+- ``NUTONIC_HYDRATION_JOB_TIMEOUT`` — default for ``--timeout`` (HF Job wall clock, e.g. ``12h``).
+- ``NUTONIC_HYDRATION_POLL_SECONDS`` — default for ``--poll-seconds`` (Hub ``inspect_job`` interval while waiting).
+- ``NUTONIC_HYDRATION_MAX_WAIT_MINUTES`` — default for ``--max-wait-minutes`` (host-side wait cap per Job).
+- ``NUTONIC_HYDRATION_INSPECT_MAX_ATTEMPTS`` — retries when ``inspect_job`` raises (transient Hub/network errors); default ``8``.
+- ``NUTONIC_HYDRATION_INSPECT_BACKOFF_START_SEC`` / ``NUTONIC_HYDRATION_INSPECT_BACKOFF_CAP_SEC`` — exponential backoff between those retries (defaults ``1.5`` and ``20``).
+- ``NUTONIC_HYDRATION_MANIFEST_MAX_ATTEMPTS`` / ``NUTONIC_HYDRATION_MANIFEST_RETRY_SLEEP_SEC`` — re-read ``hydration_included_location_ids.json`` after ``sv-lfm`` (Hub propagation lag); defaults ``1`` and ``4``.
+
+**Forwarded from host into Jobs** (export before submit): Street View / batch HTTP / readiness keys listed in
+``tools/hf_jobs/pano_batch_env.py`` (e.g. ``NUTONIC_BATCH_HTTP_MAX_ATTEMPTS``, ``NUTONIC_BATCH_HTTP_BACKOFF_CAP_SEC``,
+``NUTONIC_BATCH_INTER_POI_SLEEP_SEC``, ``NUTONIC_PANO_READY_SEC``, ``NUTONIC_LFM_READY_SEC``, ``NUTONIC_BATCH_TIMEOUT_SEC``)
+into **sv-lfm**; narrative / vLLM keys in ``inference_job_env.py`` into **llm-sidecars**; TiM keys
+``TIM_DEVICE_OVERRIDE``, ``NUTONIC_TIM_SKIP_UPLOAD``, ``TIM_HF_CONFIG`` into **tim**.
+
+CLI ``--poi-limit N`` sets ``NUTONIC_POI_LIMIT`` for Jobs. For ``N`` ≤ 12 the Job uses ``geoguessr_poi_12``;
+for ``N`` > 12 it also pulls ``geoguessr_poi_120`` (NuTonic/poidata) so the catalog can exceed the 12-POI slice.
+TiM uses the matching bundled YAML when ``N`` is 5. Geo context uses ``--allow-partial`` in the sv-lfm Job by default;
 use ``--skip-geo-hints`` to skip geo + useful_hints, or set ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL=0`` for strict failure.
 
 Optional **Street View** flags (``--shuffle-seed``, ``--pano-sampling-mode``, …) are merged into the
@@ -31,9 +52,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +78,26 @@ DEFAULT_TIM_CONFIG = (
 DEFAULT_TIM_CONFIG_FIVE = (
     "/workspace/inference/terramind_tim_local/config.hf_job_geoguessr_poi12_first5.yaml"
 )
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw, 10)
+    except ValueError:
+        return default
 
 
 def _collect_secrets_for_sv() -> dict[str, str]:
@@ -82,14 +125,75 @@ def _collect_secrets_for_tim_llm() -> dict[str, str]:
     return secrets
 
 
+def _hydration_included_ids_from_hub(repo_id: str, content_version: str) -> list[str] | None:
+    """
+    Read ``runs/<cv>/reports/hydration_included_location_ids.json`` from the output dataset.
+
+    Written by the sv-lfm Job after dropping Street View failures. Returns ``None`` if the
+    file is missing (legacy images) so TiM / LLM still run unfiltered.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        return None
+    max_attempts = max(1, _env_int("NUTONIC_HYDRATION_MANIFEST_MAX_ATTEMPTS", 1))
+    sleep_sec = max(0.0, _env_float("NUTONIC_HYDRATION_MANIFEST_RETRY_SLEEP_SEC", 4.0))
+    last_err: BaseException | None = None
+    for attempt in range(max_attempts):
+        try:
+            p = hf_hub_download(
+                repo_id=repo_id,
+                repo_type="dataset",
+                filename=f"runs/{content_version}/reports/hydration_included_location_ids.json",
+            )
+            data = json.loads(Path(p).read_text(encoding="utf-8"))
+            ids = data.get("location_ids")
+            if not isinstance(ids, list):
+                return None
+            return [str(x).strip() for x in ids if str(x).strip()]
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            if attempt + 1 >= max_attempts:
+                print(f"NU:TONIC: could not read hydration included-POI manifest: {e}", file=sys.stderr)
+                return None
+            if sleep_sec > 0:
+                time.sleep(sleep_sec)
+    if last_err is not None:
+        print(f"NU:TONIC: could not read hydration included-POI manifest: {last_err}", file=sys.stderr)
+    return None
+
+
 def _wait_job(job_id: str, *, poll_sec: float, max_wait_sec: float) -> str:
     from huggingface_hub import HfApi
 
     api = HfApi()
     deadline = time.monotonic() + max_wait_sec
     last = ""
+    inspect_attempts = max(1, _env_int("NUTONIC_HYDRATION_INSPECT_MAX_ATTEMPTS", 8))
+    backoff0 = max(0.05, _env_float("NUTONIC_HYDRATION_INSPECT_BACKOFF_START_SEC", 1.5))
+    backoff_cap = max(backoff0, _env_float("NUTONIC_HYDRATION_INSPECT_BACKOFF_CAP_SEC", 20.0))
+
+    def _inspect_once() -> object:
+        err: BaseException | None = None
+        for k in range(inspect_attempts):
+            try:
+                return api.inspect_job(job_id=job_id)
+            except BaseException as e:  # noqa: BLE001
+                err = e
+                if k + 1 >= inspect_attempts or time.monotonic() >= deadline:
+                    raise
+                span = min(
+                    backoff_cap,
+                    backoff0 * (2**k) + random.uniform(0.0, 0.35),
+                )
+                remain = deadline - time.monotonic()
+                if remain <= 0:
+                    raise err from None
+                time.sleep(min(span, remain))
+        raise err from None  # pragma: no cover
+
     while time.monotonic() < deadline:
-        info = api.inspect_job(job_id=job_id)
+        info = _inspect_once()
         stage = str(info.status.stage)
         last = stage
         if stage == "COMPLETED":
@@ -97,7 +201,10 @@ def _wait_job(job_id: str, *, poll_sec: float, max_wait_sec: float) -> str:
         if stage in ("ERROR", "CANCELED", "DELETED"):
             msg = info.status.message or ""
             raise RuntimeError(f"job {job_id} ended with stage={stage!r} message={msg!r}")
-        time.sleep(poll_sec)
+        remain = deadline - time.monotonic()
+        if remain <= 0:
+            break
+        time.sleep(min(poll_sec, remain))
     raise TimeoutError(f"job {job_id} still running after {max_wait_sec}s (last stage {last!r})")
 
 
@@ -131,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         metavar="N",
-        help="Limit to first N POIs from geoguessr_poi_12 (sets NUTONIC_POI_LIMIT for all Jobs).",
+        help="Limit to first N POIs (sets NUTONIC_POI_LIMIT; N>12 uses geoguessr_poi_120 import on the Job).",
     )
     p.add_argument(
         "--skip-geo-hints",
@@ -161,8 +268,16 @@ def main(argv: list[str] | None = None) -> int:
         help="sv-lfm only: radius_m when sampling mode is LEGACY_RADIAL_OFFSET.",
     )
     p.add_argument("--timeout", default=os.environ.get("NUTONIC_HYDRATION_JOB_TIMEOUT", "12h"))
-    p.add_argument("--poll-seconds", type=float, default=45.0)
-    p.add_argument("--max-wait-minutes", type=float, default=720.0)
+    p.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=_env_float("NUTONIC_HYDRATION_POLL_SECONDS", 45.0),
+    )
+    p.add_argument(
+        "--max-wait-minutes",
+        type=float,
+        default=_env_float("NUTONIC_HYDRATION_MAX_WAIT_MINUTES", 720.0),
+    )
     p.add_argument("--skip-download", action="store_true")
     p.add_argument("--skip-tim", action="store_true", help="Do not submit the TerraMind TiM GPU job.")
     p.add_argument("--dry-run-submit", action="store_true", help="Print job specs only (no submit / wait / download).")
@@ -196,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
 
     env_sv_lfm = {
         **env_common,
+        **pano_batch_env.pano_service_env_pass_through(),
         **pano_batch_env.pano_sv_job_env_from_argparse(args),
         **inference_job_env.lfm_vl_hint_env_from_environ(),
         **inference_job_env.geo_pipeline_env_from_environ(),
@@ -331,6 +447,27 @@ def main(argv: list[str] | None = None) -> int:
         print(str(e), file=sys.stderr)
         return 4
 
+    apply_hf_read_token()
+    included = _hydration_included_ids_from_hub(args.output_dataset, args.content_version)
+    if included is None:
+        print(
+            "NU:TONIC: hydration_included_location_ids.json not on Hub (legacy sv-lfm image?). "
+            "TiM / LLM jobs will not filter by Street View success.",
+            flush=True,
+        )
+    elif not included:
+        print(
+            "NU:TONIC: hydration manifest lists zero POIs after sv-lfm; refusing TiM / LLM.",
+            file=sys.stderr,
+        )
+        return 4
+    else:
+        env_common["NUTONIC_HYDRATION_INCLUDED_LOCATION_IDS"] = ",".join(included)
+        print(
+            f"NU:TONIC: TiM + LLM will run for {len(included)} POI(s) after Street View prune: {', '.join(included)}",
+            flush=True,
+        )
+
     job_tim = None
     if not args.skip_tim:
         assert args.tim_image
@@ -342,19 +479,19 @@ def main(argv: list[str] | None = None) -> int:
             dataset_volume="NuTonic/poidata",
             dataset_mount_path="/mnt/poidata",
             dataset_revision=None,
-            env={**env_common},
+            env={**env_common, **inference_job_env.tim_hf_job_env_from_environ()},
             secrets=tim_llm_secrets,
             labels=None,
             dry_run=False,
         )
         assert job_tim is not None
         print(job_tim.url, flush=True)
-        try:
-            _wait_job(job_tim.id, poll_sec=args.poll_seconds, max_wait_sec=max_wait)
-        except (RuntimeError, TimeoutError) as e:
-            print(str(e), file=sys.stderr)
-            return 5
 
+    env_llm_submit = {
+        **env_common,
+        **({"NUTONIC_NARRATIVE_LLM_LIVE": "1"} if args.narrative_llm_live else {}),
+        **inference_job_env.narrative_llm_job_env_from_environ(),
+    }
     job_llm = submit_hydration_job(
         docker_image=llm_image,
         command=llm_cmd,
@@ -363,17 +500,36 @@ def main(argv: list[str] | None = None) -> int:
         dataset_volume="NuTonic/poidata",
         dataset_mount_path="/mnt/poidata",
         dataset_revision=None,
-        env={**env_llm},
+        env={**env_llm_submit},
         secrets=tim_llm_secrets,
         labels=None,
         dry_run=False,
     )
     assert job_llm is not None
     print(job_llm.url, flush=True)
-    try:
-        _wait_job(job_llm.id, poll_sec=args.poll_seconds, max_wait_sec=max_wait)
-    except (RuntimeError, TimeoutError) as e:
-        print(str(e), file=sys.stderr)
+
+    wait_specs: list[tuple[str, str]] = []
+    if job_tim is not None:
+        wait_specs.append(("tim", job_tim.id))
+    wait_specs.append(("llm", job_llm.id))
+    failures: list[tuple[str, Exception]] = []
+    with ThreadPoolExecutor(max_workers=len(wait_specs)) as pool:
+        future_to_label = {
+            pool.submit(_wait_job, jid, poll_sec=args.poll_seconds, max_wait_sec=max_wait): label
+            for label, jid in wait_specs
+        }
+        for fut in as_completed(future_to_label):
+            label = future_to_label[fut]
+            try:
+                fut.result()
+            except Exception as e:
+                failures.append((label, e))
+    if failures:
+        for label, e in failures:
+            print(f"NU:TONIC: {label} job wait failed: {e}", file=sys.stderr)
+        labels_failed = {lbl for lbl, _ in failures}
+        if "tim" in labels_failed:
+            return 5
         return 6
 
     if args.skip_download:

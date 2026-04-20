@@ -23,7 +23,6 @@ COPY data/scripts /workspace/data/scripts
 COPY tools /workspace/tools
 # Repo may not ship a root ``prompts/`` tree yet; narrative job uses ``Dockerfile.hydration-llm``.
 RUN mkdir -p /workspace/prompts/llm
-COPY nutonic /workspace/nutonic
 
 RUN pip install --no-cache-dir -e /workspace/inference/streetview_pano_service \
     && pip install --no-cache-dir -e "/workspace/inference/lfm_vl_hint_service[model]"

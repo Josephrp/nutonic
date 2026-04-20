@@ -26,7 +26,8 @@ def _parse_lat_lon_from_coord_text(text: str) -> tuple[float, float] | None:
     Generation sometimes mis-labels the first field (e.g. ``lon=67.25 lon=-74.50``):
     numeric order still matches ``(lat, lon)``, so two ``lon=`` captures are interpreted
     as latitude then longitude when values fit WGS84 ranges. Symmetric for duplicated
-    ``lat=`` when ``lon=`` is missing.
+    ``lat=`` when ``lon=`` is missing. Duplicate ``lat=`` before a single ``lon=`` uses
+    the **last** latitude (model stutter) with that longitude.
     """
     try:
         lat_vals = [float(m.group(1)) for m in _COORD_LAT_RE.finditer(text)]
@@ -47,6 +48,20 @@ def _parse_lat_lon_from_coord_text(text: str) -> tuple[float, float] | None:
         a, b = lat_vals[0], lat_vals[1]
         if abs(a) <= 90.0 and abs(b) <= 180.0:
             return a, b
+        return None
+
+    # Model stutter: ``lat=… lat=… lon=…`` (duplicate lat prefix); pair last lat with lon.
+    if len(lat_vals) >= 2 and len(lon_vals) == 1:
+        la, lo = lat_vals[-1], lon_vals[0]
+        if abs(la) <= 90.0 and abs(lo) <= 180.0:
+            return la, lo
+        return None
+
+    # Symmetric: ``lon=… lon=… lat=…``
+    if len(lon_vals) >= 2 and len(lat_vals) == 1:
+        la, lo = lat_vals[0], lon_vals[-1]
+        if abs(la) <= 90.0 and abs(lo) <= 180.0:
+            return la, lo
         return None
 
     return None

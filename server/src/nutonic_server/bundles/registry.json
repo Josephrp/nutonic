@@ -1,6 +1,22 @@
 {
   "bundles": {
     "nutonic.bundle.v1.demo_still": "nutonic.bundle.v1.demo_still.jpg",
-    "nutonic.still.v1.idempo_nyc": "nutonic.still.v1.idempo_nyc.jpg"
+    "nutonic.still.v1.idempo_nyc": "nutonic.still.v1.idempo_nyc.jpg",
+    "nutonic.still.v1.poi_0000": "nutonic.still.v1.poi_0000.jpg",
+    "nutonic.still.v1.poi_0003": "nutonic.still.v1.poi_0003.jpg",
+    "nutonic.still.v1.poi_0004": "nutonic.still.v1.poi_0004.jpg",
+    "nutonic.still.v1.poi_0005": "nutonic.still.v1.poi_0005.jpg",
+    "nutonic.still.v1.poi_0006": "nutonic.still.v1.poi_0006.jpg",
+    "nutonic.still.v1.poi_0008": "nutonic.still.v1.poi_0008.jpg",
+    "nutonic.still.v1.poi_0009": "nutonic.still.v1.poi_0009.jpg",
+    "nutonic.still.v1.poi_0010": "nutonic.still.v1.poi_0010.jpg",
+    "nutonic.still.v1.poi_0011": "nutonic.still.v1.poi_0011.jpg",
+    "nutonic.still.v1.poi_0012": "nutonic.still.v1.poi_0012.jpg",
+    "nutonic.still.v1.poi_0013": "nutonic.still.v1.poi_0013.jpg",
+    "nutonic.still.v1.poi_0014": "nutonic.still.v1.poi_0014.jpg",
+    "nutonic.still.v1.poi_0015": "nutonic.still.v1.poi_0015.jpg",
+    "nutonic.still.v1.poi_0017": "nutonic.still.v1.poi_0017.jpg",
+    "nutonic.still.v1.poi_0018": "nutonic.still.v1.poi_0018.jpg",
+    "nutonic.still.v1.poi_0019": "nutonic.still.v1.poi_0019.jpg"
   }
 }

@@ -170,10 +170,17 @@ def assemble_manifest(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """
     Returns (manifest_full, manifest_public) as plain dicts.
-    Raises ValueError on validation failures.
+
+    Hint/caption checks attach ``*_validation`` / ``*_metadata`` on rows instead of aborting
+    (cache rows are always emitted when catalog + still_index allow).
     """
     from catalog_lint import lint_catalog
-    from validate_hint_strings import HintPolicy, validate_caption_text, validate_hints
+    from validate_hint_strings import (
+        HintPolicy,
+        validate_caption_text,
+        validate_hints,
+        violations_to_jsonable,
+    )
 
     catalog_root = catalog_root.resolve()
     repo_root = repo_root.resolve()
@@ -219,23 +226,53 @@ def assemble_manifest(
             raise ValueError(f"Missing still_index entry for location_id={lid}")
 
         useful: dict[str, Any] | None = None
+        useful_hints_metadata: dict[str, Any] | None = None
+        useful_hints_validation: list[dict[str, str]] | None = None
+
         if assist == "none":
             useful = None
+            useful_hints_metadata = {
+                "status": "assist_none",
+                "location_id": lid,
+                "assist_level": assist,
+            }
         else:
             hint_obj = hints_by_loc.get(lid)
             if hint_obj is None:
-                raise ValueError(f"Missing useful_hints JSON for location_id={lid}")
-            uh = hint_obj.get("useful_hints")
-            if not isinstance(uh, dict):
-                raise ValueError(f"{lid}: useful_hints object missing")
-            useful = _normalize_hints_for_manifest(uh)
-            if not skip_hint_validate:
-                payload = {"useful_hints": dict(useful), "assist_level": assist}
-                viol = validate_hints(payload, hint_policy)
-                if viol:
-                    raise ValueError(
-                        f"validate_hints failed for {lid}: " + "; ".join(v.format_line() for v in viol)
-                    )
+                useful = None
+                useful_hints_metadata = {
+                    "status": "missing_file",
+                    "location_id": lid,
+                    "assist_level": assist,
+                    "expected_relative_path": f"useful_hints/{lid}.json",
+                }
+            else:
+                uh = hint_obj.get("useful_hints")
+                if not isinstance(uh, dict):
+                    useful = None
+                    useful_hints_metadata = {
+                        "status": "invalid_wrapper",
+                        "location_id": lid,
+                        "assist_level": assist,
+                    }
+                else:
+                    useful = _normalize_hints_for_manifest(uh)
+                    if not useful or not any(str(v).strip() for v in useful.values()):
+                        useful_hints_metadata = {
+                            "status": "empty_tiers",
+                            "location_id": lid,
+                            "assist_level": assist,
+                        }
+                    if not skip_hint_validate and useful is not None:
+                        payload = {"useful_hints": dict(useful), "assist_level": assist}
+                        viol = validate_hints(payload, hint_policy)
+                        if viol:
+                            useful_hints_validation = violations_to_jsonable(viol)
+                            print(
+                                f"assemble_manifest: warning: validate_hints for {lid}: "
+                                + "; ".join(v.format_line() for v in viol),
+                                file=sys.stderr,
+                            )
 
         row: dict[str, Any] = {
             "map_id": mid,
@@ -250,6 +287,10 @@ def assemble_manifest(
             "play_budget_ms": int(loc["play_budget_ms"]) if loc.get("play_budget_ms") is not None else 180_000,
             "ai_marker_phase_enabled": bool(loc.get("ai_marker_phase_enabled", True)),
         }
+        if useful_hints_metadata is not None:
+            row["useful_hints_metadata"] = useful_hints_metadata
+        if useful_hints_validation is not None:
+            row["useful_hints_validation"] = useful_hints_validation
 
         sv_doc = streetview_by_loc.get(lid)
         if isinstance(sv_doc, dict):
@@ -257,35 +298,62 @@ def assemble_manifest(
             if pack is not None:
                 if not isinstance(pack, list):
                     raise ValueError(f"{lid}: streetview_hint_pack must be a list")
+                pack_notes: list[dict[str, Any]] = []
                 for j, item in enumerate(pack):
                     if not isinstance(item, dict):
                         raise ValueError(f"{lid}: streetview_hint_pack[{j}] must be an object")
                     txt = str(item.get("text", "")).strip()
                     if not txt:
-                        raise ValueError(f"{lid}: streetview_hint_pack[{j}].text empty")
-                    if not skip_hint_validate:
+                        pack_notes.append(
+                            {
+                                "pack_index": j,
+                                "violations": [
+                                    {
+                                        "code": "empty_text",
+                                        "message": "streetview_hint_pack item has empty text",
+                                        "path": f"{lid}.streetview_hint_pack[{j}].text",
+                                    }
+                                ],
+                            }
+                        )
+                        print(
+                            f"assemble_manifest: warning: {lid} streetview_hint_pack[{j}] has empty text",
+                            file=sys.stderr,
+                        )
+                    elif not skip_hint_validate:
                         viol = validate_caption_text(
                             txt,
                             max_len=_streetview_pack_caption_max(),
                             path=f"{lid}.streetview_hint_pack[{j}].text",
                         )
                         if viol:
-                            raise ValueError(
-                                f"validate_caption_text failed for {lid} pack[{j}]: "
-                                + "; ".join(v.format_line() for v in viol)
+                            pack_notes.append(
+                                {"pack_index": j, "violations": violations_to_jsonable(viol)}
+                            )
+                            print(
+                                f"assemble_manifest: warning: validate_caption_text for {lid} pack[{j}]: "
+                                + "; ".join(v.format_line() for v in viol),
+                                file=sys.stderr,
                             )
                 row["streetview_hint_pack"] = pack
+                if pack_notes:
+                    row["streetview_hint_pack_validation"] = pack_notes
             narr = sv_doc.get("streetview_assist_narrative")
             if narr is not None and str(narr).strip():
                 ns = str(narr).strip()
                 if not skip_hint_validate:
                     viol = validate_caption_text(ns, max_len=900, path=f"{lid}.streetview_assist_narrative")
                     if viol:
-                        raise ValueError(
-                            f"validate_caption_text failed for {lid} narrative: "
-                            + "; ".join(v.format_line() for v in viol)
+                        row["streetview_assist_narrative_validation"] = violations_to_jsonable(viol)
+                        print(
+                            f"assemble_manifest: warning: validate_caption_text for {lid} narrative: "
+                            + "; ".join(v.format_line() for v in viol),
+                            file=sys.stderr,
                         )
                 row["streetview_assist_narrative"] = ns
+            meta_sv = sv_doc.get("streetview_assist_narrative_metadata")
+            if isinstance(meta_sv, dict):
+                row["streetview_assist_narrative_metadata"] = meta_sv
             sc = sv_doc.get("satellite_caption_sidecar")
             if isinstance(sc, dict):
                 row["satellite_caption_sidecar"] = sc

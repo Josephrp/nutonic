@@ -280,6 +280,11 @@ def validate_hints(obj: Any, policy: HintPolicy | None = None) -> list[Violation
     return violations
 
 
+def violations_to_jsonable(violations: Sequence[Violation]) -> list[dict[str, str]]:
+    """Serialize ``Violation`` rows for manifests and sidecars (attach, do not drop cache rows)."""
+    return [{"code": v.code, "message": v.message, "path": v.path} for v in violations]
+
+
 def validate_caption_text(
     text: str,
     *,

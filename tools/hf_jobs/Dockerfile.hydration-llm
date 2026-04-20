@@ -22,10 +22,15 @@ RUN pip install --no-cache-dir \
     "huggingface_hub>=0.30.0" "python-dotenv>=1.0.0" "pyyaml>=6.0.0,<7" "pydantic>=2.0.0,<3" "httpx>=0.27.0,<1"
 
 COPY data/scripts/liquid_ai_defaults.py /workspace/data/scripts/liquid_ai_defaults.py
+COPY data/scripts/narrative_hydration_clues.py /workspace/data/scripts/narrative_hydration_clues.py
+COPY data/scripts/narrative_fragment_qa.py /workspace/data/scripts/narrative_fragment_qa.py
 COPY data/scripts/narrative_llm_batch.py /workspace/data/scripts/narrative_llm_batch.py
+COPY data/scripts/narrative_sidecar_postprocess.py /workspace/data/scripts/narrative_sidecar_postprocess.py
 COPY data/scripts/catalog_import_poi.py /workspace/data/scripts/catalog_import_poi.py
 COPY data/scripts/validate_hint_strings.py /workspace/data/scripts/validate_hint_strings.py
 COPY prompts/llm /workspace/prompts/llm
+# Shared entrypoint; include ``hydration_cache_finalize`` so imports succeed (some builds hoist it; sv-lfm needs it on full image).
+COPY tools/hf_jobs/hydration_cache_finalize.py /workspace/tools/hf_jobs/hydration_cache_finalize.py
 COPY tools/hf_jobs/entrypoint_hf_hydration.py /workspace/tools/hf_jobs/entrypoint_hf_hydration.py
 COPY tools/hf_jobs/hf_output_dataset.py /workspace/tools/hf_jobs/hf_output_dataset.py
 COPY tools/hf_jobs/inference_job_env.py /workspace/tools/hf_jobs/inference_job_env.py

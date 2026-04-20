@@ -7,7 +7,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from nutonic_terramind_tim_local.inputs_build import _build_inputs, _rgb_from_s12_reflectance
-from nutonic_terramind_tim_local.serialize import build_tim_modality_outputs
+from nutonic_terramind_tim_local.serialize import build_tim_modality_outputs, mean_arithmetic_latlon
 
 
 def test_build_inputs_s2l2a_random_shape() -> None:
@@ -51,6 +51,18 @@ def test_build_inputs_rgb_s2_rgb_shared_zeros_not_stac() -> None:
     assert d["RGB"].shape == (1, 3, 224, 224)
     assert d["S2L2A"].shape == (1, 12, 224, 224)
     assert aux == {}
+
+
+def test_mean_arithmetic_latlon_skips_missing_and_nan() -> None:
+    pairs: list[tuple[float | None, float | None]] = [
+        (1.0, 10.0),
+        (None, None),
+        (3.0, 30.0),
+        (float("nan"), 0.0),
+    ]
+    la, lo = mean_arithmetic_latlon(pairs)
+    assert la == pytest.approx(2.0)
+    assert lo == pytest.approx(20.0)
 
 
 def test_tim_outputs_full_retains_keys() -> None:

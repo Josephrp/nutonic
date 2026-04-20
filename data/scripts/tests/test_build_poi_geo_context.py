@@ -7,12 +7,24 @@ from pathlib import Path
 
 import pytest
 
-from build_poi_geo_context import main, pick_projected_crs, resolve_vector_path, run_build
+import pandas as pd
+
+from build_poi_geo_context import _series_idxmin_safe, main, pick_projected_crs, resolve_vector_path, run_build
 from catalog_import_poi import run_import
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURE_GEO = REPO_ROOT / "data" / "scripts" / "tests" / "fixtures" / "geo"
 FIXTURE_POI_MINI = REPO_ROOT / "data" / "scripts" / "tests" / "fixtures" / "poi_mini"
+
+
+def test_series_idxmin_safe_all_nan():
+    s = pd.Series([float("nan"), float("nan")], index=[10, 20])
+    assert _series_idxmin_safe(s) is None
+
+
+def test_series_idxmin_safe_finds_min():
+    s = pd.Series([3.0, 1.0, 2.0], index=["a", "b", "c"])
+    assert _series_idxmin_safe(s) == "b"
 
 
 def test_pick_projected_crs_utm_vs_mercator():

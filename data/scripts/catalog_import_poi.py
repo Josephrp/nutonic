@@ -241,15 +241,23 @@ def plan_import(
     poi_limit: int | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     """Returns (location_dicts, merged_maps_for_maps_yaml, warnings)."""
+    warnings: list[str] = []
     jobs = collect_import_jobs(poi_root)
+    n_discovered = len(jobs)
     if poi_limit is not None:
         if poi_limit < 0:
             raise CatalogImportError("--poi-limit must be >= 0")
+        if n_discovered < poi_limit:
+            warnings.append(
+                f"Discovered {n_discovered} POI(s) under {poi_root} but --poi-limit is {poi_limit}; "
+                "importing every discovered POI (Layout-B: sorted poi_*/poi.json). "
+                "geoguessr_poi_12 snapshots often ship a small slice only — use geoguessr_poi_120 / "
+                "a fuller NuTonic/poidata revision for more locations."
+            )
         jobs = jobs[:poi_limit]
     seen_ids: set[str] = set()
     locations: list[dict[str, Any]] = []
     map_rows: list[dict[str, Any]] = []
-    warnings: list[str] = []
 
     for row in jobs:
         loc = _location_yaml_dict(row, repo_root)

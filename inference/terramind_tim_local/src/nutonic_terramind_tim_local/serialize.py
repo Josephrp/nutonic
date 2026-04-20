@@ -50,6 +50,32 @@ def serialize_tim_entry(
     return out
 
 
+def mean_arithmetic_latlon(
+    pairs: list[tuple[float | None, float | None]],
+) -> tuple[float | None, float | None]:
+    """Arithmetic mean over finite (lat, lon) pairs; ignores missing or NaN samples."""
+    finite = [
+        (la, lo)
+        for la, lo in pairs
+        if la is not None
+        and lo is not None
+        and la == la
+        and lo == lo  # NaN
+    ]
+    if not finite:
+        return None, None
+    n = len(finite)
+    return sum(la for la, _ in finite) / n, sum(lo for _, lo in finite) / n
+
+
+def decode_coordinates_from_tim_dict(model: Any, tim_dict: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Return decoded WGS84 dict (same schema as ``Coordinates``) or ``None`` if missing."""
+    blk = tim_dict.get("coords")
+    if not isinstance(blk, dict):
+        return None
+    return _coords_wgs84_from_model(model, blk)
+
+
 def _coords_wgs84_from_model(model: Any, coords_block: Mapping[str, Any]) -> dict[str, Any] | None:
     tok = getattr(model, "tokenizer", None)
     if tok is None or "coords" not in tok:

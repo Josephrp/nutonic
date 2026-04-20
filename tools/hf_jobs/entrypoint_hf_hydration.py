@@ -4,9 +4,15 @@ Container entrypoint for Hugging Face Jobs: hydrate from ``NuTonic/poidata`` mou
 artifacts to a Hub **dataset** (``NUTONIC_HYDRATION_OUTPUT_DATASET``).
 
 Modes:
-  ``sv-lfm`` — catalog import, geo + stills + useful_hints, pano + LFM-VL services, Street View batch, upload cache.
-  ``llm-sidecars`` — import catalog from mount, run ``narrative_llm_batch`` (dry-run or live via vLLM / OpenAI HTTP /
-  in-process ``transformers`` / optional Ollama), upload ``narrative/`` only.
+  ``sv-lfm`` — catalog import, geo + stills + useful_hints, pano + LFM-VL services, Street View batch,
+  **finalize** (drop failed POIs, rewrite ``still_index.json``, emit ``reports/hydration_included_location_ids.json``),
+  then emit ``reports/useful_hints_coverage.json`` (per-POI useful-hints file presence),
+  ``reports/tim_batch_seed.json`` (coordinates for every finalized POI — consumed by the TiM Job),
+  then upload cache.
+  ``llm-sidecars`` — import catalog from mount, ``snapshot_download`` ``runs/<cv>/streetview/**`` from the output
+  dataset (when configured) so narrative prompts see hydrated Street View + satellite text, then run
+  ``narrative_llm_batch`` (dry-run or live via vLLM / OpenAI HTTP / in-process ``transformers`` / optional Ollama),
+  upload ``narrative/`` only.
 
 Environment (typical):
   ``CONTENT_VERSION`` — cache segment / run id (required).
@@ -14,8 +20,10 @@ Environment (typical):
   ``NUTONIC_HYDRATION_OUTPUT_DATASET`` — target dataset repo id for ``upload_folder``.
   ``GOOGLE_MAPS_API_KEY`` or ``GOOGLE_STREETVIEW_API_KEY``, ``MAPBOX_ACCESS_TOKEN`` (sv-lfm).
   ``HF_TOKEN`` — Hub token (injected via Job secret) for uploads.
-  ``NUTONIC_POI_LIMIT`` — if set (positive int), import **only** ``geoguessr_poi_12`` (first N by sorted
-  ``poi_*`` order) and pass the same limit to the Street View batch (skips the dual 120+12 merge).
+  ``NUTONIC_POI_LIMIT`` — if set (positive int), import the first N POIs by sorted ``poi_*`` order and pass
+  the same limit to the Street View batch. Values **≤12** use ``downloads/geoguessr_poi_12`` only; values
+  **>12** require ``geoguessr_poi_120`` on the mount (NuTonic/poidata ships 12 POIs under ``geoguessr_poi_12``
+  and the larger tree under ``geoguessr_poi_120``). No dual 120+12 merge in limited mode.
   ``NUTONIC_SKIP_GEO_HINTS`` — if ``1``, skip ``build_poi_geo_context`` / ``compile_useful_hint_tiers``
   ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL`` — if not ``0``/``false``/``no`` (default: allow), ``build_poi_geo_context`` is run with ``--allow-partial`` so one bad POI does not fail the Job.
   (still runs Mapbox stills + batch without useful-hints injection).
@@ -41,6 +49,7 @@ Environment (typical):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shlex
 import shutil
@@ -48,6 +57,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -68,17 +78,49 @@ except ImportError:
     DEFAULT_LFM_VL_HF_MODEL_ID = "LiquidAI/LFM2.5-VL-450M"
 
 
-def _poi_limit_argv() -> list[str]:
+def _poi_limit_n() -> int | None:
     raw = os.environ.get("NUTONIC_POI_LIMIT", "").strip()
     if not raw:
-        return []
+        return None
     try:
         n = int(raw)
     except ValueError:
-        return []
+        return None
     if n < 1:
+        return None
+    return n
+
+
+def _poi_limit_argv() -> list[str]:
+    n = _poi_limit_n()
+    if n is None:
         return []
     return ["--poi-limit", str(n)]
+
+
+def _limited_catalog_poi_root() -> Path:
+    """
+    When ``NUTONIC_POI_LIMIT`` requests more than the small Hub slice (12 under ``geoguessr_poi_12``),
+    prefer ``geoguessr_poi_120`` so the catalog can actually contain N locations.
+    """
+    dd = REPO_ROOT / "data" / "downloads"
+    small = dd / "geoguessr_poi_12"
+    big = dd / "geoguessr_poi_120"
+    n = _poi_limit_n()
+    if n is not None and n > 12:
+        if _tree_has_layout_b(big):
+            print(
+                f"entrypoint: NUTONIC_POI_LIMIT={n} > 12 — catalog import from geoguessr_poi_120 "
+                "(geoguessr_poi_12 is a 12-POI slice on NuTonic/poidata).",
+                file=sys.stderr,
+            )
+            return big
+        print(
+            "entrypoint: warning: NUTONIC_POI_LIMIT>12 but geoguessr_poi_120 missing or empty; "
+            "falling back to geoguessr_poi_12 (catalog may cap at 12 locations).",
+            file=sys.stderr,
+        )
+    return small
 
 
 def _skip_geo_hints() -> bool:
@@ -96,6 +138,65 @@ def _load_hub_token_into_env() -> None:
     tok = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
     if tok and not os.environ.get("HUGGING_FACE_HUB_TOKEN"):
         os.environ["HUGGING_FACE_HUB_TOKEN"] = tok
+
+
+def _pull_output_dataset_streetview_for_narrative(cv: str) -> Path | None:
+    """
+    Materialize ``runs/<cv>/streetview/*.json`` from the output dataset under ``data/cache/runs/<cv>/``.
+
+    ``narrative_llm_batch`` defaults to ``data/cache/<cv>/``, which only exists inside the sv-lfm Job;
+    the llm-sidecars Job must re-fetch Street View JSON so ``prompts/llm/*.md`` clue placeholders resolve.
+    """
+    hub_aligned = REPO_ROOT / "data" / "cache" / "runs" / cv
+    sv_dir = hub_aligned / "streetview"
+    try:
+        if sv_dir.is_dir() and any(sv_dir.glob("*.json")):
+            print(f"entrypoint llm-sidecars: using existing streetview slice at {sv_dir}", file=sys.stderr)
+            return hub_aligned
+    except OSError:
+        pass
+
+    repo = os.environ.get("NUTONIC_HYDRATION_OUTPUT_DATASET", "").strip()
+    if not repo:
+        print(
+            "entrypoint llm-sidecars: NUTONIC_HYDRATION_OUTPUT_DATASET unset; "
+            "narrative cannot load Street View JSON from Hub (clue placeholders only).",
+            file=sys.stderr,
+        )
+        return None
+    if not (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip():
+        print(
+            "entrypoint llm-sidecars: no HF_TOKEN for Hub read; narrative Street View clue pull skipped.",
+            file=sys.stderr,
+        )
+        return None
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError:
+        print("entrypoint llm-sidecars: huggingface_hub missing; cannot pull streetview for narrative.", file=sys.stderr)
+        return None
+
+    _load_hub_token_into_env()
+    cache_parent = REPO_ROOT / "data" / "cache"
+    cache_parent.mkdir(parents=True, exist_ok=True)
+    pat = f"runs/{cv}/streetview/**"
+    try:
+        snapshot_download(
+            repo_id=repo,
+            repo_type="dataset",
+            local_dir=str(cache_parent),
+            allow_patterns=[pat],
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"entrypoint llm-sidecars: Hub snapshot for narrative streetview failed: {e}", file=sys.stderr)
+        return None
+
+    if not sv_dir.is_dir() or not any(sv_dir.glob("*.json")):
+        print(f"entrypoint llm-sidecars: after snapshot, no JSON under {sv_dir}", file=sys.stderr)
+        return None
+    print(f"entrypoint llm-sidecars: pulled streetview for narrative -> {sv_dir}", file=sys.stderr)
+    return hub_aligned
 
 
 def _tree_has_layout_b(root: Path) -> bool:
@@ -203,7 +304,12 @@ def _ensure_poi_trees(mount: Path, *, required: tuple[str, ...]) -> None:
 
 
 def _required_poi_trees() -> tuple[str, ...]:
-    return ("geoguessr_poi_12",) if _poi_limit_argv() else ("geoguessr_poi_12", "geoguessr_poi_120")
+    n = _poi_limit_n()
+    if n is None:
+        return ("geoguessr_poi_12", "geoguessr_poi_120")
+    if n > 12:
+        return ("geoguessr_poi_12", "geoguessr_poi_120")
+    return ("geoguessr_poi_12",)
 
 
 def _run_script(argv: list[str], *, env: dict[str, str] | None = None) -> None:
@@ -267,6 +373,64 @@ def _wait_health(url: str, *, label: str, timeout_sec: float) -> None:
             last_err = str(e)
         time.sleep(2.0)
     raise RuntimeError(f"{label} health failed: {base} (last: {last_err})")
+
+
+USEFUL_HINTS_COVERAGE_SCHEMA = "nutonic.useful_hints_coverage.v1"
+
+
+def _write_useful_hints_coverage_report(
+    *,
+    cache_cv: Path,
+    location_ids: list[str],
+    hints_dir: Path,
+    content_version: str,
+    skip_geo_hints: bool,
+) -> None:
+    """
+    Per-location record of whether ``useful_hints/<location_id>.json`` exists after geo/hints pipeline.
+
+    Written after Street View finalize so ``location_ids`` match the shipped cache segment.
+    """
+    rep = cache_cv / "reports"
+    rep.mkdir(parents=True, exist_ok=True)
+    rows: list[dict[str, Any]] = []
+    for lid in location_ids:
+        p = hints_dir / f"{lid}.json"
+        if skip_geo_hints:
+            rows.append(
+                {
+                    "location_id": lid,
+                    "useful_hints_status": "skipped_geo_hints",
+                    "path": None,
+                }
+            )
+        elif p.is_file():
+            rows.append(
+                {
+                    "location_id": lid,
+                    "useful_hints_status": "present",
+                    "path": f"runs/{content_version}/useful_hints/{lid}.json",
+                }
+            )
+        else:
+            rows.append(
+                {
+                    "location_id": lid,
+                    "useful_hints_status": "absent",
+                    "path": None,
+                    "reason": "no useful_hints file after compile/geo pipeline",
+                }
+            )
+    doc = {
+        "content_version": content_version,
+        "locations": rows,
+        "schema_version": USEFUL_HINTS_COVERAGE_SCHEMA,
+    }
+    (rep / "useful_hints_coverage.json").write_text(
+        json.dumps(doc, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(f"entrypoint: wrote {rep / 'useful_hints_coverage.json'}", file=sys.stderr)
 
 
 def _upload_folder(local_dir: Path, *, path_in_repo: str) -> None:
@@ -364,7 +528,7 @@ def mode_llm_sidecars(cv: str) -> int:
                 py,
                 str(REPO_ROOT / "data" / "scripts" / "catalog_import_poi.py"),
                 "--poi-root",
-                str(REPO_ROOT / "data" / "downloads" / "geoguessr_poi_12"),
+                str(_limited_catalog_poi_root()),
                 "--catalog-root",
                 str(REPO_ROOT / "data" / "catalog"),
                 "--content-version",
@@ -404,6 +568,7 @@ def mode_llm_sidecars(cv: str) -> int:
                 "half",
             ]
         )
+    narr_hydration_root = _pull_output_dataset_streetview_for_narrative(cv)
     out_narr = REPO_ROOT / "data" / "cache" / cv / "narrative"
     try:
         want_live = os.environ.get("NUTONIC_NARRATIVE_LLM_LIVE", "").strip() == "1"
@@ -421,6 +586,8 @@ def mode_llm_sidecars(cv: str) -> int:
             "--output-dir",
             str(out_narr),
         ]
+        if narr_hydration_root is not None:
+            narr += ["--hydration-cache-root", str(narr_hydration_root)]
         if want_live:
             if narr_backend == "ollama":
                 if shutil.which("ollama"):
@@ -514,7 +681,7 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
                 py,
                 str(REPO_ROOT / "data" / "scripts" / "catalog_import_poi.py"),
                 "--poi-root",
-                str(REPO_ROOT / "data" / "downloads" / "geoguessr_poi_12"),
+                str(_limited_catalog_poi_root()),
                 "--catalog-root",
                 str(REPO_ROOT / "data" / "catalog"),
                 "--content-version",
@@ -651,6 +818,12 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
     try:
         _wait_health(pano_url, label="pano", timeout_sec=float(os.environ.get("NUTONIC_PANO_READY_SEC", "600")))
         _wait_health(lfm_url, label="lfm", timeout_sec=float(os.environ.get("NUTONIC_LFM_READY_SEC", "900")))
+        # Street View + LFM pacing: reduce bursty load on Google (via pano) and GPU HTTP (LFM). Override via env.
+        os.environ.setdefault("NUTONIC_BATCH_INTER_POI_SLEEP_SEC", "0.35")
+        os.environ.setdefault("NUTONIC_BATCH_PANO_TO_LFM_SLEEP_SEC", "0.12")
+        os.environ.setdefault("NUTONIC_BATCH_INTER_LFM_CHUNK_SLEEP_SEC", "0.06")
+        os.environ.setdefault("NUTONIC_BATCH_HTTP_MAX_ATTEMPTS", "10")
+        os.environ.setdefault("NUTONIC_BATCH_HTTP_BACKOFF_CAP_SEC", "48")
         still_index = still_meta / "still_index.json"
         batch = [
             py,
@@ -688,6 +861,31 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
                     proc.kill()
 
     cache_cv = REPO_ROOT / "data" / "cache" / cv
+    catalog_locs = REPO_ROOT / "data" / "catalog" / "locations"
+    # Import only in sv-lfm: ``Dockerfile.hydration-llm`` copies a minimal ``tools/hf_jobs`` tree for llm-sidecars.
+    from hydration_cache_finalize import finalize_hydration_cache_post_streetview  # noqa: PLC0415
+
+    included = finalize_hydration_cache_post_streetview(
+        cache_cv=cache_cv,
+        catalog_locations_dir=catalog_locs,
+        content_version=cv,
+    )
+    if not included:
+        print(
+            "entrypoint sv-lfm: no POIs remain after Street View finalize (all failed or missing outputs); "
+            "refusing empty cache upload.",
+            file=sys.stderr,
+        )
+        return 7
+
+    _write_useful_hints_coverage_report(
+        cache_cv=cache_cv,
+        location_ids=included,
+        hints_dir=hints_dir,
+        content_version=cv,
+        skip_geo_hints=_skip_geo_hints(),
+    )
+
     _upload_folder(cache_cv, path_in_repo=f"runs/{cv}")
     return 0
 

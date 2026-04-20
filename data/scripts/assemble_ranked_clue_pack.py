@@ -77,6 +77,15 @@ def build_ranked_pack(manifest: dict[str, Any], ranked_by_map: dict[str, bool]) 
             "still_bundle_id": loc.get("still_bundle_id"),
             "useful_hints": loc.get("useful_hints"),
         }
+        for meta_key in (
+            "useful_hints_metadata",
+            "useful_hints_validation",
+            "streetview_hint_pack_validation",
+            "streetview_assist_narrative_validation",
+            "streetview_assist_narrative_metadata",
+        ):
+            if loc.get(meta_key) is not None:
+                clue[meta_key] = loc[meta_key]
         if loc.get("streetview_hint_pack") is not None:
             clue["streetview_hint_pack"] = loc.get("streetview_hint_pack")
         if loc.get("streetview_assist_narrative") is not None:

@@ -25,6 +25,7 @@ _LFM_VL_HINT_KEYS = (
 _NARRATIVE_LLM_KEYS = (
     "NUTONIC_NARRATIVE_BACKEND",
     "NUTONIC_VLLM_MODEL",
+    "NUTONIC_VLLM_READY_SEC",
     "NUTONIC_VLLM_PORT",
     "NUTONIC_VLLM_AUTOSTART",
     "NUTONIC_VLLM_EXTRA_ARGS",
@@ -32,15 +33,33 @@ _NARRATIVE_LLM_KEYS = (
     "NUTONIC_VLLM_BASE",
     "NUTONIC_NARRATIVE_OPENAI_BASE",
     "NUTONIC_NARRATIVE_OPENAI_MODEL",
+    "NUTONIC_NARRATIVE_OPENAI_MAX_TOKENS",
+    "NUTONIC_NARRATIVE_OPENAI_TEMPERATURE",
     "NUTONIC_OPENAI_API_KEY",
     "OPENAI_API_KEY",
     "NUTONIC_NARRATIVE_TRANSFORMERS_MODEL",
     "NUTONIC_NARRATIVE_TRANSFORMERS_MAX_NEW",
+    "NUTONIC_NARRATIVE_TRANSFORMERS_TEMPERATURE",
+    "NUTONIC_NARRATIVE_TRANSFORMERS_TOP_P",
+    "NUTONIC_NARRATIVE_OLLAMA_NUM_PREDICT",
     "NUTONIC_OLLAMA_MODEL",
     "NUTONIC_OLLAMA_PULL",
     "NUTONIC_OLLAMA_READY_SEC",
     "NUTONIC_NARRATIVE_ENTRY_MAX",
+    "NUTONIC_NARRATIVE_STRIP_MARKDOWN",
+    "NUTONIC_NARRATIVE_HTTP_TIMEOUT_SEC",
     "OLLAMA_HOST",
+    "NUTONIC_NARRATIVE_STREET_CLUE_CHARS",
+    "NUTONIC_NARRATIVE_SAT_CLUE_CHARS",
+    "NUTONIC_NARRATIVE_QA_REGENERATE",
+    # Set automatically by ``run_hf_hydration_full.py`` from sv-lfm manifest; may be set manually for ad-hoc Jobs.
+    "NUTONIC_HYDRATION_INCLUDED_LOCATION_IDS",
+)
+
+_TIM_HF_JOB_KEYS = (
+    "TIM_DEVICE_OVERRIDE",
+    "NUTONIC_TIM_SKIP_UPLOAD",
+    "TIM_HF_CONFIG",
 )
 
 
@@ -60,3 +79,8 @@ def geo_pipeline_env_from_environ() -> dict[str, str]:
     if k not in os.environ:
         return {}
     return {k: os.environ[k].strip()}
+
+
+def tim_hf_job_env_from_environ() -> dict[str, str]:
+    """TiM GPU Job: forward optional operator tuning from the host shell."""
+    return {k: os.environ[k].strip() for k in _TIM_HF_JOB_KEYS if os.environ.get(k, "").strip()}

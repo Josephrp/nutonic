@@ -27,7 +27,7 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 
 /**
- * Shared community / lab leaderboard surface for **map-scoped** `GET`/`POST` (`rules/05`, `IMP-071`).
+ * Shared community / lab leaderboard surface for map-scoped fetch and optional demo posts.
  * Reused from RANK and SCAN so map hub and global tab stay aligned on dimensions and copy.
  */
 @Composable
@@ -48,7 +48,6 @@ fun CommunityLeaderboardPanel(
     var rankedStatus by remember { mutableStateOf<String?>(null) }
     var lastFetched by remember { mutableStateOf<Instant?>(null) }
     var rankedFetched by remember { mutableStateOf<Instant?>(null) }
-    var lastDebug by remember { mutableStateOf<String?>(null) }
 
     val getEnabled = featureFlags?.communityLbGet != false
     val postEnabled = featureFlags?.communityLbPost != false
@@ -87,14 +86,6 @@ fun CommunityLeaderboardPanel(
                 },
             )
         }
-        CommunityLeaderboardDebugSessionButton(
-            scope = scope,
-            nutonicApiClient = nutonicApiClient,
-            onResult = {
-                lastDebug = it.lastDebug
-                status = it.status
-            },
-        )
         CommunityLeaderboardPostButton(
             scope = scope,
             nutonicApiClient = nutonicApiClient,
@@ -104,19 +95,17 @@ fun CommunityLeaderboardPanel(
         )
         CommunityLeaderboardPanelFooter(
             lastFetched = lastFetched,
-            lastDebug = lastDebug,
             status = status,
             rows = rows,
         )
         if (showRankedVerifiedFetch) {
             Text(
-                text = "Server-verified ranked (GET ?tier=ranked)",
+                text = "Server-verified ranked leaderboard",
                 style = MaterialTheme.typography.subtitle2,
                 color = MaterialTheme.colors.primary,
             )
             CommunityLeaderboardPanelFooter(
                 lastFetched = rankedFetched,
-                lastDebug = null,
                 status = rankedStatus,
                 rows = rankedRows,
             )
@@ -140,8 +129,8 @@ private fun CommunityLeaderboardPanelIntro(
     )
     Text(
         text =
-            "Presentation-only aggregate when the server enables it " +
-                "(`rules/05`; not ranked verification).",
+            "Community scores are optional lab aggregates when the host enables them; " +
+                "they are not server-verified ranked results.",
         style = MaterialTheme.typography.caption,
         color = MaterialTheme.colors.onBackground,
     )
@@ -161,13 +150,13 @@ private fun CommunityLeaderboardPanelIntro(
         OutlinedTextField(
             value = mapId,
             onValueChange = onMapIdChange,
-            label = { Text("map_id (GET/POST path)") },
+            label = { Text("Map id") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
     } else {
         Text(
-            text = "map_id: $mapId",
+            text = "Map: $mapId",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
@@ -210,7 +199,7 @@ private fun CommunityLeaderboardGetButton(
                 .fillMaxWidth()
                 .testTag("communityLeaderboardFetchButton"),
     ) {
-        Text("GET community leaderboard")
+        Text("Refresh community scores")
     }
 }
 
@@ -244,53 +233,7 @@ private fun CommunityLeaderboardRankedTierFetchButton(
                 .fillMaxWidth()
                 .testTag("rankedLeaderboardTierFetchButton"),
     ) {
-        Text("GET ranked leaderboard (?tier=ranked)")
-    }
-}
-
-private data class DebugSessionUiResult(
-    val lastDebug: String?,
-    val status: String?,
-)
-
-@Composable
-private fun CommunityLeaderboardDebugSessionButton(
-    scope: CoroutineScope,
-    nutonicApiClient: NutonicApiClient,
-    onResult: (DebugSessionUiResult) -> Unit,
-) {
-    Button(
-        onClick = {
-            scope.launch {
-                onResult(DebugSessionUiResult(null, "Issuing token…"))
-                when (val t = nutonicApiClient.postAuthToken()) {
-                    is ApiResult.Ok -> {
-                        when (val d = nutonicApiClient.getDebugSession(t.value.accessToken)) {
-                            is ApiResult.Ok ->
-                                onResult(
-                                    DebugSessionUiResult(
-                                        "debug/session ok · session_id=${d.value.sessionId}",
-                                        null,
-                                    ),
-                                )
-
-                            is ApiResult.HttpFailure ->
-                                onResult(DebugSessionUiResult(null, d.userMessage))
-
-                            is ApiResult.NetworkFailure ->
-                                onResult(DebugSessionUiResult(null, "Network: ${d.debugMessage}"))
-                        }
-                    }
-
-                    is ApiResult.HttpFailure -> onResult(DebugSessionUiResult(null, t.userMessage))
-                    is ApiResult.NetworkFailure ->
-                        onResult(DebugSessionUiResult(null, "Network: ${t.debugMessage}"))
-                }
-            }
-        },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text("POST /auth/token then GET /debug/session")
+        Text("Refresh ranked leaderboard")
     }
 }
 
@@ -341,27 +284,19 @@ private fun CommunityLeaderboardPostButton(
         enabled = postEnabled,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text("POST lab leaderboard row (JWT + Idempotency-Key)")
+        Text("Post demo score (signed in)")
     }
 }
 
 @Composable
 private fun CommunityLeaderboardPanelFooter(
     lastFetched: Instant?,
-    lastDebug: String?,
     status: String?,
     rows: List<CommunityLeaderboardRow>,
 ) {
     lastFetched?.let {
         Text(
-            "Last GET (UTC): $it",
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onBackground,
-        )
-    }
-    lastDebug?.let {
-        Text(
-            it,
+            "Last refresh (UTC): $it",
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onBackground,
         )

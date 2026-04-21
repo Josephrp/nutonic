@@ -1,7 +1,6 @@
 refs
-stitch
-refs/stitch/
-# stitch/ # DO NOT UNCOMMENT OR ADD THIS TO GITIGNORE!
+stitch/
+
 # Large/local payloads stay untracked; version tooling under data/scripts only.
 data/*
 !data/scripts/
@@ -14,6 +13,10 @@ data/geo/*
 !data/geo/README.md
 .cache
 .env
+
+# Google Cloud / Earth Engine service account keys (never commit)
+radioshaq-*.json
+*-gserviceaccount*.json
 
 # PM2 and local verification (Gradle, future server test runners)
 logs/

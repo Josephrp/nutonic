@@ -18,3 +18,6 @@ class MemoryUtf8BlobStore : Utf8BlobStore {
 }
 
 expect fun createLocalLeaderboardBlobStore(): Utf8BlobStore
+
+/** Guess-record POST outbox (`GuessRecordOutboxRepository`). */
+expect fun createGuessSyncOutboxBlobStore(): Utf8BlobStore

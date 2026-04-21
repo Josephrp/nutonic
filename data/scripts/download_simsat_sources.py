@@ -78,7 +78,7 @@ def download_url(
     url: str,
     dest: Path,
     chunk_size: int = 1024 * 1024,
-    timeout: int = 600,
+    timeout: int = 3600,
 ) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")

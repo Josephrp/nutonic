@@ -10,3 +10,5 @@ shapely>=2.0.0,<3
 pyyaml>=6.0.0,<7
 pydantic>=2.0.0,<3
 pillow>=10.0.0,<12
+# LFM-VL SFT dataset (`lfm_vl_sft_dataset`): connected components + common geo stack
+scipy>=1.10.0,<2

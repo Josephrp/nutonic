@@ -33,9 +33,15 @@ private class PathUtf8BlobStore(
     }
 }
 
-actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore {
+private fun androidNutonicBlob(relative: String): Utf8BlobStore {
     val ctx = AndroidNutonicAppContext.application ?: return MemoryUtf8BlobStore()
-    val f = java.io.File(ctx.filesDir, "nutonic/local-nonranked-leaderboard.json")
+    val f = java.io.File(ctx.filesDir, relative)
     f.parentFile?.mkdirs()
     return PathUtf8BlobStore(f.toPath())
 }
+
+actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/local-nonranked-leaderboard.json")
+
+actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/guess-record-outbox.json")

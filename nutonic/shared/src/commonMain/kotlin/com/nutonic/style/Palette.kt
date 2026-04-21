@@ -12,6 +12,11 @@ import androidx.compose.ui.unit.sp
 /** When true, prefer non-animated transitions (`docs/CLIENT-SETTINGS-SPEC.md` §4.1). */
 val LocalNutonicReducedMotion = compositionLocalOf { false }
 
+/** Default BGM crossfade duration (`docs/SCREEN-MUSIC-SPEC.md`, publishable plan §2.2). */
+object NutonicMotion {
+    const val crossfadeMs: Int = 400
+}
+
 /** Semantic colors from `docs/DESIGN.md` §2–4 (HUD / Void palette). */
 object NutonicColors {
     /** Transient toast / snack bar surface (shared across entry points). */
@@ -27,6 +32,14 @@ object NutonicColors {
     val surfaceContainerLowest = Color(0xFF0A0E19)
     val surfaceContainerLow = Color(0xFF171B27)
     val surfaceContainerHigh = Color(0xFF262A36)
+
+    /** Glass / frosted panels (`docs/DESIGN.md` §2) — surface @ ~55% on supported surfaces. */
+    val surfaceGlass: Color
+        get() = surface.copy(alpha = 0.55f)
+
+    /** Optional card outline “ghost” line (`docs/DESIGN.md` §2 No-Line). */
+    val outlineGhost: Color
+        get() = Color(0xFF3B494C).copy(alpha = 0.15f)
 
     /** Matte behind cropped bundled reference stills (SCAN clue imagery). */
     val stillImageMatte = Color(0xFF0F1214)

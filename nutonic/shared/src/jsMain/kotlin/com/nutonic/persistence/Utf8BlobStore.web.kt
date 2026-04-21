@@ -5,18 +5,23 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val LEADERBOARD_STORAGE_KEY = "nutonic.local_nonranked_leaderboard.v1"
+private const val GUESS_OUTBOX_STORAGE_KEY = "nutonic.guess_record_outbox.v1"
 
-private class WebUtf8BlobStore : Utf8BlobStore {
+private class WebUtf8BlobStore(
+    private val key: String,
+) : Utf8BlobStore {
     override suspend fun load(): String? =
         withContext(Dispatchers.Default) {
-            localStorage.getItem(LEADERBOARD_STORAGE_KEY)
+            localStorage.getItem(key)
         }
 
     override suspend fun save(text: String) {
         withContext(Dispatchers.Default) {
-            localStorage.setItem(LEADERBOARD_STORAGE_KEY, text)
+            localStorage.setItem(key, text)
         }
     }
 }
 
-actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore = WebUtf8BlobStore()
+actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore = WebUtf8BlobStore(LEADERBOARD_STORAGE_KEY)
+
+actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore = WebUtf8BlobStore(GUESS_OUTBOX_STORAGE_KEY)

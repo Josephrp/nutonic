@@ -22,16 +22,19 @@ import com.nutonic.audio.PlatformBgmPlayer
 import com.nutonic.audio.resolveNutonicBgmTrack
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.cache.createManifestBlobStore
+import com.nutonic.leaderboard.GuessRecordOutboxRepository
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
 import com.nutonic.navigation.NutonicRoute
 import com.nutonic.navigation.decodeNutonicRoute
 import com.nutonic.navigation.encode
+import com.nutonic.persistence.createGuessSyncOutboxBlobStore
 import com.nutonic.persistence.createLocalLeaderboardBlobStore
 import com.nutonic.screens.AuthenticationScreenPlaceholder
 import com.nutonic.screens.NutonicMusicMasterTopBar
 import com.nutonic.screens.RoleSelectionScreenPlaceholder
 import com.nutonic.screens.SplashScreenPlaceholder
 import com.nutonic.settings.MemorySettingsRepository
+import com.nutonic.style.NutonicMotion
 import com.nutonic.style.NutonicTheme
 
 @Composable
@@ -51,6 +54,10 @@ fun NutonicApp(
         remember {
             LocalNonRankedLeaderboardRepository(createLocalLeaderboardBlobStore())
         }
+    val guessRecordOutboxRepository =
+        remember {
+            GuessRecordOutboxRepository(createGuessSyncOutboxBlobStore())
+        }
 
     LaunchedEffect(nutonicApiClient) {
         serverFeatureFlags = null
@@ -60,6 +67,11 @@ fun NutonicApp(
                 is ApiResult.Ok -> r.value.features
                 else -> null
             }
+    }
+
+    LaunchedEffect(nutonicApiClient, routeToken) {
+        val client = nutonicApiClient ?: return@LaunchedEffect
+        guessRecordOutboxRepository.flushPending(client)
     }
 
     NutonicTheme(
@@ -80,6 +92,7 @@ fun NutonicApp(
             bgmPlayer.applyDesiredTrack(
                 effectiveBgm,
                 settings.musicMasterEnabled,
+                NutonicMotion.crossfadeMs,
             )
         }
 
@@ -124,6 +137,7 @@ fun NutonicApp(
                                 serverFeatureFlags = serverFeatureFlags,
                                 contentCacheRepository = contentCacheRepository,
                                 localNonRankedLeaderboardRepository = localNonRankedLeaderboardRepository,
+                                guessRecordOutboxRepository = guessRecordOutboxRepository,
                             )
                         }
                     }

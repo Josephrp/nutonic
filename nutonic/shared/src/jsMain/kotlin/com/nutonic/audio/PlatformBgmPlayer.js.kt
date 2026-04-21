@@ -3,6 +3,7 @@
 package com.nutonic.audio
 
 import com.nutonic.resources.Res
+import kotlinx.coroutines.delay
 import org.khronos.webgl.Uint8Array
 import org.w3c.dom.Audio
 import org.w3c.dom.url.URL
@@ -16,8 +17,28 @@ actual class PlatformBgmPlayer actual constructor() {
     actual suspend fun applyDesiredTrack(
         track: NutonicBgmTrack,
         masterEnabled: Boolean,
+        crossfadeMs: Int,
     ) {
-        releaseInternal()
+        val old = audio
+        val oldUrl = objectUrl
+        audio = null
+        objectUrl = null
+        if (old != null) {
+            if (crossfadeMs > 0) {
+                fadeOutAudio(old, (crossfadeMs / 2).coerceAtLeast(1))
+            } else {
+                try {
+                    old.pause()
+                } catch (_: Throwable) {
+                }
+            }
+            oldUrl?.let { u ->
+                try {
+                    URL.revokeObjectURL(u)
+                } catch (_: Throwable) {
+                }
+            }
+        }
         if (!masterEnabled) {
             return
         }
@@ -36,22 +57,46 @@ actual class PlatformBgmPlayer actual constructor() {
         objectUrl = url
         val a = Audio(url)
         a.loop = true
-        a.asDynamic().play()
+        if (crossfadeMs > 0) {
+            a.volume = 0.0
+            a.asDynamic().play()
+            fadeInAudio(a, (crossfadeMs / 2).coerceAtLeast(1))
+        } else {
+            a.volume = 1.0
+            a.asDynamic().play()
+        }
         audio = a
     }
 
-    private fun releaseInternal() {
+    private suspend fun fadeOutAudio(
+        a: Audio,
+        durationMs: Int,
+    ) {
+        val steps = (durationMs / 50).coerceAtLeast(2)
         try {
-            audio?.pause()
+            repeat(steps) { i ->
+                a.volume = 1.0 - (i + 1.0) / steps
+                delay(50)
+            }
         } catch (_: Throwable) {
         }
-        audio = null
-        objectUrl?.let { u ->
-            try {
-                URL.revokeObjectURL(u)
-            } catch (_: Throwable) {
-            }
+        try {
+            a.pause()
+        } catch (_: Throwable) {
         }
-        objectUrl = null
+    }
+
+    private suspend fun fadeInAudio(
+        a: Audio,
+        durationMs: Int,
+    ) {
+        val steps = (durationMs / 50).coerceAtLeast(2)
+        try {
+            repeat(steps) { i ->
+                a.volume = (i + 1.0) / steps
+                delay(50)
+            }
+        } catch (_: Throwable) {
+        }
     }
 }

@@ -11,6 +11,7 @@
 | Spec | Script path | Phase |
 |------|-------------|--------|
 | [SPEC-download-geoguessr-poi-imagery.md](SPEC-download-geoguessr-poi-imagery.md) | `data/scripts/download_geoguessr_poi_imagery.py` | **Existing** ingest |
+| [SPEC-lfm-vl-sft-dataset.md](SPEC-lfm-vl-sft-dataset.md) | `data/scripts/build_lfm_vl_sft_dataset.py` + `data/scripts/run_lfm_vl_sft_orchestrator.py` + `data/scripts/lfm_vl_sft_dataset/` | **S2 + Dynamic World → JSONL + Hub** (builder + optional multi-batch orchestrator; see spec §7) |
 | [SPEC-geo-nutonic.md](SPEC-geo-nutonic.md) | `data/scripts/geo_nutonic.py` | **Shared — implemented** |
 | [SPEC-fetch-geo-baselines.md](SPEC-fetch-geo-baselines.md) | `data/scripts/fetch_geo_baselines.py` | **A — implemented** |
 | [SPEC-catalog-import-poi.md](SPEC-catalog-import-poi.md) | `data/scripts/catalog_import_poi.py` | **A — implemented** |

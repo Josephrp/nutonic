@@ -100,6 +100,45 @@ fun mergeShippedRoundTruth(
     shippedFull: CacheManifestDocument?,
 ): CacheManifestDocument = mergeShippedRoundTruthDetailed(networkOrPersisted, shippedFull).document
 
+/**
+ * When the merged manifest has **no** [CacheManifestDocument.locationForMap] for [mapId] but the shipped
+ * bundle does, copy that round row (and matching `ai_guesses`) so SCAN gameplay stays playable under
+ * skew or partial server manifests (**AD-1**, publishable plan §2.6).
+ */
+fun ensurePlayableLocationFromShipped(
+    document: CacheManifestDocument,
+    shippedFull: CacheManifestDocument?,
+    mapId: String,
+): CacheManifestDocument {
+    if (shippedFull == null) {
+        return document
+    }
+    if (document.locationForMap(mapId) != null) {
+        return document
+    }
+    val fromShipped = shippedFull.locationForMap(mapId) ?: return document
+    val shippedAi =
+        shippedFull.aiGuesses.filter { row ->
+            row.mapId == mapId && row.locationId == fromShipped.locationId
+        }
+    val mergedAiKeys = document.aiGuesses.map { it.mapId to it.locationId }.toMutableSet()
+    val appendedAi =
+        buildList {
+            addAll(document.aiGuesses)
+            for (row in shippedAi) {
+                val key = row.mapId to row.locationId
+                if (key !in mergedAiKeys) {
+                    mergedAiKeys.add(key)
+                    add(row)
+                }
+            }
+        }
+    return document.copy(
+        locations = document.locations + fromShipped,
+        aiGuesses = appendedAi,
+    )
+}
+
 suspend fun readShippedFullManifest(): CacheManifestDocument? =
     runCatching {
         val text = Res.readBytes(ShippedManifestPaths.FULL).decodeToString()

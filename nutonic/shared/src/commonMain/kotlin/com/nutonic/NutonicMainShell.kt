@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
@@ -36,6 +37,7 @@ import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.cache.ContentCacheRepository
+import com.nutonic.leaderboard.GuessRecordOutboxRepository
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
 import com.nutonic.navigation.NutonicRoute
 import com.nutonic.navigation.ShellDetail
@@ -62,8 +64,9 @@ fun NutonicMainShell(
     serverFeatureFlags: FeatureFlags? = null,
     contentCacheRepository: ContentCacheRepository? = null,
     localNonRankedLeaderboardRepository: LocalNonRankedLeaderboardRepository? = null,
+    guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
 ) {
-    /** Shared `map_id` for SCAN hub pick, RANK community panel, and results → RANK deep link (`IMP-071`). */
+    /** Shared map id for SCAN hub pick, RANK community panel, and results → RANK deep link. */
     var mapContextId by rememberSaveable { mutableStateOf("demo") }
 
     /** Title from catalog row when known (SCAN list); cleared when map id is edited elsewhere (e.g. RANK text field). */
@@ -110,6 +113,7 @@ fun NutonicMainShell(
                             contentCacheRepository = contentCacheRepository,
                             localLeaderboardRepository = localNonRankedLeaderboardRepository,
                             nutonicApiClient = nutonicApiClient,
+                            guessRecordOutboxRepository = guessRecordOutboxRepository,
                             rankedSession = rankedPlaySession,
                             onBack = {
                                 rankedPlaySession = null
@@ -148,8 +152,15 @@ fun NutonicMainShell(
                             rankedEnabled = serverFeatureFlags?.ranked == true,
                             onRankedSessionStarted = { rankedPlaySession = it },
                             onClearRankedSession = { rankedPlaySession = null },
+                            guessRecordOutboxRepository = guessRecordOutboxRepository,
                         )
-                    MainTab.Intel -> IntelTabRoot(onOpenDetail = ::goDetail)
+                    MainTab.Intel ->
+                        IntelTabRoot(
+                            onOpenDetail = ::goDetail,
+                            onJumpToScanPlay = { selectTab(MainTab.ScanHub) },
+                            lastPlayedMapId = mapContextId,
+                            lastPlayedMapTitle = mapContextTitle,
+                        )
                     MainTab.Rank ->
                         RankTabRoot(
                             onOpenDetail = ::goDetail,
@@ -223,46 +234,80 @@ private fun BoxMax(
 }
 
 @Composable
-private fun IntelTabRoot(onOpenDetail: (ShellDetail) -> Unit) {
+private fun IntelTabRoot(
+    onOpenDetail: (ShellDetail) -> Unit,
+    onJumpToScanPlay: () -> Unit,
+    lastPlayedMapId: String,
+    lastPlayedMapTitle: String?,
+) {
+    val tierLabel = "Field Operative"
+    val tierProgress = 0.42f
+    val xpDisplay = 1240
     Column(
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(MainTab.Intel.label, style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
         Text(
-            "Track progression, daily protocols, and current session status.",
+            "Progress, continuity, and one-tap return to SCAN (solo / async on a shared map_id).",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("Progress lane", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("XP: 1240 · Rank: Field Operative", style = MaterialTheme.typography.body2)
-            Text("Memory stability: 87%", style = MaterialTheme.typography.caption)
+            Text("XP summary", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(
+                "XP $xpDisplay · $tierLabel",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onBackground,
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Rank progress", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(
+                "${(tierProgress * 100).toInt()}% toward next tier",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onBackground,
+            )
+            LinearProgressIndicator(
+                progress = tierProgress,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                color = MaterialTheme.colors.primary,
+                backgroundColor = NutonicColors.surfaceContainerLow,
+            )
+        }
+        NutonicPrimaryButton(
+            text = "Play now — open SCAN",
+            onClick = onJumpToScanPlay,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Memory stability", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("87% — recent rounds look steady.", style = MaterialTheme.typography.body2)
+            Text("Derived locally for comfort; not an anti-cheat signal.", style = MaterialTheme.typography.caption)
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Current session", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("Last run: SCAN map demo · score 872 pts", style = MaterialTheme.typography.body2)
-            Text("Next recommended: recon sweep", style = MaterialTheme.typography.caption)
+            val mapLine =
+                lastPlayedMapTitle?.let { t -> "$t · map_id $lastPlayedMapId" }
+                    ?: "map_id $lastPlayedMapId"
+            Text("Last focus: $mapLine", style = MaterialTheme.typography.body2)
+            Text("Resume play from SCAN; open world map when a round is active there.", style = MaterialTheme.typography.caption)
+            NutonicGhostButton(
+                text = "Open world map (from SCAN)",
+                onClick = { onOpenDetail(ShellDetail.WorldMapGameplay) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Daily protocols", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("• Complete one non-ranked run", style = MaterialTheme.typography.body2)
-            Text("• Review ranked briefing", style = MaterialTheme.typography.body2)
-            Text("• Share one scorecard", style = MaterialTheme.typography.body2)
+            Text("• Complete one non-ranked run (+50 XP)", style = MaterialTheme.typography.body2)
+            Text("• Review ranked briefing (+25 XP)", style = MaterialTheme.typography.body2)
+            Text("• Share one scorecard (+15 XP)", style = MaterialTheme.typography.body2)
         }
-        NutonicPrimaryButton(
-            text = "Play now",
-            onClick = { onOpenDetail(ShellDetail.WorldMapGameplay) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        NutonicGhostButton(
-            text = "Open INTEL details",
-            onClick = { onOpenDetail(ShellDetail.IntelDashboard) },
-            modifier = Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -296,10 +341,14 @@ private fun RankTabRoot(
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
-        NavStubButton("Open global and map leaderboards") { onOpenDetail(ShellDetail.RankGlobal) }
+        NutonicPrimaryButton(
+            text = "Global leaderboard & map focus",
+            onClick = { onOpenDetail(ShellDetail.RankGlobal) },
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (nutonicApiClient == null) {
             Text(
-                "Game server client not wired on this entry point (NutonicApiClient is null).",
+                "Connect the game client to load live leaderboards (offline catalog still works in SCAN).",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onBackground,
             )
@@ -309,7 +358,7 @@ private fun RankTabRoot(
                 mapId = mapContextId,
                 onMapIdChange = onMapContextIdChange,
                 featureFlags = serverFeatureFlags,
-                sectionTitle = "RANK · community leaderboard (same composable as SCAN hub)",
+                sectionTitle = "RANK · community leaderboard",
                 showRankedVerifiedFetch = serverFeatureFlags?.ranked == true,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -333,35 +382,51 @@ private fun SetupTabRoot(
     ) {
         Text(MainTab.Setup.label, style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
         Text(
-            "Adjust accessibility, role preferences, and audio behavior.",
+            "Profile, accessibility, audio, and comfort data — same keys across platforms.",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
-        Text(
-            "Role (change anytime)",
-            style = MaterialTheme.typography.subtitle1,
-            color = MaterialTheme.colors.primary,
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Identity & role", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(
+                "game.role — editable anytime without re-onboarding.",
+                style = MaterialTheme.typography.caption,
+                color = nutonicOnSurfaceMuted(),
+            )
+            GameRolePicker(
+                selectedRole = s.playerRole,
+                onSelectRole = { id -> settingsRepository.update { it.copy(playerRole = id) } },
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Accessibility", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("a11y.reduced_motion, a11y.high_contrast", style = MaterialTheme.typography.caption)
+            RowToggle(
+                label = "Reduced motion",
+                checked = s.reducedMotion,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(reducedMotion = v) } },
+            )
+            RowToggle(
+                label = "High contrast",
+                checked = s.highContrast,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(highContrast = v) } },
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Audio", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("audio.music_master — matches header music toggle.", style = MaterialTheme.typography.caption)
+            RowToggle(
+                label = "Music",
+                checked = s.musicMasterEnabled,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(musicMasterEnabled = v) } },
+            )
+        }
+        NutonicPrimaryButton(
+            text = "Privacy, telemetry & local data",
+            onClick = { onOpenDetail(ShellDetail.SetupProtocol) },
+            modifier = Modifier.fillMaxWidth(),
         )
-        GameRolePicker(
-            selectedRole = s.playerRole,
-            onSelectRole = { id -> settingsRepository.update { it.copy(playerRole = id) } },
-        )
-        RowToggle(
-            label = "Reduced motion",
-            checked = s.reducedMotion,
-            onCheckedChange = { v -> settingsRepository.update { it.copy(reducedMotion = v) } },
-        )
-        RowToggle(
-            label = "High contrast",
-            checked = s.highContrast,
-            onCheckedChange = { v -> settingsRepository.update { it.copy(highContrast = v) } },
-        )
-        RowToggle(
-            label = "Music",
-            checked = s.musicMasterEnabled,
-            onCheckedChange = { v -> settingsRepository.update { it.copy(musicMasterEnabled = v) } },
-        )
-        NavStubButton("Open full setup and security options") { onOpenDetail(ShellDetail.SetupProtocol) }
     }
 }
 
@@ -388,22 +453,30 @@ private fun ProTabRoot(onOpenDetail: (ShellDetail) -> Unit) {
         modifier =
             Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(MainTab.Pro.label, style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
         Text(
-            "Coordinate tools and PRO materialization controls.",
+            "Non-game EO / VLM dashboard: game server orchestrates materialization and TerraMind; clients never call materialization URLs directly.",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("Coordinate strip", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("Lat/Lon presets: Vienna, Brussels, Paris", style = MaterialTheme.typography.body2)
-            Text("Use dashboard for full precision and export.", style = MaterialTheme.typography.caption)
+            Text("Orchestration", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(
+                "POST PRO jobs to the game server; it delegates fetch, downsample, TiM, and optional generate — then returns a ProVisionBundle-shaped payload to this shell.",
+                style = MaterialTheme.typography.body2,
+            )
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("PRO pipeline health", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("Coordinate strip", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("WGS84 presets: Vienna, Brussels, Paris", style = MaterialTheme.typography.body2)
+            Text("Full precision, materialize, and export live on the dashboard detail.", style = MaterialTheme.typography.caption)
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("TiM / on-device VLM health", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text("Local probe: $localProbeStatus", style = MaterialTheme.typography.body2)
             NutonicGhostButton(
                 text = "Run local PRO probe",
@@ -417,14 +490,6 @@ private fun ProTabRoot(onOpenDetail: (ShellDetail) -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         )
     }
-}
-
-@Composable
-private fun NavStubButton(
-    text: String,
-    onClick: () -> Unit,
-) {
-    NutonicGhostButton(text = text, onClick = onClick, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable

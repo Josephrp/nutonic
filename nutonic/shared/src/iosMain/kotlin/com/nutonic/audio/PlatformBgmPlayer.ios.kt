@@ -10,6 +10,7 @@ import kotlinx.cinterop.ObjCObjectVar
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
+import kotlinx.coroutines.delay
 import platform.AVFAudio.AVAudioPlayer
 import platform.Foundation.NSError
 import platform.Foundation.NSURL
@@ -20,9 +21,17 @@ actual class PlatformBgmPlayer actual constructor() {
     actual suspend fun applyDesiredTrack(
         track: NutonicBgmTrack,
         masterEnabled: Boolean,
+        crossfadeMs: Int,
     ) {
-        player?.stop()
+        val old = player
         player = null
+        if (old != null) {
+            if (crossfadeMs > 0) {
+                fadeOutPlayer(old, (crossfadeMs / 2).coerceAtLeast(1))
+            } else {
+                old.stop()
+            }
+        }
         if (!masterEnabled) {
             return
         }
@@ -41,7 +50,43 @@ actual class PlatformBgmPlayer actual constructor() {
             }
         p.numberOfLoops = -1
         p.prepareToPlay()
-        p.play()
+        if (crossfadeMs > 0) {
+            p.volume = 0f
+            p.play()
+            fadeInPlayer(p, (crossfadeMs / 2).coerceAtLeast(1))
+        } else {
+            p.volume = 1f
+            p.play()
+        }
         player = p
+    }
+
+    private suspend fun fadeOutPlayer(
+        p: AVAudioPlayer,
+        durationMs: Int,
+    ) {
+        val steps = (durationMs / 50).coerceAtLeast(2)
+        try {
+            repeat(steps) { i ->
+                p.volume = 1f - (i + 1f) / steps
+                delay(50)
+            }
+        } catch (_: Throwable) {
+        }
+        p.stop()
+    }
+
+    private suspend fun fadeInPlayer(
+        p: AVAudioPlayer,
+        durationMs: Int,
+    ) {
+        val steps = (durationMs / 50).coerceAtLeast(2)
+        try {
+            repeat(steps) { i ->
+                p.volume = (i + 1f) / steps
+                delay(50)
+            }
+        } catch (_: Throwable) {
+        }
     }
 }

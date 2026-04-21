@@ -5,7 +5,7 @@ import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIWindow
 
-actual fun shareNutonicScorecard(
+actual suspend fun shareNutonicScorecard(
     context: PlatformContext,
     text: String,
 ): Boolean {

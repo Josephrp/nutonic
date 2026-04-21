@@ -3,11 +3,15 @@ package com.nutonic.shell
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Card
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -18,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,9 +33,11 @@ import com.nutonic.api.MapSummary
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.RankedRoundStartIn
 import com.nutonic.cache.ContentCacheRepository
+import com.nutonic.leaderboard.GuessRecordOutboxRepository
 import com.nutonic.navigation.ShellDetail
 import com.nutonic.screens.CommunityLeaderboardPanel
 import com.nutonic.screens.RankedPlaySession
+import com.nutonic.style.NutonicColors
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
@@ -47,6 +54,7 @@ fun ScanHubScreen(
     rankedEnabled: Boolean,
     onRankedSessionStarted: (RankedPlaySession) -> Unit,
     onClearRankedSession: () -> Unit,
+    guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
     var maps by remember { mutableStateOf<List<MapSummary>>(emptyList()) }
@@ -66,6 +74,13 @@ fun ScanHubScreen(
             onMapContextSelect = onMapContextSelect,
         )
     }
+
+    LaunchedEffect(nutonicApiClient, guessRecordOutboxRepository) {
+        val client = nutonicApiClient ?: return@LaunchedEffect
+        val outbox = guessRecordOutboxRepository ?: return@LaunchedEffect
+        outbox.flushPending(client)
+    }
+
     val selectedMap = maps.firstOrNull { it.mapId == mapContextId }
     val missionOptions = remember(selectedMap?.mapId, selectedMap?.title) { buildScanMissionOptions(selectedMap) }
     LaunchedEffect(missionOptions) {
@@ -135,7 +150,7 @@ fun ScanHubScreen(
 
         if (nutonicApiClient == null) {
             Text(
-                "Map catalog fetch needs a wired NutonicApiClient (same origin as game server).",
+                "Connect the game client on this host to load the live map list (bundled maps still work offline).",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onBackground,
             )
@@ -190,22 +205,50 @@ fun ScanHubScreen(
                     )
                     maps.forEach { m ->
                         val selected = m.mapId == mapContextId
-                        Text(
-                            "${if (selected) "▸ " else ""}${m.mapId} — ${m.title}" +
-                                m.engineVersion?.let { ev -> " (engine $ev)" }.orEmpty(),
-                            style = MaterialTheme.typography.body2,
-                            color =
-                                if (selected) {
-                                    MaterialTheme.colors.primary
-                                } else {
-                                    MaterialTheme.colors.onBackground
-                                },
+                        Card(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { onMapContextSelect(m.mapId, m.title) }
-                                    .padding(vertical = 6.dp),
-                        )
+                                    .padding(vertical = 6.dp)
+                                    .clickable { onMapContextSelect(m.mapId, m.title) },
+                            backgroundColor =
+                                if (selected) {
+                                    NutonicColors.surfaceContainerHigh.copy(alpha = 0.85f)
+                                } else {
+                                    NutonicColors.surfaceContainerLow.copy(alpha = 0.55f)
+                                },
+                            elevation = 0.dp,
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = m.title,
+                                        style = MaterialTheme.typography.subtitle2,
+                                        color = MaterialTheme.colors.primary,
+                                    )
+                                    Text(
+                                        text =
+                                            buildString {
+                                                append("Map ")
+                                                append(m.mapId)
+                                                m.engineVersion?.let { ev -> append(" · engine ").append(ev) }
+                                            },
+                                        style = MaterialTheme.typography.caption,
+                                        color = MaterialTheme.colors.onBackground,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "›",
+                                    style = MaterialTheme.typography.h6,
+                                    color = MaterialTheme.colors.primary,
+                                )
+                            }
+                        }
                     }
                     Text(
                         text = "Play entry",

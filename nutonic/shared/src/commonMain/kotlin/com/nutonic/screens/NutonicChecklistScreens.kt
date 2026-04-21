@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.nutonic.navigation.ShellDetail
+import com.nutonic.nutonicClientVersionLabel
 import com.nutonic.style.NutonicGhostButton
+import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
 
 @Composable
@@ -59,6 +62,7 @@ fun SplashScreenPlaceholder(
     onInitialize: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val version = nutonicClientVersionLabel()
     ChecklistScreenChrome(
         title = "NU:TONIC",
         supportText = "Initialize uplink and enter the SCAN shell.",
@@ -67,6 +71,12 @@ fun SplashScreenPlaceholder(
         extra = {
             Spacer(modifier = Modifier.height(24.dp))
             NutonicPrimaryButton(text = "Initialize", onClick = onInitialize, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Client $version",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
         },
     )
 }
@@ -79,15 +89,53 @@ fun RoleSelectionScreenPlaceholder(
     onOpenOptionalAuth: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val roles =
+        remember {
+            listOf(
+                Triple("HUMAN", "Human", "Baseline SCAN pacing with familiar controls and assists."),
+                Triple("ASTRONAUT", "Astronaut", "Balanced telemetry load — good for mixed recon and ranked warmups."),
+                Triple("ALIEN", "Alien", "Aggressive assist cadence for players who want faster hint unlocks."),
+            )
+        }
     ChecklistScreenChrome(
         title = "Choose your role",
         supportText = "Pick the protocol identity for this session.",
         modifier = modifier,
         onBack = null,
         extra = {
-            Spacer(modifier = Modifier.height(16.dp))
-            GameRolePicker(selectedRole = selectedRole, onSelectRole = onSelectRole)
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            roles.forEach { (id, title, perk) ->
+                NutonicGlassCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.subtitle1,
+                        color = MaterialTheme.colors.primary,
+                    )
+                    Text(
+                        text = perk,
+                        style = MaterialTheme.typography.body2,
+                        color = MaterialTheme.colors.onBackground,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 10.dp),
+                    )
+                    if (selectedRole == id) {
+                        NutonicPrimaryButton(
+                            text = "Selected",
+                            onClick = {},
+                            enabled = false,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        NutonicGhostButton(
+                            text = "Choose $title",
+                            onClick = { onSelectRole(id) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             NutonicPrimaryButton(
                 text = "Continue",
                 onClick = onContinue,
@@ -104,7 +152,7 @@ fun RoleSelectionScreenPlaceholder(
     )
 }
 
-/** Human / Astronaut / Alien picker (`rules/01`, CLIENT-SETTINGS-SPEC §6.1). */
+/** Human / Astronaut / Alien picker for compact surfaces (e.g. SETUP tab). */
 @Composable
 fun GameRolePicker(
     selectedRole: String?,
@@ -153,10 +201,10 @@ fun ShellDetailPlaceholder(
     detail: ShellDetail,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Final results → RANK + `map_id` (`IMP-071`, `rules/07` #7). */
+    /** Final results → RANK with map context. */
     onNavigateToRankForMap: ((String) -> Unit)? = null,
     rankNavigationMapId: String = "demo",
-    /** Last persisted non-ranked row for this map (`IMP-083` / `IMP-084`). */
+    /** Last persisted non-ranked row for this map. */
     lastRoundSummary: String? = null,
 ) {
     val (title, ref) = detailMeta(detail)
@@ -166,18 +214,32 @@ fun ShellDetailPlaceholder(
         modifier = modifier,
         onBack = onBack,
         extra = {
-            if (detail == ShellDetail.FinalResults && lastRoundSummary != null) {
+            if (detail == ShellDetail.FinalResults) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    text = lastRoundSummary,
+                    text = "Round recap",
+                    style = MaterialTheme.typography.subtitle1,
+                    color = MaterialTheme.colors.primary,
+                )
+                Text(
+                    text = "Distance, score, and AI vs truth for your last run on this map.",
                     style = MaterialTheme.typography.body2,
                     color = MaterialTheme.colors.onBackground,
+                    modifier = Modifier.padding(top = 6.dp),
                 )
+                if (lastRoundSummary != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = lastRoundSummary,
+                        style = MaterialTheme.typography.body2,
+                        color = MaterialTheme.colors.onBackground,
+                    )
+                }
             }
             if (detail == ShellDetail.FinalResults && onNavigateToRankForMap != null) {
                 Spacer(modifier = Modifier.height(24.dp))
                 NutonicPrimaryButton(
-                    text = "Open RANK for map: $rankNavigationMapId",
+                    text = "Open rankings for this map",
                     onClick = { onNavigateToRankForMap(rankNavigationMapId) },
                     modifier = Modifier.fillMaxWidth(),
                 )

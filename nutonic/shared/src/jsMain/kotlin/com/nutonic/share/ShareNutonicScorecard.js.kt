@@ -1,45 +1,59 @@
 package com.nutonic.share
 
 import com.nutonic.filter.PlatformContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 import kotlinx.browser.document
 import kotlinx.browser.window
 import org.w3c.dom.HTMLTextAreaElement
 
+private suspend fun awaitJsPromise(p: dynamic) {
+    val isThenable = js("p != null && typeof p.then === 'function'") as Boolean
+    if (!isThenable) {
+        return
+    }
+    suspendCoroutine { cont ->
+        p.then(
+            { _: dynamic -> cont.resume(Unit) },
+            { err: dynamic ->
+                cont.resumeWithException(Throwable(err?.toString() ?: "share rejected"))
+            },
+        )
+    }
+}
+
 @Suppress("UNUSED_PARAMETER")
-/**
- * Returns `true` when the browser accepted a share/clipboard handoff request.
- * This is intentionally best-effort: native `navigator.share` and clipboard APIs are async,
- * so `true` means "handoff started" rather than "user completed share".
- */
-actual fun shareNutonicScorecard(
+actual suspend fun shareNutonicScorecard(
     context: PlatformContext,
     text: String,
 ): Boolean {
     val navigatorDynamic = window.navigator.asDynamic()
 
-    // Best-effort native share sheet (async promise; fire-and-forget for non-suspending API).
     try {
         val shareFn = navigatorDynamic.share
         if (shareFn != null) {
-            shareFn.call(navigatorDynamic, js("{ text: text }"))
+            val options = js("{}")
+            options.asDynamic().text = text
+            val result = shareFn.call(navigatorDynamic, options)
+            awaitJsPromise(result)
             return true
         }
     } catch (_: Throwable) {
         // fall through to clipboard paths
     }
 
-    // Clipboard API path (also async; still a useful signal for caller/UI).
     try {
         val clipboard = navigatorDynamic.clipboard
         if (clipboard != null && clipboard.writeText != null) {
-            clipboard.writeText(text)
+            val writePromise = clipboard.writeText(text)
+            awaitJsPromise(writePromise)
             return true
         }
     } catch (_: Throwable) {
         // fall through to legacy execCommand
     }
 
-    // Legacy synchronous fallback.
     val body = document.body ?: return false
     return try {
         val textarea = document.createElement("textarea") as HTMLTextAreaElement

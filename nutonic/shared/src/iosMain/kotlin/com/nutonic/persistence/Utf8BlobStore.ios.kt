@@ -28,9 +28,15 @@ private class IosUtf8BlobStore(
     }
 }
 
-actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore {
+private fun iosNutonicBlob(fileName: String): Utf8BlobStore {
     val root = File(iosDocumentsDirectory(), "nutonic")
     root.mkdirs()
-    val file = File(root, "local-nonranked-leaderboard.json")
+    val file = File(root, fileName)
     return IosUtf8BlobStore(file)
 }
+
+actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("local-nonranked-leaderboard.json")
+
+actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("guess-record-outbox.json")

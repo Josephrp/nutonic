@@ -2,6 +2,7 @@ package com.nutonic.style
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
@@ -13,7 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-private val ctaShape = RoundedCornerShape(14.dp)
+/** Primary / ghost CTA corner radius (publishable plan §2.2: 12–16dp). */
+val NutonicCtaShape = RoundedCornerShape(CornerSize(14.dp))
 
 @Composable
 fun NutonicGlassCard(
@@ -23,7 +25,7 @@ fun NutonicGlassCard(
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        backgroundColor = NutonicColors.surfaceContainerLow.copy(alpha = 0.55f),
+        backgroundColor = NutonicColors.surfaceGlass,
         border = BorderStroke(width = 1.dp, color = NutonicColors.primary.copy(alpha = 0.12f)),
         elevation = 0.dp,
     ) {
@@ -44,7 +46,7 @@ fun NutonicPrimaryButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        shape = ctaShape,
+        shape = NutonicCtaShape,
         colors =
             ButtonDefaults.buttonColors(
                 backgroundColor = MaterialTheme.colors.primaryVariant,
@@ -67,7 +69,7 @@ fun NutonicGhostButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        shape = ctaShape,
+        shape = NutonicCtaShape,
         border = BorderStroke(1.dp, NutonicColors.primary.copy(alpha = 0.28f)),
         colors =
             ButtonDefaults.outlinedButtonColors(

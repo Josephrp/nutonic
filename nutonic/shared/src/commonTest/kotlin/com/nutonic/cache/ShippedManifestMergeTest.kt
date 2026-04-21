@@ -150,4 +150,40 @@ class ShippedManifestMergeTest {
         assertEquals(1, detailed.document.aiGuesses.size)
         assertEquals(ShippedManifestMergeOutcome.VERSION_MISMATCH, detailed.outcome)
     }
+
+    @Test
+    fun ensurePlayableLocationFromShipped_fills_missing_map_row_when_server_has_other_maps() {
+        val serverLocOther =
+            ManifestRoundLocation(
+                mapId = "other",
+                locationId = "x",
+                truthLat = 1.0,
+                truthLon = 2.0,
+            )
+        val public =
+            CacheManifestDocument(
+                contentVersion = "v3",
+                maps = listOf(MapSummary(mapId = "demo", title = "Demo"), MapSummary(mapId = "other", title = "Other")),
+                locations = listOf(serverLocOther),
+                aiGuesses = emptyList(),
+            )
+        val shippedLocDemo =
+            ManifestRoundLocation(
+                mapId = "demo",
+                locationId = "demo-from-ship",
+                truthLat = 48.0,
+                truthLon = 16.0,
+            )
+        val shipped =
+            CacheManifestDocument(
+                contentVersion = "v2",
+                maps = public.maps,
+                locations = listOf(shippedLocDemo),
+                aiGuesses = listOf(AiGuessRow(mapId = "demo", locationId = "demo-from-ship", aiLat = 3.0, aiLon = 4.0)),
+            )
+        val patched = ensurePlayableLocationFromShipped(public, shipped, "demo")
+        assertEquals(2, patched.locations.size)
+        assertEquals("demo-from-ship", patched.locationForMap("demo")?.locationId)
+        assertEquals(1, patched.aiGuesses.size)
+    }
 }

@@ -3,7 +3,7 @@ package com.nutonic.share
 import android.content.Intent
 import com.nutonic.filter.PlatformContext
 
-actual fun shareNutonicScorecard(
+actual suspend fun shareNutonicScorecard(
     context: PlatformContext,
     text: String,
 ): Boolean {

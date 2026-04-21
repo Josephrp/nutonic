@@ -53,10 +53,12 @@ import com.nutonic.cache.CachedDocumentWithMergeOutcome
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.cache.ShippedManifestMergeOutcome
 import com.nutonic.cache.locationForMap
+import com.nutonic.cache.ensurePlayableLocationFromShipped
 import com.nutonic.cache.mergeRankedClueWithPack
 import com.nutonic.cache.readShippedFullManifest
 import com.nutonic.cache.readShippedRankedCluePack
 import com.nutonic.cache.truthLatLon
+import com.nutonic.leaderboard.GuessRecordOutboxRepository
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRow
 import com.nutonic.map.BasemapMode
@@ -70,6 +72,8 @@ import com.nutonic.filter.getPlatformContext
 import com.nutonic.map.ViewportBounds
 import com.nutonic.resources.Res
 import com.nutonic.style.NutonicColors
+import com.nutonic.style.NutonicGhostButton
+import com.nutonic.style.NutonicPrimaryButton
 import com.nutonic.toImageBitmap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -85,8 +89,7 @@ import kotlin.math.sqrt
 private val demoPeerHint = LatLon(latitude = 50.8503, longitude = 4.3517)
 
 private const val NON_RANKED_CONTENT_BLOCKED_MESSAGE =
-    "Round data is unavailable for this map (missing catalog row). Refresh the SCAN hub manifest or update the app."
-private const val SHOW_ENGINE_DEBUG_LABELS = false
+    "Round data is unavailable for this map. Open the SCAN hub to refresh the catalog, check connectivity, or pick another map."
 
 private val rankedBounds =
     ViewportBounds(
@@ -139,6 +142,7 @@ fun WorldMapGameplayDetail(
     contentCacheRepository: ContentCacheRepository? = null,
     localLeaderboardRepository: LocalNonRankedLeaderboardRepository? = null,
     nutonicApiClient: NutonicApiClient? = null,
+    guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
     /** When set, local truth/score HUD is suppressed until server [postRankedRoundSubmit] resolves (W6). */
     rankedSession: RankedPlaySession? = null,
     onBack: () -> Unit,
@@ -147,11 +151,11 @@ fun WorldMapGameplayDetail(
     var manifestSnapshot by remember { mutableStateOf<CacheManifestDocument?>(null) }
     var manifestVersionNotice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(mapId, contentCacheRepository) {
+        val shippedOnly = readShippedFullManifest()
         val cached: CachedDocumentWithMergeOutcome? =
             when (val repo = contentCacheRepository) {
                 null -> {
-                    val shipped = readShippedFullManifest()
-                    shipped?.let {
+                    shippedOnly?.let {
                         CachedDocumentWithMergeOutcome(
                             document = it,
                             mergeOutcome = ShippedManifestMergeOutcome.OVERLAID_FROM_SHIPPED,
@@ -164,7 +168,13 @@ fun WorldMapGameplayDetail(
                     repo.cachedDocumentWithMergeOutcome()
                 }
             }
-        manifestSnapshot = cached?.document
+        val baseDoc = cached?.document
+        manifestSnapshot =
+            if (baseDoc != null) {
+                ensurePlayableLocationFromShipped(baseDoc, shippedOnly, mapId)
+            } else {
+                null
+            }
         manifestVersionNotice =
             when (cached?.mergeOutcome) {
                 ShippedManifestMergeOutcome.VERSION_MISMATCH ->
@@ -199,8 +209,7 @@ fun WorldMapGameplayDetail(
 
     val isRanked = rankedForUi != null
     val catalogLocation = remember(manifestSnapshot, mapId) { manifestSnapshot?.locationForMap(mapId) }
-    val fallbackLocation = remember(manifestSnapshot) { manifestSnapshot?.locations?.firstOrNull() }
-    val playableLocation = if (catalogLocation != null || isRanked) catalogLocation else fallbackLocation
+    val playableLocation = if (isRanked) null else catalogLocation
     val rankedStillSource =
         remember(rankedForUi) {
             rankedForUi?.let { rs ->
@@ -257,6 +266,7 @@ fun WorldMapGameplayDetail(
     var lockedGuess by remember { mutableStateOf<LatLon?>(null) }
     var searchField by remember { mutableStateOf(TextFieldValue("")) }
     var gameplayStatus by remember { mutableStateOf("Tap the map or search a location, then submit one guess.") }
+    var guessRecordRemoteStatus by remember { mutableStateOf<String?>(null) }
 
     var guessModalExpanded by remember { mutableStateOf(true) }
     var narrativeOverlayOpen by remember { mutableStateOf(false) }
@@ -279,9 +289,9 @@ fun WorldMapGameplayDetail(
         }
     }
 
-    LaunchedEffect(nonRankedContentBlocked, manifestVersionNotice) {
+    LaunchedEffect(nonRankedContentBlocked) {
         if (nonRankedContentBlocked) {
-            gameplayStatus = manifestVersionNotice ?: NON_RANKED_CONTENT_BLOCKED_MESSAGE
+            gameplayStatus = NON_RANKED_CONTENT_BLOCKED_MESSAGE
         }
     }
 
@@ -431,17 +441,6 @@ fun WorldMapGameplayDetail(
             aiMarker?.let { haversineKm(it, groundTruth) }
         }
 
-    val enginePhaseLabel =
-        when {
-            isRanked && rankedServerError != null -> "RANKED_ERROR"
-            isRanked && rankedServerOutcome != null -> "RESOLVED (server)"
-            isRanked && lockedGuess != null -> "VERIFYING (server)"
-            isRanked -> "HUMAN_PLAY (ranked)"
-            lockedGuess != null && aiMarker != null -> "AI_RESOLVE"
-            lockedGuess != null -> "RESOLVED"
-            else -> "HUMAN_PLAY"
-        }
-
     LaunchedEffect(lockedGuess, roundInstanceId, localLeaderboardRepository, rankedForUi) {
         val guess = lockedGuess
         val rid = roundInstanceId
@@ -483,19 +482,21 @@ fun WorldMapGameplayDetail(
         stillLocation,
         guessesRecordEnabled,
         rankedForUi,
+        guessRecordOutboxRepository,
     ) {
         val guess = lockedGuess
         val rid = roundInstanceId
         val api = nutonicApiClient
         val km = distanceKm
+        val outbox = guessRecordOutboxRepository
+        guessRecordRemoteStatus = null
         if (rankedForUi != null || !guessesRecordEnabled || guess == null || rid == null || api == null || km == null) {
             return@LaunchedEffect
         }
-        val token =
-            when (val t = api.postAuthToken()) {
-                is ApiResult.Ok -> t.value.accessToken
-                else -> return@LaunchedEffect
-            }
+        if (outbox == null) {
+            guessRecordRemoteStatus = "Saved locally; sync queue unavailable."
+            return@LaunchedEffect
+        }
         val idem = "guess-record|$rid"
         val body =
             GuessRecordIn(
@@ -506,7 +507,8 @@ fun WorldMapGameplayDetail(
                 clientDistanceKm = km,
                 rulesetVersion = playableLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
             )
-        api.postGuessRecord(mapId, body, token, idem)
+        outbox.enqueueOrReplace(mapId, idem, body)
+        guessRecordRemoteStatus = outbox.flushPending(api)
     }
 
     var hideSuccessOverlay by remember(mapId) { mutableStateOf(false) }
@@ -597,6 +599,14 @@ fun WorldMapGameplayDetail(
                     )
                 }
             }
+            guessRecordRemoteStatus?.let { syncLine ->
+                Text(
+                    text = syncLine,
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -623,28 +633,23 @@ fun WorldMapGameplayDetail(
                         color = MaterialTheme.colors.primary,
                     )
                     Text(
-                        text = "SCAN flow: map + still + collapsible assists + one primary submit",
+                        text = "Map, reference still, assists, and one scored submit.",
                         style = MaterialTheme.typography.caption,
                         color = MaterialTheme.colors.onBackground,
                     )
                     if (isRanked) {
                         Text(
-                            text = "Ranked: local distance is hidden; opening assists records a ranked forfeit.",
+                            text = "Ranked: distance stays server-verified; opening some assists may record a forfeit.",
                             style = MaterialTheme.typography.caption,
                             color = MaterialTheme.colors.secondary,
                         )
                     }
-                    if (SHOW_ENGINE_DEBUG_LABELS) {
-                        Text(
-                            text = "Engine phase: $enginePhaseLabel",
-                            style = MaterialTheme.typography.caption,
-                            color = MaterialTheme.colors.onBackground,
-                        )
-                    }
                 }
-                Button(modifier = Modifier.testTag("worldMapBackButton"), onClick = onBack) {
-                    Text("Back")
-                }
+                NutonicGhostButton(
+                    text = "Back",
+                    onClick = onBack,
+                    modifier = Modifier.testTag("worldMapBackButton"),
+                )
             }
 
             Box(modifier = Modifier.fillMaxWidth().weight(1f).testTag("worldMapGameplayRoot")) {
@@ -673,7 +678,6 @@ fun WorldMapGameplayDetail(
                     scorePoints = scorePoints,
                     distanceKm = distanceKm,
                     aiDistanceToTruthKm = if (lockedGuess != null) aiVsTruthKm else null,
-                    phaseLabel = if (SHOW_ENGINE_DEBUG_LABELS) enginePhaseLabel else null,
                     modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
                 )
 
@@ -880,15 +884,14 @@ fun WorldMapGameplayDetail(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Button(
-                    modifier = Modifier.weight(1f).testTag("worldMapNarrativeButton"),
+                NutonicGhostButton(
+                    text = "Narrative",
                     onClick = { narrativeOverlayOpen = true },
-                ) {
-                    Text("Narrative")
-                }
+                    modifier = Modifier.weight(1f).testTag("worldMapNarrativeButton"),
+                )
 
-                Button(
-                    modifier = Modifier.weight(1f).testTag("worldMapClearButton"),
+                NutonicGhostButton(
+                    text = "Clear round",
                     onClick = {
                         provisionalGuess = null
                         lockedGuess = null
@@ -897,9 +900,8 @@ fun WorldMapGameplayDetail(
                         revealedHintTier = 0
                         gameplayStatus = "Round state reset."
                     },
-                ) {
-                    Text("Clear round")
-                }
+                    modifier = Modifier.weight(1f).testTag("worldMapClearButton"),
+                )
             }
         }
 
@@ -920,7 +922,6 @@ private fun GameplayHudCard(
     scorePoints: Int?,
     distanceKm: Double?,
     aiDistanceToTruthKm: Double?,
-    phaseLabel: String?,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -930,11 +931,11 @@ private fun GameplayHudCard(
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text("HUD", style = MaterialTheme.typography.caption, color = MaterialTheme.colors.primary)
-            phaseLabel?.let {
-                Text("Phase: $it", style = MaterialTheme.typography.caption)
-            }
-            Text("Elapsed: ${elapsedSeconds}s", style = MaterialTheme.typography.body2)
+            Text("Status", style = MaterialTheme.typography.caption, color = MaterialTheme.colors.primary)
+            Text(
+                "Elapsed (for fun, not scored): ${elapsedSeconds}s",
+                style = MaterialTheme.typography.body2,
+            )
             Text("Sector time (not scored): ${remainingSeconds}s", style = MaterialTheme.typography.body2)
             if (scorePoints != null && distanceKm != null) {
                 Text("Distance: ${distanceKm.format(2)} km", style = MaterialTheme.typography.caption)

@@ -5,7 +5,7 @@ import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 
 @Suppress("UNUSED_PARAMETER")
-actual fun shareNutonicScorecard(
+actual suspend fun shareNutonicScorecard(
     context: PlatformContext,
     text: String,
 ): Boolean =

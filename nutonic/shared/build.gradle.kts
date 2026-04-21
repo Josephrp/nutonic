@@ -112,6 +112,10 @@ android {
 
     defaultConfig {
         minSdk = 26
+        buildConfigField("String", "NUTONIC_CLIENT_VERSION", "\"1.0-SNAPSHOT\"")
+    }
+    buildFeatures {
+        buildConfig = true
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

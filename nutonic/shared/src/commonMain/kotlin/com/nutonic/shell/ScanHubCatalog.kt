@@ -14,7 +14,8 @@ internal fun manifestLineForSync(m: ManifestSyncResult): String =
             "Manifest: up to date (${m.document.contentVersion})"
         is ManifestSyncResult.UsedStaleCache ->
             "Manifest: using cached ${m.document.contentVersion} (${m.reason})"
-        is ManifestSyncResult.Failed -> "Manifest: ${m.reason}"
+        is ManifestSyncResult.Failed ->
+            "Couldn't refresh catalog (${m.reason}). Maps below may use the last successful load or bundled data."
     }
 
 internal fun mapsFromManifestSync(m: ManifestSyncResult): List<MapSummary>? =

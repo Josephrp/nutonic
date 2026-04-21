@@ -32,11 +32,15 @@ private class PathUtf8BlobStore(
     }
 }
 
-actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
-    PathUtf8BlobStore(
-        Path.of(
-            System.getProperty("user.home"),
-            ".nutonic",
-            "local-nonranked-leaderboard.json",
-        ),
+private fun desktopNutonicPath(fileName: String): Path =
+    Path.of(
+        System.getProperty("user.home"),
+        ".nutonic",
+        fileName,
     )
+
+actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
+    PathUtf8BlobStore(desktopNutonicPath("local-nonranked-leaderboard.json"))
+
+actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
+    PathUtf8BlobStore(desktopNutonicPath("guess-record-outbox.json"))

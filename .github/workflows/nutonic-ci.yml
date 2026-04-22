@@ -8,10 +8,11 @@ on:
   pull_request:
     branches:
       - main
+      - dev
     paths:
       - "nutonic/**"
       - "server/**"
-      - "data/scripts/**"
+      - "data/**"
       - "docs/scripts/**"
       - "tools/**"
       - "inference/streetview_pano_service/**"

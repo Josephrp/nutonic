@@ -116,7 +116,7 @@ Place the generated `baseline.xml` at `nutonic/config/detekt/baseline.xml`. The 
 
 Workflow: **`.github/workflows/nutonic-ci.yml`**
 
-- **Triggers:** **`pull_request`** when the **base branch is `main`** (and paths match the filter below), plus **`workflow_dispatch`** for ad-hoc full CI from the Actions tab.
+- **Triggers:** **`pull_request`** when the **base branch is `main` or `dev`** (and paths match the filter below), plus **`workflow_dispatch`** for ad-hoc full CI from the Actions tab.
 - **Path filters:** PRs / dispatches only run client CI when changes touch listed paths (e.g. `nutonic/**`, `server/**`, `docs/openapi.yaml`, workflows under `.github/workflows/`, `rules/**`) — see the workflow file for the exact list.
 
 | Job | Runner | Purpose |

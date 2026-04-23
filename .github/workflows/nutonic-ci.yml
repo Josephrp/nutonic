@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r data/scripts/requirements.txt -r tools/requirements.txt pytest ./inference/streetview_pano_service ./inference/lfm_vl_hint_service ./inference/lfm_vl_satellite_caption_service ./inference/pro_materialization_service
+        run: pip install -r data/scripts/requirements.txt -r data/scripts/requirements-lfm-vl-dataset.txt -r tools/requirements.txt pytest ./inference/streetview_pano_service ./inference/lfm_vl_hint_service ./inference/lfm_vl_satellite_caption_service ./inference/pro_materialization_service
       - name: Pytest data/scripts + tools + inference stubs
         run: python -m pytest data/scripts/tests tools/tests inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests inference/lfm_vl_satellite_caption_service/tests inference/pro_materialization_service/tests -q
 

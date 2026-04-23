@@ -132,6 +132,7 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 ### Release installers + GitHub Release (`.github/workflows/nutonic-release.yml`)
 
 - **Triggers:** **`push`** to **`main`** (path-filtered: `nutonic/**`, release workflow file, `docs/openapi.yaml`, `rules/**`) builds **`.deb` / `.msi` / `.dmg`** and uploads **workflow artifacts** (no GitHub Release on push). **`workflow_dispatch`** runs the same builds, then **publishes** assets to a **GitHub Release** for the **tag** you enter, using **`softprops/action-gh-release@v2.6.2`**.
+- **Optional mobile (same workflow, `workflow_dispatch` only):** boolean inputs build a **signed Android release APK** (keystore via secrets + Gradle injected signing), an **iOS archive → IPA** (distribution cert + provisioning profile + shared **`.xcscheme`**), optional **TestFlight upload** via **`apple-actions/upload-testflight-build@v4`**, and optional **attach** of `.apk` / `.ipa` to the same GitHub Release. See the workflow file header comments for the exact secret names.
 - **Repository settings:** publishing requires **Actions → General → Workflow permissions → Read and write** for the default `GITHUB_TOKEN` (the publish job sets **`contents: write`**; push-only runs use **`contents: read`**).
 
 ### CI conventions

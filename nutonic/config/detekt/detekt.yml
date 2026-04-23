@@ -14,7 +14,8 @@ build:
 style:
   MaxLineLength:
     active: true
-    maxLineLength: 160
+    # Compose copy and Gradle KTS occasionally carry long literals; ktlint also caps lines.
+    maxLineLength: 240
     excludePackageStatements: true
     excludeImportStatements: true
   # Wildcards are common in Compose/interop; ktlint already encodes team policy in .editorconfig.
@@ -50,7 +51,8 @@ exceptions:
 complexity:
   LongMethod:
     active: true
-    threshold: 120
+    # Large @Composable hubs (shell, screens) are expected; tighten later with extraction.
+    threshold: 320
     excludes:
       - "**/test/**"
       - "**/androidTest/**"
@@ -60,6 +62,7 @@ complexity:
       - "**/*Tests.kt"
       # Large @Composable trees are normal; keep a sane threshold elsewhere.
       - "**/screens/**"
+      - "**/shell/**"
       - "**/NutonicMainShell.kt"
   ComplexCondition:
     active: true

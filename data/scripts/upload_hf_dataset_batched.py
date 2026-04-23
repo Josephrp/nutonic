@@ -230,7 +230,7 @@ def main() -> int:
     batches = plan_batches()
     print(
         f"Local files to upload: {len(pairs)} in {len(batches)} commit(s) "
-        f"(≤{max_per} files/commit, ≥{args.min_seconds_between_commits}s between commits)",
+        f"(<={max_per} files/commit, >={args.min_seconds_between_commits}s between commits)",
         flush=True,
     )
     if args.dry_run:
@@ -265,7 +265,7 @@ def main() -> int:
                 )
                 parent_commit = oid
                 total_commits += 1
-                print(f"Committed {msg} -> {oid[:7]}… (commit #{total_commits})", flush=True)
+                print(f"Committed {msg} -> {oid[:7]}... (commit #{total_commits})", flush=True)
                 _sleep_rate_limit(args.min_seconds_between_commits)
                 return
             except HfHubHTTPError as e:
@@ -273,14 +273,14 @@ def main() -> int:
                 ra = _retry_after_seconds(e)
                 if code == 429:
                     wait = ra if ra is not None else min(120.0, 5.0 * attempt)
-                    print(f"429 rate limit; sleeping {wait:.1f}s then retrying…", flush=sys.stderr)
+                    print(f"429 rate limit; sleeping {wait:.1f}s then retrying...", flush=sys.stderr)
                     time.sleep(wait)
                     continue
                 if code == 413 and len(batch) > 1:
                     mid = len(batch) // 2
                     print(
                         f"413 payload too large for {len(batch)} files; splitting into "
-                        f"{mid} + {len(batch) - mid}…",
+                        f"{mid} + {len(batch) - mid}...",
                         file=sys.stderr,
                     )
                     commit_recursive(batch[:mid], f"{label} [a]", depth + 1)

@@ -33,6 +33,7 @@ from lfm_vl_sft_dataset.pro_dataset_common import (
     split_for_event,
     write_metadata,
 )
+from lfm_vl_sft_dataset.pro_hub_readme import firewatch_readme
 from lfm_vl_sft_dataset.pro_prompts import (
     FIREWATCH_CHANGE_CAPTION,
     FIREWATCH_GROUNDING,
@@ -296,7 +297,13 @@ def main() -> int:
     for name in ("train", "validation", "test"):
         write_jsonl(out_dir / "data" / f"{name}.jsonl", by_split.get(name, []))
     (out_dir / "README.md").write_text(
-        "# FireWatch SFT Dataset\n\nTemporal Sentinel-2 image pairs with burn-change captioning and grounding rows.\n",
+        firewatch_readme(
+            hub_repo_id=args.upload_repo,
+            n_train=len(by_split["train"]),
+            n_val=len(by_split["validation"]),
+            n_test=len(by_split["test"]),
+            n_tiles=built,
+        ),
         encoding="utf-8",
     )
     print(

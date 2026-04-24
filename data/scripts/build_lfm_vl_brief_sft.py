@@ -19,6 +19,7 @@ if str(_SCRIPTS) not in sys.path:
 from lfm_vl_sft_dataset.caption_rules import brief_caption
 from lfm_vl_sft_dataset.hf_upload import upload_dataset_folder
 from lfm_vl_sft_dataset.jsonl_format import make_multi_image_vlm_message, split_key, write_jsonl
+from lfm_vl_sft_dataset.pro_hub_readme import brief_composer_readme
 from lfm_vl_sft_dataset.pro_prompts import BRIEF_COMPOSER_PROMPT, SYSTEM_GEOSPATIAL_ANALYST, SYSTEM_OPTICAL_LIMITS
 
 DEFAULT_HF_REPO = "NuTonic/brief-composer-sft-v1"
@@ -171,7 +172,12 @@ def main() -> int:
     for name in ("train", "validation", "test"):
         write_jsonl(data_out / f"{name}.jsonl", by_split.get(name, []))
     (out_dir / "README.md").write_text(
-        "# Brief Composer SFT Dataset\n\nComposite multi-image analytical briefing rows built from profile dataset outputs.\n",
+        brief_composer_readme(
+            hub_repo_id=args.upload_repo,
+            n_train=len(by_split["train"]),
+            n_val=len(by_split["validation"]),
+            n_test=len(by_split["test"]),
+        ),
         encoding="utf-8",
     )
     print(

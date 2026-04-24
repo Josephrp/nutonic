@@ -19,7 +19,12 @@ if str(_SCRIPTS) not in sys.path:
 
 from lfm_vl_sft_dataset.caption_rules import oceanscout_caption
 from lfm_vl_sft_dataset.change_instances import find_change_regions
-from lfm_vl_sft_dataset.event_catalog import load_events_file, sample_coastal_locations
+from lfm_vl_sft_dataset.event_catalog import (
+    load_default_oceanscout_catalog,
+    load_events_file,
+    sample_coastal_locations,
+    subsample_geo_events,
+)
 from lfm_vl_sft_dataset.grid import build_reference_grid
 from lfm_vl_sft_dataset.hf_upload import upload_dataset_folder
 from lfm_vl_sft_dataset.jsonl_format import make_multi_image_vlm_message, write_jsonl
@@ -33,6 +38,7 @@ from lfm_vl_sft_dataset.pro_dataset_common import (
     split_for_event,
     write_metadata,
 )
+from lfm_vl_sft_dataset.pro_hub_readme import oceanscout_readme
 from lfm_vl_sft_dataset.pro_prompts import (
     OCEANSCOUT_DETECT,
     OCEANSCOUT_GROUNDING,
@@ -102,9 +108,14 @@ def main() -> int:
         "--events",
         type=Path,
         default=None,
-        help="Optional CSV/JSON events with event_id,lat,lon,event_date. If omitted, seeded coastal samples are used.",
+        help="Optional CSV/JSON events with event_id,lat,lon,event_date. If omitted, data/events/oceanscout_pois.json is used when present; otherwise seeded coastal samples (--seeded-events).",
     )
-    p.add_argument("--seeded-events", type=int, default=24, help="Used when --events is not provided.")
+    p.add_argument(
+        "--seeded-events",
+        type=int,
+        default=24,
+        help="Max locations when --events is omitted: subsampled from data/events/oceanscout_pois.json if present, else synthetic seeds.",
+    )
     p.add_argument(
         "--out-dir",
         type=Path,
@@ -146,7 +157,16 @@ def main() -> int:
     if args.events is not None:
         events = load_events_file(args.events, profile="maritime", source="events_file")
     else:
-        events = sample_coastal_locations(args.seeded_events, min_separation_km=50, seed=42)
+        catalog = load_default_oceanscout_catalog(REPO_ROOT)
+        if catalog:
+            events = subsample_geo_events(
+                catalog,
+                args.seeded_events,
+                min_separation_km=50,
+                seed=42,
+            )
+        else:
+            events = sample_coastal_locations(args.seeded_events, min_separation_km=50, seed=42)
     if args.max_events > 0:
         events = events[: args.max_events]
     if not events:
@@ -313,7 +333,13 @@ def main() -> int:
     for name in ("train", "validation", "test"):
         write_jsonl(out_dir / "data" / f"{name}.jsonl", by_split.get(name, []))
     (out_dir / "README.md").write_text(
-        "# OceanScout SFT Dataset\n\nSingle-image maritime detection rows with vessel-candidate grounding.\n",
+        oceanscout_readme(
+            hub_repo_id=args.upload_repo,
+            n_train=len(by_split["train"]),
+            n_val=len(by_split["validation"]),
+            n_test=len(by_split["test"]),
+            n_tiles=built,
+        ),
         encoding="utf-8",
     )
     print(

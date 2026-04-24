@@ -18,7 +18,12 @@ if str(_SCRIPTS) not in sys.path:
 
 from lfm_vl_sft_dataset.caption_rules import landshift_caption
 from lfm_vl_sft_dataset.change_instances import find_change_regions
-from lfm_vl_sft_dataset.event_catalog import load_events_file, sample_land_change_locations
+from lfm_vl_sft_dataset.event_catalog import (
+    load_default_landshift_catalog,
+    load_events_file,
+    sample_land_change_locations,
+    subsample_geo_events,
+)
 from lfm_vl_sft_dataset.grid import build_reference_grid
 from lfm_vl_sft_dataset.hf_upload import upload_dataset_folder
 from lfm_vl_sft_dataset.jsonl_format import write_jsonl
@@ -33,6 +38,7 @@ from lfm_vl_sft_dataset.pro_dataset_common import (
     split_for_event,
     write_metadata,
 )
+from lfm_vl_sft_dataset.pro_hub_readme import landshift_readme
 from lfm_vl_sft_dataset.pro_prompts import (
     LANDSHIFT_CHANGE_CAPTION,
     LANDSHIFT_GROUNDING,
@@ -92,9 +98,14 @@ def main() -> int:
         "--events",
         type=Path,
         default=None,
-        help="Optional CSV/JSON events with event_id,lat,lon,event_date. If omitted, seeded locations are used.",
+        help="Optional CSV/JSON events with event_id,lat,lon,event_date. If omitted, data/events/landshift_pois.json is used when present; otherwise seeded locations (--seeded-events).",
     )
-    p.add_argument("--seeded-events", type=int, default=24, help="Used when --events is not provided.")
+    p.add_argument(
+        "--seeded-events",
+        type=int,
+        default=24,
+        help="Max locations when --events is omitted: subsampled from data/events/landshift_pois.json if present, else synthetic seeds.",
+    )
     p.add_argument(
         "--out-dir",
         type=Path,
@@ -135,7 +146,16 @@ def main() -> int:
     if args.events is not None:
         events = load_events_file(args.events, profile="land_use_change", source="events_file")
     else:
-        events = sample_land_change_locations(args.seeded_events, seed=42)
+        catalog = load_default_landshift_catalog(REPO_ROOT)
+        if catalog:
+            events = subsample_geo_events(
+                catalog,
+                args.seeded_events,
+                min_separation_km=150,
+                seed=42,
+            )
+        else:
+            events = sample_land_change_locations(args.seeded_events, seed=42)
     if args.max_events > 0:
         events = events[: args.max_events]
     if not events:
@@ -304,7 +324,13 @@ def main() -> int:
     for name in ("train", "validation", "test"):
         write_jsonl(out_dir / "data" / f"{name}.jsonl", by_split.get(name, []))
     (out_dir / "README.md").write_text(
-        "# LandShift SFT Dataset\n\nTemporal Sentinel-2 image pairs with land-transition change rows.\n",
+        landshift_readme(
+            hub_repo_id=args.upload_repo,
+            n_train=len(by_split["train"]),
+            n_val=len(by_split["validation"]),
+            n_test=len(by_split["test"]),
+            n_tiles=built,
+        ),
         encoding="utf-8",
     )
     print(

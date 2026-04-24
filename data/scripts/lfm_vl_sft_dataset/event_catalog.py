@@ -79,6 +79,56 @@ def load_flood_events(source: str = "manual", path: Path | None = None) -> list[
     return load_events_file(path, profile="flood", source=source)
 
 
+def default_oceanscout_pois_path(repo_root: Path) -> Path:
+    return repo_root / "data" / "events" / "oceanscout_pois.json"
+
+
+def default_landshift_pois_path(repo_root: Path) -> Path:
+    return repo_root / "data" / "events" / "landshift_pois.json"
+
+
+def load_default_oceanscout_catalog(repo_root: Path) -> list[GeoEvent] | None:
+    path = default_oceanscout_pois_path(repo_root)
+    if not path.is_file():
+        return None
+    return load_events_file(path, profile="maritime", source="default_oceanscout_pois")
+
+
+def load_default_landshift_catalog(repo_root: Path) -> list[GeoEvent] | None:
+    path = default_landshift_pois_path(repo_root)
+    if not path.is_file():
+        return None
+    return load_events_file(path, profile="land_use_change", source="default_landshift_pois")
+
+
+def subsample_geo_events(
+    events: list[GeoEvent],
+    n: int,
+    *,
+    min_separation_km: float,
+    seed: int,
+) -> list[GeoEvent]:
+    """
+    Deterministic geographic spread: shuffle then greedily keep events at least
+    min_separation_km apart (haversine), up to n items.
+    """
+    rng = random.Random(seed)
+    pool = list(events)
+    rng.shuffle(pool)
+    picked: list[GeoEvent] = []
+    for ev in pool:
+        ok = True
+        for p in picked:
+            if haversine_km(ev.lon, ev.lat, p.lon, p.lat) < min_separation_km:
+                ok = False
+                break
+        if ok:
+            picked.append(ev)
+        if len(picked) >= n:
+            break
+    return picked
+
+
 def _sample_points(
     candidates: list[tuple[float, float]],
     n: int,

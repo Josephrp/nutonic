@@ -210,9 +210,8 @@ def main() -> int:
         print(f"Missing {args.token_env} in environment.", file=sys.stderr)
         if os.environ.get("GITHUB_ACTIONS") == "true":
             print(
-                "GitHub Actions: set repository secrets HF_TOKEN_TONIC and HF_TOKEN_NUTONIC "
-                "(or HF_TOKEN as fallback if one token can write to both org Spaces). "
-                "See tools/hf_deploy/README.md.",
+                "GitHub Actions: set HF_TOKEN_TONIC / HF_TOKEN_NUTONIC, or HF_TOKEN, or HF_API_WRITE "
+                "(write-capable Hub token for Space upload). See tools/hf_deploy/README.md.",
                 file=sys.stderr,
             )
         return 2

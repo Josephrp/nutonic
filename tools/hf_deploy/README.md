@@ -23,7 +23,8 @@ python tools/hf_deploy/deploy_space.py --service lfm_vl_hint --repo-id YOUR_USER
 |--------|---------|
 | `HF_TOKEN_TONIC` | Write token for **Tonic** Spaces (LFM hints, TerraMind). |
 | `HF_TOKEN_NUTONIC` | Write token for **NuTonic** Spaces (game server, PRO materialization). |
-| `HF_TOKEN` (optional fallback) | When `HF_TOKEN_TONIC` or `HF_TOKEN_NUTONIC` is unset, the workflow falls back to this secret for that job. Use only if one Hub identity can **write** to both `Tonic/…` and `NuTonic/…` Space repos (scoped fine-grained token or org member with repo write). |
+| `HF_TOKEN` (optional fallback) | When `HF_TOKEN_TONIC` or `HF_TOKEN_NUTONIC` is unset, the workflow uses **`HF_TOKEN`** next, then **`HF_API_WRITE`**, for Hub upload auth. Same token is fine if it has **write** on the target Space repos. |
+| `HF_API_WRITE` (optional fallback) | Used only when org-specific and `HF_TOKEN` deploy secrets are empty; must be a **write-capable** Hub token for the Spaces you deploy. |
 
 ### Troubleshooting: `Missing HF_TOKEN in environment` in Actions
 
@@ -43,10 +44,24 @@ Optional **runtime** secrets (see `profiles/*.yaml` — each maps a Hugging Face
 | `NUTONIC_JWT_SECRET` | Game server Space secret `JWT_SECRET` |
 | `NUTONIC_LEADERBOARD_DATABASE_URL` | SQLAlchemy URL (often secret) |
 | `NUTONIC_RANKED_DATABASE_URL` | Ranked store URL |
-| `NUTONIC_MAPBOX_ACCESS_TOKEN` | PRO materialization Mapbox |
-| `NUTONIC_INFERENCE_HMAC_SECRET` | PRO worker inbound HMAC |
+| `NUTONIC_MAPBOX_ACCESS_TOKEN` | PRO materialization → Space secret **`MAPBOX_ACCESS_TOKEN`**. If unset, the workflow uses **`MAPBOX_ACCESS_TOKEN`** (same token name the worker reads at runtime). |
+| `NUTONIC_INFERENCE_HMAC_SECRET` | PRO worker inbound HMAC (Space secret **`NUTONIC_INFERENCE_HMAC_SECRET`**). **Required** while `profiles/pro_materialization.yaml` sets **`NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC: "1"`** — otherwise the Space fails startup (`RuntimeError` in lifespan). Generate a long random string and use the **same** value on the game server as **`NUTONIC_INFERENCE_HMAC_SECRET`** when it calls this worker. Alias in CI: **`INFERENCE_HMAC_SECRET`**. |
 
 If an optional secret is **unset**, that key is skipped (no empty secret pushed).
+
+### Production checklist (Spaces)
+
+| Space / service | You likely already have | Add in GitHub Actions (if missing) | Pushed to Space as |
+|-----------------|-------------------------|-------------------------------------|---------------------|
+| **All deploy jobs** | `HF_TOKEN` and/or `HF_API_WRITE` | `HF_TOKEN_TONIC`, `HF_TOKEN_NUTONIC` for separate org tokens | *(auth only — not a Space env)* |
+| **LFM-VL hints** | — | `TONIC_LFM_OPENAI_API_KEY` / `TONIC_LFM_OPENAI_BASE_URL` only if `LFM_VL_BACKEND=openai_compatible` (profile default is **transformers**) | `OPENAI_*` |
+| **TerraMind TiM** | `HF_API_READ` or `HF_TOKEN` | `TONIC_TERRAMIND_HF_TOKEN` for a dedicated read token (optional) | `HF_TOKEN` |
+| **Game server** | — | **`NUTONIC_JWT_SECRET`**, **`NUTONIC_LEADERBOARD_DATABASE_URL`**, **`NUTONIC_RANKED_DATABASE_URL`** for real prod (Postgres URLs as needed) | `JWT_SECRET`, `NUTONIC_LEADERBOARD_DATABASE_URL`, `NUTONIC_RANKED_DATABASE_URL` |
+| **PRO materialization** | `MAPBOX_ACCESS_TOKEN` | **`NUTONIC_INFERENCE_HMAC_SECRET`** (required with current profile) | `MAPBOX_ACCESS_TOKEN`, `NUTONIC_INFERENCE_HMAC_SECRET` |
+
+Secrets such as **`GOOGLE_MAPS_API_KEY`**, **`NUTONIC_HYDRATION_OUTPUT_DATASET`**, and **`GITLEAKS_LICENSE`** are used by **other** jobs/scripts, not by **`huggingface-deploy.yml`**. Add them only where those workflows or tools read them.
+
+**Redeploy everything from Actions:** use **Actions → huggingface — deploy Spaces → Run workflow**, target **all**, after secrets exist. Pushes to **`main`** on paths listed in the workflow also run deploys.
 
 ## Profiles
 

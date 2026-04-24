@@ -20,6 +20,8 @@ def _tiny_png() -> bytes:
 @pytest.fixture
 def fake_mapbox_png(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("MAPBOX_ACCESS_TOKEN", "test-token-not-for-production")
+    monkeypatch.setenv("NUTONIC_MAPBOX_ATTRIBUTION", "© Test attribution")
+    monkeypatch.setenv("NUTONIC_MAPBOX_STATIC_STYLE", "mapbox/satellite-v9")
 
     def _fake_fetch(client, **kwargs):  # noqa: ANN001, ARG001
         return (_tiny_png(), "© Test attribution")
@@ -72,6 +74,8 @@ def test_internal_materialize_with_tim_npz(fake_mapbox_png) -> None:
     data = r.json()
     assert data["vlm_artifacts"][0]["width"] == 512
     assert data["tim_payload"]["modalities_keys"] == ["RGB"]
+    assert data["run_manifest"]["mapbox_source"]["attribution"] == "© Test attribution"
+    assert data["run_manifest"]["profile_policy"]["datetime_window_days"] == 120
     raw = base64.standard_b64decode(data["tim_payload"]["npz_base64"])
     z = np.load(io.BytesIO(raw))
     assert z["RGB"].shape == (1, 3, 224, 224)
@@ -92,14 +96,15 @@ def test_minimal_rgb_tim_wrong_branch(fake_mapbox_png) -> None:
     assert r.json()["detail"]["code"] == "TIM_BRANCH_REQUIRES_RGB_MAPBOX"
 
 
-def test_profile_requires_tim_and_sentinel_stack(fake_mapbox_png) -> None:
+@pytest.mark.parametrize("profile", ["wildfire", "oceanscout_ship_detection", "land_use_change", "flood_pulse"])
+def test_profile_requires_tim_and_sentinel_stack(fake_mapbox_png, profile: str) -> None:
     client = TestClient(app)
     no_tim = client.post(
         "/internal/v1/materialize",
         json={
             "latitude": 1.0,
             "longitude": 1.0,
-            "analysis_profile": "wildfire",
+            "analysis_profile": profile,
         },
     )
     assert no_tim.status_code == 422
@@ -110,12 +115,30 @@ def test_profile_requires_tim_and_sentinel_stack(fake_mapbox_png) -> None:
         json={
             "latitude": 1.0,
             "longitude": 1.0,
-            "analysis_profile": "wildfire",
+            "analysis_profile": profile,
             "enable_tim": True,
         },
     )
     assert minimal_rgb.status_code == 422
     assert minimal_rgb.json()["detail"]["code"] == "PROFILE_REQUIRES_SENTINEL_STACK"
+
+
+@pytest.mark.parametrize("profile", ["wildfire", "oceanscout_ship_detection", "land_use_change", "flood_pulse"])
+def test_profile_requires_s2_tim_branch(fake_mapbox_png, profile: str) -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "analysis_profile": profile,
+            "sentinel_fetch_mode": "FULL_STAC",
+            "enable_tim": True,
+            "tim_branch": "RGB_mapbox",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "PROFILE_REQUIRES_S2L2A_FULL"
 
 
 def test_terramind_spectral_requires_s2_tim_when_rgb_tim(fake_mapbox_png) -> None:

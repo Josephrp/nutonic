@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, AsyncIterator
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
@@ -25,6 +26,8 @@ from nutonic_server.deps import (
     require_ranked_read_public,
     require_ranked_session,
     require_session_jwt,
+    shutdown_pro_job_runners,
+    start_pro_job_runner_for_settings,
 )
 from nutonic_server.guess_telemetry_store import GuessTelemetryIn, create_guess_telemetry_store
 from nutonic_server.haversine import haversine_km, score_from_distance_km
@@ -41,10 +44,12 @@ from nutonic_server.schemas import (
     LeaderboardRowOut,
     MapSummaryOut,
     ProArtifactRef,
+    ProBriefSection,
     ProJobCancelOut,
     ProJobCreateIn,
     ProJobCreateOut,
     ProJobStatusOut,
+    ProOnDevicePayload,
     RankedClueOut,
     RankedForfeitIn,
     RankedForfeitOut,
@@ -62,10 +67,22 @@ _leaderboard_store = create_leaderboard_store(settings)
 _ranked_store = create_ranked_store(settings.ranked_database_url)
 _guess_telemetry_store = create_guess_telemetry_store(settings.guess_telemetry_database_url)
 
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    s = load_settings()
+    if s.feature_pro_jobs:
+        start_pro_job_runner_for_settings(s)
+    try:
+        yield
+    finally:
+        shutdown_pro_job_runners(grace_seconds=30.0)
+
 app = FastAPI(
     title="NU:TONIC Game Server",
     version="0.1.0",
     description="Thin orchestrator API (`/api/v1/*`). OpenAPI source: repo `docs/openapi.yaml`.",
+    lifespan=_lifespan,
 )
 
 
@@ -501,6 +518,7 @@ def _pro_status_out(row: ProJobRecord) -> ProJobStatusOut:
     analysis_artifacts = [a for a in artifacts if a.profile != "brief_only"]
     brief_artifacts = [a for a in artifacts if a.profile == "brief_only" or a.kind == "brief"]
     status_reason = row.error_class or ("cancelled" if row.status == "cancelled" else None)
+    materialization_summary = row.materialization_summary or None
     return ProJobStatusOut(
         job_id=row.job_id,
         status=row.status,
@@ -516,10 +534,11 @@ def _pro_status_out(row: ProJobRecord) -> ProJobStatusOut:
         analysis_artifacts=analysis_artifacts,
         brief_artifacts=brief_artifacts,
         scene_provenance=row.scene_provenance or None,
+        on_device_payload=_on_device_payload(materialization_summary, analysis_artifacts),
         bundle_download_url=None,
         materialization_id=row.materialization_id,
         cache_key=row.cache_key,
-        materialization_summary=row.materialization_summary or None,
+        materialization_summary=materialization_summary,
     )
 
 
@@ -534,6 +553,56 @@ def _artifact_ref(job_id: str, raw: dict[str, object]) -> ProArtifactRef:
         profile=str(raw.get("profile") or "") or None,
         download_url=download_url,
     )
+
+
+def _on_device_payload(
+    materialization_summary: dict[str, object] | None,
+    analysis_artifacts: list[ProArtifactRef],
+) -> ProOnDevicePayload | None:
+    if not materialization_summary:
+        return None
+    brief = materialization_summary.get("brief_summary")
+    if not isinstance(brief, dict):
+        return None
+    sections: list[ProBriefSection] = []
+    executive_summary = brief.get("executive_summary")
+    if isinstance(executive_summary, str) and executive_summary.strip():
+        sections.append(
+            ProBriefSection(
+                title="Executive summary",
+                body=_bounded_text(executive_summary, 2000),
+                confidence=_brief_confidence(brief),
+            )
+        )
+    key_findings = brief.get("key_findings")
+    if isinstance(key_findings, list) and key_findings:
+        body = "\n".join(f"- {str(item)[:300]}" for item in key_findings[:5])
+        sections.append(ProBriefSection(title="Key findings", body=_bounded_text(body, 2000), confidence=_brief_confidence(brief)))
+    recommended_actions = brief.get("recommended_actions")
+    if isinstance(recommended_actions, list) and recommended_actions:
+        body = "\n".join(f"- {str(item)[:300]}" for item in recommended_actions[:5])
+        sections.append(ProBriefSection(title="Recommended actions", body=_bounded_text(body, 2000), confidence=None))
+    if not sections and not analysis_artifacts:
+        return None
+    return ProOnDevicePayload(
+        brief_sections=sections[:5],
+        overlay_refs=analysis_artifacts[:4],
+        confidence_summary=_brief_confidence(brief),
+    )
+
+
+def _brief_confidence(brief: dict[str, object]) -> str | None:
+    confidence = brief.get("confidence")
+    if isinstance(confidence, str) and confidence.strip():
+        return confidence.strip()[:64]
+    return None
+
+
+def _bounded_text(raw: str, max_len: int) -> str:
+    text = raw.strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
 
 
 def _artifact_path(root: str, job_id: str, artifact_id: str) -> Path | None:

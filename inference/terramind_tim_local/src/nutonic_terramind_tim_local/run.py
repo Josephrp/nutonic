@@ -13,7 +13,10 @@ import torch
 from terratorch import BACKBONE_REGISTRY
 
 from nutonic_terramind_tim_local.capture import attach_tim_sampler_capture
-from nutonic_terramind_tim_local.terramind_patches import apply_terramind_tim_runtime_hotfixes
+from nutonic_terramind_tim_local.terramind_patches import (
+    apply_terramind_tim_runtime_hotfixes,
+    terramind_patch_diagnostics,
+)
 from nutonic_terramind_tim_local.inputs_build import _build_inputs, load_run_config
 from nutonic_terramind_tim_local.serialize import (
     build_profile_analytics,
@@ -186,6 +189,7 @@ def _export_row(
             "tim_modalities": list(cfg["tim_modalities"]),
             "merge_method": cfg.get("merge_method", "mean"),
             "tim_outputs": tim_policy,
+            "patch_diagnostics": terramind_patch_diagnostics(),
         },
         "map_id": map_id,
         "location_id": location_id,

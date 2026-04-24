@@ -24,6 +24,7 @@ def test_run_tim_forward_export_minimal_yaml(tmp_path: Path) -> None:
     cfg.setdefault("export", {})["location_id"] = "t_loc"
     row = run_tim_forward_export(cfg)
     assert row["map_id"] == "t_map"
+    assert row["engine"]["patch_diagnostics"]["diagnostics_version"] == "nutonic.terramind_patches.v1"
     assert "tim_modality_outputs" in row
     assert "Coordinates" in row["tim_modality_outputs"]
     assert "ai_lat" in row and "ai_lon" in row

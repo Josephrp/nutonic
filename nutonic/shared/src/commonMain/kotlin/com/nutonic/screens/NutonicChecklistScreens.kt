@@ -259,4 +259,9 @@ private fun detailMeta(detail: ShellDetail): Pair<String, String> =
         ShellDetail.RankGlobal -> "RANK · global + map pick" to "Browse map-scoped and global rank slices."
         ShellDetail.SetupProtocol -> "SETUP · protocol" to "Profile, accessibility, and audio protocol controls."
         ShellDetail.ProCoordinateDashboard -> "PRO · coordinate dashboard" to "Advanced coordinate tooling and VLM surfaces."
+        ShellDetail.ProFireWatch -> "PRO · FireWatch" to "Wildfire risk, burn/change overlays, hotspots, and brief handoff."
+        ShellDetail.ProOceanScout -> "PRO · OceanScout" to "Coastal activity, vessel candidates, heatmaps, and evidence labels."
+        ShellDetail.ProLandShift -> "PRO · LandShift" to "Land-cover transitions, top changes, overlays, and transition matrix."
+        ShellDetail.ProFloodPulse -> "PRO · FloodPulse" to "Flood extent, affected-area metrics, and before/after review."
+        ShellDetail.ProBriefComposer -> "PRO · brief composer" to "Structured multi-source brief composition and export handoff."
     }

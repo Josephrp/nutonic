@@ -271,20 +271,22 @@ If the VLM returns **JSON** in the assistant text, client may **parse** (strict 
 
 ---
 
-## 9. OpenAPI sketch (illustrative)
+## 9. OpenAPI sketch (canonical surface)
 
-Implementers replace paths and wire **OpenAPI** components per product.
+The canonical public client surface is `docs/openapi.yaml`. Keep this sketch aligned with those component names; do not introduce bundle-only aliases here without updating OpenAPI.
 
 - **`POST /api/v1/pro/jobs`**  
-  - Body: `{ "center_lat": number, "center_lon": number, "bbox_half_km"?: number, "mapbox_zoom"?: number, "analysis_profile"?: "wildfire" | "oceanscout_ship_detection" | "land_use_change" | "flood_pulse" | "brief_only", "sentinel_fetch_mode"?: "MINIMAL_RGB" | "TERRAMIND_SPECTRAL" | "FULL_STAC", "enable_tim"?: boolean, "scene_id_t0"?: string, "scene_id_t1"?: string }` — `center_lat` / `center_lon` come from the map pin unless the advanced numeric fields are explicitly used. Include **`Coordinates`** when product wants **TiM-derived** map pin / **AI-guess** hydration.
-  - Response: `{ "job_id": "uuid", "status": "queued" }`
+  - Body: `{ "center_lat": number, "center_lon": number, "bbox_half_km"?: number, "mapbox_zoom"?: integer, "analysis_profile"?: "wildfire" | "oceanscout_ship_detection" | "land_use_change" | "flood_pulse" | "brief_only", "sentinel_fetch_mode"?: "MINIMAL_RGB" | "TERRAMIND_SPECTRAL" | "FULL_STAC", "enable_tim"?: boolean, "tim_branch"?: "S2L2A_full" | "RGB_mapbox", "datetime_interval"?: string, "scene_id_t0"?: string, "scene_id_t1"?: string }` — `center_lat` / `center_lon` come from the map pin unless the advanced numeric fields are explicitly used. Legacy `vessel_monitoring` profile requests are normalized to `oceanscout_ship_detection`.
+  - Response: `{ "job_id": "uuid", "status": "queued", "inference_upstream_ok": null, "materialization_ok": null }`; the health booleans are compatibility fields and new clients poll the job resource for execution health.
 
 - **`GET /api/v1/pro/jobs/{job_id}`**  
-  - Response: `{ "status": "...", "progress": 0.0-1.0, "message_key": "FETCHING_SENTINEL", "bundle_url"?: "...", "content_version"?: "...", "error"?: { "code": "...", "detail": "..." } }`
+  - Response: `{ "job_id": "uuid", "status": "queued|running|completed|failed|cancelled", "progress_pct"?: 0-100, "status_reason"?: string, "error_class"?: "stac_no_coverage|stac_cloud_ceiling|worker_timeout|worker_unreachable|worker_error|input_validation|cancelled|internal", "error_detail"?: string, "analysis_profile"?: string, "artifacts"?: ProArtifactRef[], "analysis_artifacts"?: ProArtifactRef[], "brief_artifacts"?: ProArtifactRef[], "scene_provenance"?: object, "on_device_payload"?: ProOnDevicePayload, "materialization_summary"?: object }`
 
-- **`GET /api/v1/pro/bundles/{bundle_id}`**  
+- **`GET /api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}`**  
   - Headers: `ETag`, `Cache-Control`  
-  - Body: binary per §5
+  - Body: artifact bytes referenced by `download_url`/`artifact_id`; object-store redirects are allowed if signed by the game server.
+
+- **`GET /api/v1/pro/jobs?limit=20&status=completed`** — returns recent session-scoped job statuses for dashboard history.
 
 - **`POST /api/v1/pro/jobs/{job_id}/cancel`** — best-effort cancel.
 

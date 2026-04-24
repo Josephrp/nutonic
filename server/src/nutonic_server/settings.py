@@ -124,8 +124,20 @@ class Settings(BaseSettings):
         ),
         description=(
             "Optional origin for the PRO materialization worker (`inference/pro_materialization_service`). "
-            "When set alongside or instead of `inference_worker_base_url`, PRO job create probes "
-            "GET `{origin}/health` for each configured origin (all must succeed for `inference_upstream_ok`)."
+            "PRO jobs probe configured origins before execution; origins listed in `pro_required_origins` "
+            "must succeed, while `pro_optional_origins` may be degraded without failing the job."
+        ),
+    )
+
+    lfm_vl_hint_service_url: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "NUTONIC_LFM_VL_HINT_SERVICE_URL",
+            "LFM_VL_HINT_SERVICE_URL",
+        ),
+        description=(
+            "Optional origin for the LFM-VL hint/brief service. When set, PRO jobs can call "
+            "`POST {origin}/v1/pro/brief/fuse` after materialization."
         ),
     )
 

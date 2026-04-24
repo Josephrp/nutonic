@@ -20,6 +20,19 @@ Each row: implement in **`commonMain`** unless a **platform actual** is noted. P
 | 8 | Settings / protocol ( **SETUP** tab ) | `settings_protocol` | `music_setup` | Profile block, security status, sliders, accessibility toggles, destructive actions styled per DESIGN; **header music toggle**; Audio sliders sync with [`docs/CLIENT-SETTINGS-SPEC.md`](../docs/CLIENT-SETTINGS-SPEC.md) §6.7 |
 | 9 | **PRO** (VLM tools, non-game) | **`refs/VLMExample/`** (port target) | `music_pro` | **Compose port** of the VLM example app: minimal shell, **not** the default geo-guess loop (`rules/01-navigation-architecture.md`, `rules/06-server-vlm-tim-and-on-device-ml.md`); **map-first AOI picker** with movable pin is the primary coordinate entry, numeric lat/lon fields are advanced/accessibility only and stay in sync; production routes must not ship placeholder-only content; includes mini-app entries for FireWatch, OceanScout, LandShift, FloodPulse, and Brief Composer; **header music toggle** |
 
+## PRO Mini-App Acceptance Rows
+
+These rows refine screen **9** and are required before a PRO mini-app route can be considered production-ready. Stubs may exist during development, but a shipped route cannot be placeholder-only.
+
+|Mini-app|Route token|Must include|
+|---|---|---|
+|**PRO dashboard**|`pro`|Shared `MapViewport` AOI picker as the primary input; single center pin with tap/pan/drag semantics; zoom/bbox sync; collapsed validated coordinate fields; `features.pro_jobs` gate-aware run controls; recent job refresh; polling with retry/backoff; merged artifact lists from `artifacts`, `analysis_artifacts`, `brief_artifacts`, and `on_device_payload.overlay_refs`.|
+|**FireWatch**|`pro-firewatch`|Artifact-backed wildfire map overlay; burn/change mask or hotspot layer; hotspot list with confidence/evidence labels; status/error copy for STAC/cloud/worker failures; brief handoff. Placeholder copy alone fails acceptance.|
+|**OceanScout**|`pro-oceanscout`|Compare/overlay view for vessel candidates and coastal context; observation coverage panel; normalized heatmap/incursion summaries; shoreline/confidence/evidence labels; explicit claim-safety limitations. Placeholder copy alone fails acceptance.|
+|**LandShift**|`pro-landshift`|Artifact-backed before/after or classified overlay; transition matrix/top transitions; scene provenance and quality metadata; brief handoff. Placeholder copy alone fails acceptance.|
+|**FloodPulse**|`pro-floodpulse`|Before/after flood extent view; inundation polygons or affected-area metrics; confidence/coverage warnings; brief handoff. Placeholder copy alone fails acceptance.|
+|**Brief Composer**|`pro-brief`|Selectable source outputs from one or more PRO jobs; structured sections with source toggles; export/share affordance; clear provenance for generated claims. Placeholder copy alone fails acceptance.|
+
 **RANK tab (shell):** Uses **`music_rank`** when the player is on the **RANK** destination; reuse **final_results** leaderboard composables — see [`docs/SCREEN-MUSIC-SPEC.md`](../docs/SCREEN-MUSIC-SPEC.md). **Header music toggle** required.
 
 ## Overlays and modals (from spec text)

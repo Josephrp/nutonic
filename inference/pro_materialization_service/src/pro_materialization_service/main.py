@@ -85,6 +85,7 @@ def _materialize_http_errors(e: ValueError) -> NoReturn:
         "TIM_BRANCH_INVALID",
         "PROFILE_REQUIRES_TIM",
         "PROFILE_REQUIRES_SENTINEL_STACK",
+        "PROFILE_REQUIRES_S2L2A_FULL",
     ):
         raise HTTPException(status_code=422, detail={"code": code}) from e
     if code in ("STAC_NO_ITEMS", "S2L2A_INCOMPLETE"):

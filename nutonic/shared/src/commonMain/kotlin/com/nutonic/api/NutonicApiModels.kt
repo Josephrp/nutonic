@@ -221,6 +221,30 @@ enum class ProJobProfile {
 
     @SerialName("brief_only")
     BRIEF_ONLY,
+    ;
+
+    fun wireToken(): String =
+        when (this) {
+            WILDFIRE -> "wildfire"
+            OCEANSCOUT_SHIP_DETECTION -> "oceanscout_ship_detection"
+            LAND_USE_CHANGE -> "land_use_change"
+            FLOOD_PULSE -> "flood_pulse"
+            BRIEF_ONLY -> "brief_only"
+        }
+
+    companion object {
+        fun fromWireOrDefault(value: String?): ProJobProfile =
+            when (value?.trim()) {
+                "wildfire" -> WILDFIRE
+                "oceanscout_ship_detection",
+                "vessel_monitoring",
+                -> OCEANSCOUT_SHIP_DETECTION
+                "land_use_change" -> LAND_USE_CHANGE
+                "flood_pulse" -> FLOOD_PULSE
+                "brief_only" -> BRIEF_ONLY
+                else -> BRIEF_ONLY
+            }
+    }
 }
 
 @Serializable

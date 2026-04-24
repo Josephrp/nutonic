@@ -1,0 +1,1675 @@
+[
+  {
+    "event_id": "os_sg_jurong",
+    "lat": 1.27,
+    "lon": 103.72,
+    "event_date": "2024-07-15",
+    "notes": "Singapore Strait / Jurong anchorage; dense traffic."
+  },
+  {
+    "event_id": "os_cn_shanghai_yangshan",
+    "lat": 30.62,
+    "lon": 122.08,
+    "event_date": "2024-08-01",
+    "notes": "Yangshan deep-water; East China Sea approach."
+  },
+  {
+    "event_id": "os_cn_ningbo_zhoushan",
+    "lat": 29.95,
+    "lon": 122.08,
+    "event_date": "2024-07-20",
+    "notes": "Zhoushan archipelago; major container complex."
+  },
+  {
+    "event_id": "os_cn_shenzhen_yantian",
+    "lat": 22.57,
+    "lon": 114.27,
+    "event_date": "2024-06-10",
+    "notes": "Pearl River estuary; Yantian corridor."
+  },
+  {
+    "event_id": "os_hk_kwai_tsing",
+    "lat": 22.32,
+    "lon": 114.12,
+    "event_date": "2024-05-22",
+    "notes": "Victoria Harbour approaches."
+  },
+  {
+    "event_id": "os_kr_busan",
+    "lat": 35.1,
+    "lon": 129.08,
+    "event_date": "2024-09-05",
+    "notes": "Busan New Port basin."
+  },
+  {
+    "event_id": "os_kr_incheon",
+    "lat": 37.45,
+    "lon": 126.62,
+    "event_date": "2024-08-18",
+    "notes": "Yellow Sea port approaches."
+  },
+  {
+    "event_id": "os_tw_kaohsiung",
+    "lat": 22.55,
+    "lon": 120.3,
+    "event_date": "2024-07-08",
+    "notes": "Taiwan Strait western lane."
+  },
+  {
+    "event_id": "os_tw_mailiao",
+    "lat": 23.8,
+    "lon": 120.18,
+    "event_date": "2024-06-28",
+    "notes": "Taiwan Strait mid-route traffic."
+  },
+  {
+    "event_id": "os_jp_yokohama",
+    "lat": 35.45,
+    "lon": 139.65,
+    "event_date": "2024-10-02",
+    "notes": "Tokyo Bay anchorage."
+  },
+  {
+    "event_id": "os_jp_kobe",
+    "lat": 34.68,
+    "lon": 135.22,
+    "event_date": "2024-09-12",
+    "notes": "Osaka Bay; Inland Sea feeder."
+  },
+  {
+    "event_id": "os_jp_nagoya",
+    "lat": 35.08,
+    "lon": 136.88,
+    "event_date": "2024-08-25",
+    "notes": "Ise Bay port approaches."
+  },
+  {
+    "event_id": "os_my_port_klang",
+    "lat": 3.0,
+    "lon": 101.38,
+    "event_date": "2024-06-15",
+    "notes": "Strait of Malacca western lane."
+  },
+  {
+    "event_id": "os_my_tanjung_pelepas",
+    "lat": 1.36,
+    "lon": 103.55,
+    "event_date": "2024-07-01",
+    "notes": "Malacca Singapore junction."
+  },
+  {
+    "event_id": "os_id_jakarta_tanjung_priok",
+    "lat": -6.1,
+    "lon": 106.88,
+    "event_date": "2024-05-30",
+    "notes": "Java Sea Sunda approaches."
+  },
+  {
+    "event_id": "os_id_surabaya",
+    "lat": -7.2,
+    "lon": 112.72,
+    "event_date": "2024-08-08",
+    "notes": "Madura Strait traffic."
+  },
+  {
+    "event_id": "os_th_laem_chabang",
+    "lat": 13.08,
+    "lon": 100.88,
+    "event_date": "2024-07-25",
+    "notes": "Gulf of Thailand hub."
+  },
+  {
+    "event_id": "os_vn_cat_lai",
+    "lat": 10.75,
+    "lon": 106.78,
+    "event_date": "2024-06-20",
+    "notes": "Mekong delta estuary."
+  },
+  {
+    "event_id": "os_ph_manila",
+    "lat": 14.62,
+    "lon": 120.95,
+    "event_date": "2024-09-18",
+    "notes": "Manila Bay approaches."
+  },
+  {
+    "event_id": "os_lk_colombo",
+    "lat": 6.94,
+    "lon": 79.85,
+    "event_date": "2024-08-05",
+    "notes": "Indian Ocean transshipment."
+  },
+  {
+    "event_id": "os_in_mumbai_jnpt",
+    "lat": 18.95,
+    "lon": 72.95,
+    "event_date": "2024-07-12",
+    "notes": "Arabian Sea hub."
+  },
+  {
+    "event_id": "os_in_mundra",
+    "lat": 22.85,
+    "lon": 69.72,
+    "event_date": "2024-06-05",
+    "notes": "Gulf of Kutch vessel lanes."
+  },
+  {
+    "event_id": "os_pk_karachi",
+    "lat": 24.82,
+    "lon": 66.98,
+    "event_date": "2024-05-18",
+    "notes": "Arabian Sea approaches."
+  },
+  {
+    "event_id": "os_ae_jebel_ali",
+    "lat": 25.01,
+    "lon": 55.06,
+    "event_date": "2024-09-01",
+    "notes": "Gulf hub; heavy anchorage."
+  },
+  {
+    "event_id": "os_sa_jeddah",
+    "lat": 21.48,
+    "lon": 39.18,
+    "event_date": "2024-08-14",
+    "notes": "Red Sea Bab-al-Mandeb feeder."
+  },
+  {
+    "event_id": "os_eg_port_said",
+    "lat": 31.26,
+    "lon": 32.32,
+    "event_date": "2024-07-05",
+    "notes": "Suez Canal Mediterranean entrance."
+  },
+  {
+    "event_id": "os_eg_suez",
+    "lat": 29.97,
+    "lon": 32.55,
+    "event_date": "2024-06-25",
+    "notes": "Suez Gulf of Suez approach."
+  },
+  {
+    "event_id": "os_ma_tanger_med",
+    "lat": 35.88,
+    "lon": -5.52,
+    "event_date": "2024-09-22",
+    "notes": "Strait of Gibraltar feeder."
+  },
+  {
+    "event_id": "os_es_algeciras",
+    "lat": 36.12,
+    "lon": -5.45,
+    "event_date": "2024-08-28",
+    "notes": "Gibraltar anchorage zone."
+  },
+  {
+    "event_id": "os_nl_rotterdam",
+    "lat": 51.95,
+    "lon": 4.12,
+    "event_date": "2024-07-30",
+    "notes": "North Sea Europort approaches."
+  },
+  {
+    "event_id": "os_be_antwerp",
+    "lat": 51.28,
+    "lon": 4.35,
+    "event_date": "2024-08-10",
+    "notes": "Scheldt estuary."
+  },
+  {
+    "event_id": "os_de_hamburg",
+    "lat": 53.55,
+    "lon": 9.98,
+    "event_date": "2024-09-08",
+    "notes": "Elbe fairway."
+  },
+  {
+    "event_id": "os_de_bremerhaven",
+    "lat": 53.55,
+    "lon": 8.58,
+    "event_date": "2024-07-18",
+    "notes": "Weser estuary."
+  },
+  {
+    "event_id": "os_uk_felixstowe",
+    "lat": 51.95,
+    "lon": 1.32,
+    "event_date": "2024-06-12",
+    "notes": "North Sea container lane."
+  },
+  {
+    "event_id": "os_fr_le_havre",
+    "lat": 49.48,
+    "lon": 0.12,
+    "event_date": "2024-08-22",
+    "notes": "English Channel approaches."
+  },
+  {
+    "event_id": "os_gr_piraeus",
+    "lat": 37.94,
+    "lon": 23.62,
+    "event_date": "2024-09-15",
+    "notes": "Aegean hub."
+  },
+  {
+    "event_id": "os_tr_ambarli",
+    "lat": 40.97,
+    "lon": 28.68,
+    "event_date": "2024-07-22",
+    "notes": "Marmara Sea approaches."
+  },
+  {
+    "event_id": "os_ua_odessa",
+    "lat": 46.48,
+    "lon": 30.75,
+    "event_date": "2024-06-01",
+    "notes": "Black Sea grain corridor context."
+  },
+  {
+    "event_id": "os_ru_novorossiysk",
+    "lat": 44.72,
+    "lon": 37.78,
+    "event_date": "2024-08-03",
+    "notes": "Black Sea tanker traffic."
+  },
+  {
+    "event_id": "os_us_la_long_beach",
+    "lat": 33.75,
+    "lon": -118.22,
+    "event_date": "2024-09-28",
+    "notes": "San Pedro Bay anchorage."
+  },
+  {
+    "event_id": "os_us_oakland",
+    "lat": 37.8,
+    "lon": -122.32,
+    "event_date": "2024-08-16",
+    "notes": "San Francisco Bay."
+  },
+  {
+    "event_id": "os_us_seattle_tacoma",
+    "lat": 47.28,
+    "lon": -122.42,
+    "event_date": "2024-07-08",
+    "notes": "Puget Sound traffic."
+  },
+  {
+    "event_id": "os_ca_vancouver",
+    "lat": 49.28,
+    "lon": -123.08,
+    "event_date": "2024-06-22",
+    "notes": "Strait of Georgia approaches."
+  },
+  {
+    "event_id": "os_us_ny_nj",
+    "lat": 40.67,
+    "lon": -74.04,
+    "event_date": "2024-10-05",
+    "notes": "Upper NY Bay."
+  },
+  {
+    "event_id": "os_us_savannah",
+    "lat": 32.08,
+    "lon": -81.09,
+    "event_date": "2024-08-01",
+    "notes": "Atlantic US East hub."
+  },
+  {
+    "event_id": "os_us_charleston",
+    "lat": 32.78,
+    "lon": -79.92,
+    "event_date": "2024-07-14",
+    "notes": "South Atlantic bight."
+  },
+  {
+    "event_id": "os_us_houston",
+    "lat": 29.73,
+    "lon": -95.27,
+    "event_date": "2024-09-10",
+    "notes": "Galveston Bay fairway."
+  },
+  {
+    "event_id": "os_us_miami",
+    "lat": 25.77,
+    "lon": -80.18,
+    "event_date": "2024-06-18",
+    "notes": "Florida Straits feeder."
+  },
+  {
+    "event_id": "os_mx_veracruz",
+    "lat": 19.2,
+    "lon": -96.12,
+    "event_date": "2024-07-28",
+    "notes": "Gulf of Mexico hub."
+  },
+  {
+    "event_id": "os_pa_balboa",
+    "lat": 8.95,
+    "lon": -79.57,
+    "event_date": "2024-08-30",
+    "notes": "Panama Canal Pacific approach."
+  },
+  {
+    "event_id": "os_br_santos",
+    "lat": -23.96,
+    "lon": -46.31,
+    "event_date": "2024-09-05",
+    "notes": "Santos basin anchorage."
+  },
+  {
+    "event_id": "os_ar_buenos_aires",
+    "lat": -34.58,
+    "lon": -58.37,
+    "event_date": "2024-08-12",
+    "notes": "R\u00edo de la Plata traffic."
+  },
+  {
+    "event_id": "os_cl_valparaiso",
+    "lat": -33.05,
+    "lon": -71.62,
+    "event_date": "2024-07-02",
+    "notes": "Pacific South America hub."
+  },
+  {
+    "event_id": "os_pe_callao",
+    "lat": -12.05,
+    "lon": -77.15,
+    "event_date": "2024-06-25",
+    "notes": "Lima port approaches."
+  },
+  {
+    "event_id": "os_za_durban",
+    "lat": -29.87,
+    "lon": 31.05,
+    "event_date": "2024-09-18",
+    "notes": "Indian Ocean Africa hub."
+  },
+  {
+    "event_id": "os_ng_lagos",
+    "lat": 6.45,
+    "lon": 3.39,
+    "event_date": "2024-07-10",
+    "notes": "Bight of Benin approaches."
+  },
+  {
+    "event_id": "os_gh_tema",
+    "lat": 5.63,
+    "lon": 0.02,
+    "event_date": "2024-08-08",
+    "notes": "Gulf of Guinea anchorage."
+  },
+  {
+    "event_id": "os_au_botany",
+    "lat": -33.97,
+    "lon": 151.22,
+    "event_date": "2024-10-01",
+    "notes": "Tasman Sea container lane."
+  },
+  {
+    "event_id": "os_au_melbourne",
+    "lat": -38.08,
+    "lon": 144.75,
+    "event_date": "2024-09-12",
+    "notes": "Port Phillip Bay."
+  },
+  {
+    "event_id": "os_au_fremantle",
+    "lat": -32.05,
+    "lon": 115.75,
+    "event_date": "2024-08-05",
+    "notes": "Indian Ocean Australia hub."
+  },
+  {
+    "event_id": "os_nz_tauranga",
+    "lat": -37.68,
+    "lon": 176.18,
+    "event_date": "2024-07-20",
+    "notes": "Bay of Plenty export hub."
+  },
+  {
+    "event_id": "os_cp_malacca_mid",
+    "lat": 2.5,
+    "lon": 101.5,
+    "event_date": "2024-06-08",
+    "notes": "Strait of Malacca open water; AIS density."
+  },
+  {
+    "event_id": "os_cp_hormuz",
+    "lat": 26.55,
+    "lon": 56.55,
+    "event_date": "2024-08-20",
+    "notes": "Strait of Hormuz traffic separation."
+  },
+  {
+    "event_id": "os_cp_bab_el_mandeb",
+    "lat": 12.6,
+    "lon": 43.4,
+    "event_date": "2024-07-05",
+    "notes": "Red Sea\u2013Gulf of Aden chokepoint."
+  },
+  {
+    "event_id": "os_cp_gibraltar",
+    "lat": 36.0,
+    "lon": -5.4,
+    "event_date": "2024-09-02",
+    "notes": "Alboran Sea approaches."
+  },
+  {
+    "event_id": "os_cp_dover",
+    "lat": 51.0,
+    "lon": 1.4,
+    "event_date": "2024-08-05",
+    "notes": "English Channel TSS."
+  },
+  {
+    "event_id": "os_cp_storebaelt",
+    "lat": 55.35,
+    "lon": 10.95,
+    "event_date": "2024-07-25",
+    "notes": "Danish straits feeder."
+  },
+  {
+    "event_id": "os_cp_taiwan_strait",
+    "lat": 24.0,
+    "lon": 119.0,
+    "event_date": "2024-06-15",
+    "notes": "Major container lane open water."
+  },
+  {
+    "event_id": "os_cp_bosphorus",
+    "lat": 41.12,
+    "lon": 29.08,
+    "event_date": "2024-09-05",
+    "notes": "Turkish straits vessel density."
+  },
+  {
+    "event_id": "os_no_stavanger",
+    "lat": 58.97,
+    "lon": 5.73,
+    "event_date": "2024-08-12",
+    "notes": "North Sea offshore supply."
+  },
+  {
+    "event_id": "os_dk_skagen",
+    "lat": 57.72,
+    "lon": 10.62,
+    "event_date": "2024-07-08",
+    "notes": "Skagerrak junction."
+  },
+  {
+    "event_id": "os_se_gothenburg",
+    "lat": 57.7,
+    "lon": 11.95,
+    "event_date": "2024-08-28",
+    "notes": "Kattegat approaches."
+  },
+  {
+    "event_id": "os_fi_helsinki",
+    "lat": 60.17,
+    "lon": 25.0,
+    "event_date": "2024-09-01",
+    "notes": "Gulf of Finland winter ice context."
+  },
+  {
+    "event_id": "os_ru_murmansk",
+    "lat": 68.97,
+    "lon": 33.08,
+    "event_date": "2024-07-18",
+    "notes": "Barents Sea port."
+  },
+  {
+    "event_id": "os_cn_qingdao",
+    "lat": 36.08,
+    "lon": 120.32,
+    "event_date": "2024-08-14",
+    "notes": "Yellow Sea hub."
+  },
+  {
+    "event_id": "os_cn_tianjin",
+    "lat": 38.98,
+    "lon": 117.75,
+    "event_date": "2024-09-08",
+    "notes": "Bohai Sea approaches."
+  },
+  {
+    "event_id": "os_cn_guangzhou_nansha",
+    "lat": 22.58,
+    "lon": 113.68,
+    "event_date": "2024-07-12",
+    "notes": "Pearl River delta hub."
+  },
+  {
+    "event_id": "os_vn_haiphong",
+    "lat": 20.82,
+    "lon": 106.78,
+    "event_date": "2024-06-28",
+    "notes": "Gulf of Tonkin port."
+  },
+  {
+    "event_id": "os_bd_chittagong",
+    "lat": 22.3,
+    "lon": 91.8,
+    "event_date": "2024-08-02",
+    "notes": "Bay of Bengal anchorage."
+  },
+  {
+    "event_id": "os_om_salalah",
+    "lat": 16.95,
+    "lon": 54.0,
+    "event_date": "2024-07-22",
+    "notes": "Arabian Sea transshipment."
+  },
+  {
+    "event_id": "os_qa_ras_laffan",
+    "lat": 25.92,
+    "lon": 52.55,
+    "event_date": "2024-08-18",
+    "notes": "Gulf LNG / tanker traffic."
+  },
+  {
+    "event_id": "os_kw_mina_al_ahmadi",
+    "lat": 29.08,
+    "lon": 48.15,
+    "event_date": "2024-09-12",
+    "notes": "Persian Gulf tanker lanes."
+  },
+  {
+    "event_id": "os_br_suape",
+    "lat": -8.4,
+    "lon": -34.95,
+    "event_date": "2024-07-05",
+    "notes": "NE Brazil deep-water port."
+  },
+  {
+    "event_id": "os_co_cartagena",
+    "lat": 10.4,
+    "lon": -75.52,
+    "event_date": "2024-08-25",
+    "notes": "Caribbean hub."
+  },
+  {
+    "event_id": "os_tt_point_lisas",
+    "lat": 10.42,
+    "lon": -61.48,
+    "event_date": "2024-06-30",
+    "notes": "Gulf of Paria traffic."
+  },
+  {
+    "event_id": "os_us_new_orleans",
+    "lat": 29.93,
+    "lon": -90.02,
+    "event_date": "2024-09-20",
+    "notes": "Mississippi River pilot station."
+  },
+  {
+    "event_id": "os_ca_halifax",
+    "lat": 44.65,
+    "lon": -63.58,
+    "event_date": "2024-08-08",
+    "notes": "North Atlantic Canada hub."
+  },
+  {
+    "event_id": "os_it_genoa",
+    "lat": 44.42,
+    "lon": 8.92,
+    "event_date": "2024-07-28",
+    "notes": "Ligurian Sea approaches."
+  },
+  {
+    "event_id": "os_es_valencia",
+    "lat": 39.45,
+    "lon": -0.32,
+    "event_date": "2024-09-05",
+    "notes": "Western Mediterranean hub."
+  },
+  {
+    "event_id": "os_eg_alexandria",
+    "lat": 31.2,
+    "lon": 29.88,
+    "event_date": "2024-06-18",
+    "notes": "Eastern Mediterranean."
+  },
+  {
+    "event_id": "os_il_ashdod",
+    "lat": 31.82,
+    "lon": 34.65,
+    "event_date": "2024-08-12",
+    "notes": "Levant coast traffic."
+  },
+  {
+    "event_id": "os_jo_aqaba",
+    "lat": 29.52,
+    "lon": 34.98,
+    "event_date": "2024-07-30",
+    "notes": "Red Sea southern hub."
+  },
+  {
+    "event_id": "os_ke_mombasa",
+    "lat": -4.05,
+    "lon": 39.65,
+    "event_date": "2024-09-01",
+    "notes": "East Africa Indian Ocean."
+  },
+  {
+    "event_id": "os_tz_dar_es_salaam",
+    "lat": -6.82,
+    "lon": 39.28,
+    "event_date": "2024-08-22",
+    "notes": "Swahili coast hub."
+  },
+  {
+    "event_id": "os_mo_macau_outer",
+    "lat": 22.15,
+    "lon": 113.58,
+    "event_date": "2024-06-12",
+    "notes": "Pearl River estuary open water."
+  },
+  {
+    "event_id": "os_bn_muara",
+    "lat": 5.02,
+    "lon": 115.05,
+    "event_date": "2024-07-18",
+    "notes": "South China Sea Brunei approaches."
+  },
+  {
+    "event_id": "os_kh_sihanoukville",
+    "lat": 10.62,
+    "lon": 103.52,
+    "event_date": "2024-08-05",
+    "notes": "Gulf of Thailand feeder."
+  },
+  {
+    "event_id": "os_mm_yangon",
+    "lat": 16.78,
+    "lon": 96.25,
+    "event_date": "2024-06-25",
+    "notes": "Andaman Sea river mouth."
+  },
+  {
+    "event_id": "os_ir_bandar_abbas",
+    "lat": 27.18,
+    "lon": 56.28,
+    "event_date": "2024-09-08",
+    "notes": "Strait of Hormuz approaches."
+  },
+  {
+    "event_id": "os_ly_tripoli",
+    "lat": 32.9,
+    "lon": 13.18,
+    "event_date": "2024-07-14",
+    "notes": "Central Mediterranean."
+  },
+  {
+    "event_id": "os_dz_algiers",
+    "lat": 36.78,
+    "lon": 3.08,
+    "event_date": "2024-08-20",
+    "notes": "Algerian coast hub."
+  },
+  {
+    "event_id": "os_ng_onne",
+    "lat": 4.72,
+    "lon": 7.15,
+    "event_date": "2024-06-08",
+    "notes": "Niger Delta offshore supply."
+  },
+  {
+    "event_id": "os_cv_mindelo",
+    "lat": 16.88,
+    "lon": -24.98,
+    "event_date": "2024-09-15",
+    "notes": "Mid-Atlantic transshipment."
+  },
+  {
+    "event_id": "os_is_reykjavik",
+    "lat": 64.15,
+    "lon": -21.92,
+    "event_date": "2024-07-05",
+    "notes": "North Atlantic fishing / traffic."
+  },
+  {
+    "event_id": "os_no_bergen",
+    "lat": 60.38,
+    "lon": 5.32,
+    "event_date": "2024-08-28",
+    "notes": "Norwegian fjord fairway."
+  },
+  {
+    "event_id": "os_jp_hakodate",
+    "lat": 41.77,
+    "lon": 140.72,
+    "event_date": "2024-09-22",
+    "notes": "Tsugaru Strait approaches."
+  },
+  {
+    "event_id": "os_ru_vladivostok",
+    "lat": 43.1,
+    "lon": 132.0,
+    "event_date": "2024-08-01",
+    "notes": "Sea of Japan hub."
+  },
+  {
+    "event_id": "os_kr_ulsan",
+    "lat": 35.5,
+    "lon": 129.38,
+    "event_date": "2024-07-25",
+    "notes": "Korea Strait tanker / bulker."
+  },
+  {
+    "event_id": "os_tw_keelung",
+    "lat": 25.15,
+    "lon": 121.75,
+    "event_date": "2024-06-20",
+    "notes": "Northern Taiwan approaches."
+  },
+  {
+    "event_id": "os_ph_cebu",
+    "lat": 10.3,
+    "lon": 123.92,
+    "event_date": "2024-08-14",
+    "notes": "Visayan Sea hub."
+  },
+  {
+    "event_id": "os_id_belawan",
+    "lat": 3.78,
+    "lon": 98.7,
+    "event_date": "2024-09-02",
+    "notes": "Malacca western approaches."
+  },
+  {
+    "event_id": "os_au_port_hedland",
+    "lat": -20.32,
+    "lon": 118.58,
+    "event_date": "2024-07-08",
+    "notes": "Pilbara iron ore export."
+  },
+  {
+    "event_id": "os_cl_san_antonio",
+    "lat": -33.58,
+    "lon": -71.62,
+    "event_date": "2024-08-18",
+    "notes": "Pacific copper / container."
+  },
+  {
+    "event_id": "os_fo_torshavn",
+    "lat": 62.02,
+    "lon": -6.78,
+    "event_date": "2024-09-05",
+    "notes": "North Atlantic fishing traffic."
+  },
+  {
+    "event_id": "os_gl_nuuk",
+    "lat": 64.18,
+    "lon": -51.72,
+    "event_date": "2024-07-28",
+    "notes": "Labrador Sea approaches."
+  },
+  {
+    "event_id": "os_ae_khalifa",
+    "lat": 24.78,
+    "lon": 54.68,
+    "event_date": "2024-08-06",
+    "notes": "Khalifa Port (Abu Dhabi); transshipment growth (industry reports)."
+  },
+  {
+    "event_id": "os_vn_cai_mep",
+    "lat": 10.55,
+    "lon": 107.02,
+    "event_date": "2024-07-11",
+    "notes": "Cai Mep\u2013Thi Vai; Vietnam manufacturing export corridor."
+  },
+  {
+    "event_id": "os_mt_marsaxlokk",
+    "lat": 35.82,
+    "lon": 14.54,
+    "event_date": "2024-09-03",
+    "notes": "Marsaxlokk Freeport; central Med relay hub."
+  },
+  {
+    "event_id": "os_gb_london_gateway",
+    "lat": 51.51,
+    "lon": 0.5,
+    "event_date": "2024-07-19",
+    "notes": "Thames Estuary deep-sea terminal; North Sea feeder."
+  },
+  {
+    "event_id": "os_gb_southampton",
+    "lat": 50.9,
+    "lon": -1.4,
+    "event_date": "2024-08-17",
+    "notes": "Solent container / cruise traffic."
+  },
+  {
+    "event_id": "os_cn_yangpu",
+    "lat": 19.73,
+    "lon": 109.18,
+    "event_date": "2024-06-14",
+    "notes": "Hainan Yangpu; southern China shipping belt."
+  },
+  {
+    "event_id": "os_cn_zhanjiang",
+    "lat": 21.2,
+    "lon": 110.38,
+    "event_date": "2024-07-27",
+    "notes": "Leizhou Peninsula hub; Beibu Gulf."
+  },
+  {
+    "event_id": "os_cn_dalian",
+    "lat": 38.92,
+    "lon": 121.65,
+    "event_date": "2024-09-09",
+    "notes": "Bohai/Yellow Sea northeast gateway."
+  },
+  {
+    "event_id": "os_cn_xiamen",
+    "lat": 24.48,
+    "lon": 118.18,
+    "event_date": "2024-08-04",
+    "notes": "Taiwan Strait western container port."
+  },
+  {
+    "event_id": "os_cn_fuzhou",
+    "lat": 26.05,
+    "lon": 119.72,
+    "event_date": "2024-07-03",
+    "notes": "East China Sea approaches."
+  },
+  {
+    "event_id": "os_cn_lianyungang",
+    "lat": 34.75,
+    "lon": 119.45,
+    "event_date": "2024-06-21",
+    "notes": "Yellow Sea rail-sea intermodal hub."
+  },
+  {
+    "event_id": "os_cn_yantai",
+    "lat": 37.55,
+    "lon": 121.38,
+    "event_date": "2024-08-29",
+    "notes": "Shandong peninsula port approaches."
+  },
+  {
+    "event_id": "os_cn_weihai",
+    "lat": 37.5,
+    "lon": 122.12,
+    "event_date": "2024-07-16",
+    "notes": "Bohai Sea fishing and traffic mix."
+  },
+  {
+    "event_id": "os_cn_zhuhai",
+    "lat": 22.28,
+    "lon": 113.58,
+    "event_date": "2024-06-09",
+    "notes": "Pearl River estuary feeder ports."
+  },
+  {
+    "event_id": "os_si_koper",
+    "lat": 45.55,
+    "lon": 13.73,
+    "event_date": "2024-09-14",
+    "notes": "Adriatic northern gateway."
+  },
+  {
+    "event_id": "os_fr_marseille",
+    "lat": 43.32,
+    "lon": 5.32,
+    "event_date": "2024-08-11",
+    "notes": "Golfe de Fos anchorage approaches."
+  },
+  {
+    "event_id": "os_es_barcelona",
+    "lat": 41.35,
+    "lon": 2.17,
+    "event_date": "2024-07-24",
+    "notes": "Western Med hub; dense ferry and cargo mix."
+  },
+  {
+    "event_id": "os_pt_sines",
+    "lat": 37.95,
+    "lon": -8.87,
+    "event_date": "2024-09-16",
+    "notes": "Atlantic Europe deep-water hub."
+  },
+  {
+    "event_id": "os_eg_damietta",
+    "lat": 31.42,
+    "lon": 31.82,
+    "event_date": "2024-06-11",
+    "notes": "Nile delta east Mediterranean container."
+  },
+  {
+    "event_id": "os_tn_bizerte",
+    "lat": 37.28,
+    "lon": 9.87,
+    "event_date": "2024-08-07",
+    "notes": "Central Med coastal traffic."
+  },
+  {
+    "event_id": "os_dz_skikda",
+    "lat": 36.88,
+    "lon": 6.9,
+    "event_date": "2024-07-29",
+    "notes": "Algerian hydrocarbon export port approaches."
+  },
+  {
+    "event_id": "os_tr_izmir",
+    "lat": 38.42,
+    "lon": 27.13,
+    "event_date": "2024-09-04",
+    "notes": "Aegean east hub."
+  },
+  {
+    "event_id": "os_cy_limassol",
+    "lat": 34.68,
+    "lon": 33.04,
+    "event_date": "2024-08-19",
+    "notes": "Eastern Med transshipment."
+  },
+  {
+    "event_id": "os_ua_chornomorsk",
+    "lat": 46.3,
+    "lon": 30.65,
+    "event_date": "2024-06-07",
+    "notes": "Black Sea grain / container approaches."
+  },
+  {
+    "event_id": "os_ge_poti",
+    "lat": 42.15,
+    "lon": 41.68,
+    "event_date": "2024-07-31",
+    "notes": "Caucasus feeder / Black Sea."
+  },
+  {
+    "event_id": "os_mx_altamira",
+    "lat": 22.48,
+    "lon": -97.87,
+    "event_date": "2024-08-13",
+    "notes": "Gulf of Mexico industrial port."
+  },
+  {
+    "event_id": "os_us_jacksonville",
+    "lat": 30.32,
+    "lon": -81.65,
+    "event_date": "2024-09-11",
+    "notes": "St. Johns River mouth; US East auto hub."
+  },
+  {
+    "event_id": "os_us_norfolk",
+    "lat": 36.92,
+    "lon": -76.33,
+    "event_date": "2024-08-02",
+    "notes": "Hampton Roads Navy/cargo mix."
+  },
+  {
+    "event_id": "os_us_baltimore",
+    "lat": 39.27,
+    "lon": -76.58,
+    "event_date": "2024-07-07",
+    "notes": "Chesapeake Bay container approaches."
+  },
+  {
+    "event_id": "os_us_boston",
+    "lat": 42.35,
+    "lon": -71.02,
+    "event_date": "2024-09-21",
+    "notes": "Massachusetts Bay traffic."
+  },
+  {
+    "event_id": "os_us_tampa",
+    "lat": 27.85,
+    "lon": -82.55,
+    "event_date": "2024-06-26",
+    "notes": "Gulf of Mexico west Florida hub."
+  },
+  {
+    "event_id": "os_us_corpus_christi",
+    "lat": 27.82,
+    "lon": -97.4,
+    "event_date": "2024-08-24",
+    "notes": "Western Gulf tanker and bulker lanes."
+  },
+  {
+    "event_id": "os_us_san_diego",
+    "lat": 32.68,
+    "lon": -117.12,
+    "event_date": "2024-07-13",
+    "notes": "Southern California border Pacific traffic."
+  },
+  {
+    "event_id": "os_pr_san_juan",
+    "lat": 18.43,
+    "lon": -66.12,
+    "event_date": "2024-08-09",
+    "notes": "Caribbean transshipment hub."
+  },
+  {
+    "event_id": "os_jm_kingston",
+    "lat": 17.98,
+    "lon": -76.83,
+    "event_date": "2024-09-07",
+    "notes": "Jamaica relay; major cruise and cargo."
+  },
+  {
+    "event_id": "os_br_rio_grande",
+    "lat": -32.05,
+    "lon": -52.1,
+    "event_date": "2024-07-21",
+    "notes": "Patos Lagoon access; southern Brazil hub."
+  },
+  {
+    "event_id": "os_br_pecem",
+    "lat": -3.53,
+    "lon": -38.78,
+    "event_date": "2024-08-15",
+    "notes": "NE Brazil deep-water iron / industry."
+  },
+  {
+    "event_id": "os_br_fortaleza",
+    "lat": -3.72,
+    "lon": -38.48,
+    "event_date": "2024-06-17",
+    "notes": "Equatorial Atlantic approaches."
+  },
+  {
+    "event_id": "os_cg_pointe_noire",
+    "lat": -4.78,
+    "lon": 11.88,
+    "event_date": "2024-09-19",
+    "notes": "Gulf of Guinea oil export anchorage."
+  },
+  {
+    "event_id": "os_na_walvis_bay",
+    "lat": -22.95,
+    "lon": 14.5,
+    "event_date": "2024-08-21",
+    "notes": "Benguela current fishing and bulk traffic."
+  },
+  {
+    "event_id": "os_mu_port_louis",
+    "lat": -20.15,
+    "lon": 57.5,
+    "event_date": "2024-07-09",
+    "notes": "Indian Ocean transshipment / sugar export."
+  },
+  {
+    "event_id": "os_in_kandla",
+    "lat": 23.03,
+    "lon": 70.22,
+    "event_date": "2024-08-26",
+    "notes": "Gulf of Kutch bulk and container."
+  },
+  {
+    "event_id": "os_in_haldia",
+    "lat": 22.03,
+    "lon": 88.08,
+    "event_date": "2024-06-29",
+    "notes": "Hooghly estuary industrial traffic."
+  },
+  {
+    "event_id": "os_in_visakhapatnam",
+    "lat": 17.68,
+    "lon": 83.28,
+    "event_date": "2024-09-13",
+    "notes": "Bay of Bengal east coast hub."
+  },
+  {
+    "event_id": "os_in_chennai",
+    "lat": 13.1,
+    "lon": 80.3,
+    "event_date": "2024-07-26",
+    "notes": "Coromandel Coast container."
+  },
+  {
+    "event_id": "os_in_tuticorin",
+    "lat": 8.82,
+    "lon": 78.2,
+    "event_date": "2024-08-30",
+    "notes": "Gulf of Mannar approaches."
+  },
+  {
+    "event_id": "os_in_mormugao",
+    "lat": 15.41,
+    "lon": 73.8,
+    "event_date": "2024-06-16",
+    "notes": "Arabian Sea iron ore export."
+  },
+  {
+    "event_id": "os_pk_port_qasim",
+    "lat": 24.77,
+    "lon": 67.33,
+    "event_date": "2024-07-17",
+    "notes": "Indus delta industrial port."
+  },
+  {
+    "event_id": "os_pk_gwadar",
+    "lat": 25.12,
+    "lon": 62.33,
+    "event_date": "2024-09-06",
+    "notes": "Arabian Sea western approaches."
+  },
+  {
+    "event_id": "os_bd_mongla",
+    "lat": 22.48,
+    "lon": 89.6,
+    "event_date": "2024-08-08",
+    "notes": "Sundarbans estuary bulk traffic."
+  },
+  {
+    "event_id": "os_my_pasir_gudang",
+    "lat": 1.45,
+    "lon": 103.9,
+    "event_date": "2024-07-04",
+    "notes": "Johor Strait dense AIS."
+  },
+  {
+    "event_id": "os_my_labuan",
+    "lat": 5.28,
+    "lon": 115.25,
+    "event_date": "2024-09-17",
+    "notes": "Borneo offshore supply / Brunei approaches."
+  },
+  {
+    "event_id": "os_id_makassar",
+    "lat": -5.12,
+    "lon": 119.42,
+    "event_date": "2024-06-27",
+    "notes": "Makassar Strait hub."
+  },
+  {
+    "event_id": "os_id_bitung",
+    "lat": 1.44,
+    "lon": 125.2,
+    "event_date": "2024-08-23",
+    "notes": "Celebes Sea Pacific approaches."
+  },
+  {
+    "event_id": "os_id_jayapura",
+    "lat": -2.53,
+    "lon": 140.72,
+    "event_date": "2024-07-23",
+    "notes": "Pacific western New Guinea hub."
+  },
+  {
+    "event_id": "os_ph_batangas",
+    "lat": 13.75,
+    "lon": 121.05,
+    "event_date": "2024-09-10",
+    "notes": "Verde Island Passage feeder."
+  },
+  {
+    "event_id": "os_ph_subic",
+    "lat": 14.82,
+    "lon": 120.28,
+    "event_date": "2024-08-16",
+    "notes": "Luzon west coast hub."
+  },
+  {
+    "event_id": "os_il_haifa",
+    "lat": 32.82,
+    "lon": 34.98,
+    "event_date": "2024-07-15",
+    "notes": "Eastern Mediterranean major port."
+  },
+  {
+    "event_id": "os_il_eilat",
+    "lat": 29.55,
+    "lon": 34.95,
+    "event_date": "2024-08-03",
+    "notes": "Gulf of Aqaba southern approaches."
+  },
+  {
+    "event_id": "os_bj_cotonou",
+    "lat": 6.35,
+    "lon": 2.42,
+    "event_date": "2024-06-19",
+    "notes": "Bight of Benin container relay."
+  },
+  {
+    "event_id": "os_tg_lome",
+    "lat": 6.13,
+    "lon": 1.28,
+    "event_date": "2024-09-02",
+    "notes": "Gulf of Guinea transshipment growth."
+  },
+  {
+    "event_id": "os_gh_takoradi",
+    "lat": 4.88,
+    "lon": -1.75,
+    "event_date": "2024-07-30",
+    "notes": "West Africa bulk / offshore supply."
+  },
+  {
+    "event_id": "os_cm_douala",
+    "lat": 4.05,
+    "lon": 9.7,
+    "event_date": "2024-08-18",
+    "notes": "Wouri estuary industrial traffic."
+  },
+  {
+    "event_id": "os_ga_libreville",
+    "lat": 0.39,
+    "lon": 9.45,
+    "event_date": "2024-07-01",
+    "notes": "Gabon estuary oil and cargo."
+  },
+  {
+    "event_id": "os_gq_bata",
+    "lat": 1.85,
+    "lon": 9.78,
+    "event_date": "2024-09-08",
+    "notes": "Gulf of Guinea Equatorial Guinea hub."
+  },
+  {
+    "event_id": "os_ao_lobito",
+    "lat": -12.35,
+    "lon": 13.55,
+    "event_date": "2024-08-05",
+    "notes": "Benguela railway mineral export."
+  },
+  {
+    "event_id": "os_za_richards_bay",
+    "lat": -28.78,
+    "lon": 32.05,
+    "event_date": "2024-07-12",
+    "notes": "Coal and mineral bulk terminal."
+  },
+  {
+    "event_id": "os_za_gqeberha",
+    "lat": -33.95,
+    "lon": 25.65,
+    "event_date": "2024-09-14",
+    "notes": "Algoa Bay container and automotive."
+  },
+  {
+    "event_id": "os_mz_maputo",
+    "lat": -25.97,
+    "lon": 32.58,
+    "event_date": "2024-08-12",
+    "notes": "Maputo Bay southern Africa hub."
+  },
+  {
+    "event_id": "os_mz_beira",
+    "lat": -19.82,
+    "lon": 34.85,
+    "event_date": "2024-06-13",
+    "notes": "Mozambique Channel bulk traffic."
+  },
+  {
+    "event_id": "os_dj_djibouti",
+    "lat": 11.6,
+    "lon": 43.15,
+    "event_date": "2024-09-18",
+    "notes": "Bab el-Mandeb western anchorage."
+  },
+  {
+    "event_id": "os_so_mogadishu",
+    "lat": 2.03,
+    "lon": 45.35,
+    "event_date": "2024-07-28",
+    "notes": "Indian Ocean Horn feeder."
+  },
+  {
+    "event_id": "os_lk_trincomalee",
+    "lat": 8.58,
+    "lon": 81.23,
+    "event_date": "2024-08-14",
+    "notes": "Bay of Bengal natural deep harbour."
+  },
+  {
+    "event_id": "os_mv_male",
+    "lat": 4.17,
+    "lon": 73.51,
+    "event_date": "2024-09-01",
+    "notes": "Atoll state dense coastal traffic."
+  },
+  {
+    "event_id": "os_sc_victoria",
+    "lat": -4.62,
+    "lon": 55.45,
+    "event_date": "2024-07-20",
+    "notes": "Indian Ocean tuna / transshipment."
+  },
+  {
+    "event_id": "os_re_le_port",
+    "lat": -20.92,
+    "lon": 55.3,
+    "event_date": "2024-08-27",
+    "notes": "R\u00e9union Indian Ocean hub."
+  },
+  {
+    "event_id": "os_nc_noumea",
+    "lat": -22.28,
+    "lon": 166.45,
+    "event_date": "2024-09-05",
+    "notes": "Pacific nickel export hub."
+  },
+  {
+    "event_id": "os_pf_papeete",
+    "lat": -17.54,
+    "lon": -149.57,
+    "event_date": "2024-07-14",
+    "notes": "Society Islands inter-island traffic."
+  },
+  {
+    "event_id": "os_fj_suva",
+    "lat": -18.12,
+    "lon": 178.42,
+    "event_date": "2024-08-01",
+    "notes": "Pacific hub; reef-limited fairways."
+  },
+  {
+    "event_id": "os_sb_honiara",
+    "lat": -9.43,
+    "lon": 159.95,
+    "event_date": "2024-06-24",
+    "notes": "Solomon Sea timber / bulk export."
+  },
+  {
+    "event_id": "os_pg_lae",
+    "lat": -6.72,
+    "lon": 146.98,
+    "event_date": "2024-09-12",
+    "notes": "Huon Gulf industrial port."
+  },
+  {
+    "event_id": "os_au_darwin",
+    "lat": -12.47,
+    "lon": 130.85,
+    "event_date": "2024-08-19",
+    "notes": "Timor Sea LNG and defence traffic."
+  },
+  {
+    "event_id": "os_au_townsville",
+    "lat": -19.25,
+    "lon": 146.85,
+    "event_date": "2024-07-08",
+    "notes": "Great Barrier Reef pilot approaches."
+  },
+  {
+    "event_id": "os_au_brisbane",
+    "lat": -27.38,
+    "lon": 153.17,
+    "event_date": "2024-09-03",
+    "notes": "Moreton Bay container hub."
+  },
+  {
+    "event_id": "os_au_gladstone",
+    "lat": -23.85,
+    "lon": 151.25,
+    "event_date": "2024-08-11",
+    "notes": "Coral Sea bulk coal / LNG export."
+  },
+  {
+    "event_id": "os_au_newcastle",
+    "lat": -32.92,
+    "lon": 151.78,
+    "event_date": "2024-07-25",
+    "notes": "Hunter River coal export fairway."
+  },
+  {
+    "event_id": "os_tl_dili",
+    "lat": -8.55,
+    "lon": 125.58,
+    "event_date": "2024-06-08",
+    "notes": "Timor Sea north coast hub."
+  },
+  {
+    "event_id": "os_es_bilbao",
+    "lat": 43.35,
+    "lon": -3.05,
+    "event_date": "2024-09-15",
+    "notes": "Bay of Biscay industrial port."
+  },
+  {
+    "event_id": "os_pt_leixoes",
+    "lat": 41.18,
+    "lon": -8.7,
+    "event_date": "2024-07-18",
+    "notes": "Douro estuary approaches."
+  },
+  {
+    "event_id": "os_ie_dublin",
+    "lat": 53.35,
+    "lon": -6.2,
+    "event_date": "2024-08-22",
+    "notes": "Irish Sea Ro-Ro and container."
+  },
+  {
+    "event_id": "os_ie_cork",
+    "lat": 51.9,
+    "lon": -8.42,
+    "event_date": "2024-09-04",
+    "notes": "Celtic Sea pharma / food export."
+  },
+  {
+    "event_id": "os_gb_belfast",
+    "lat": 54.62,
+    "lon": -5.9,
+    "event_date": "2024-07-06",
+    "notes": "North Channel feeder traffic."
+  },
+  {
+    "event_id": "os_dk_esbjerg",
+    "lat": 55.47,
+    "lon": 8.45,
+    "event_date": "2024-08-28",
+    "notes": "North Sea offshore wind / supply."
+  },
+  {
+    "event_id": "os_dk_aarhus",
+    "lat": 56.15,
+    "lon": 10.22,
+    "event_date": "2024-09-07",
+    "notes": "Kattegat container hub."
+  },
+  {
+    "event_id": "os_pl_gdynia",
+    "lat": 54.52,
+    "lon": 18.55,
+    "event_date": "2024-07-22",
+    "notes": "Gda\u0144sk Bay tri-city traffic."
+  },
+  {
+    "event_id": "os_lv_riga",
+    "lat": 56.96,
+    "lon": 24.08,
+    "event_date": "2024-08-05",
+    "notes": "Daugava estuary Baltic hub."
+  },
+  {
+    "event_id": "os_lt_klaipeda",
+    "lat": 55.7,
+    "lon": 21.13,
+    "event_date": "2024-09-11",
+    "notes": "Curonian Lagoon approaches."
+  },
+  {
+    "event_id": "os_ru_ust_luga",
+    "lat": 59.68,
+    "lon": 28.42,
+    "event_date": "2024-06-28",
+    "notes": "Gulf of Finland bulk export."
+  },
+  {
+    "event_id": "os_ru_arkhangelsk",
+    "lat": 64.52,
+    "lon": 40.55,
+    "event_date": "2024-07-31",
+    "notes": "White Sea seasonal navigation."
+  },
+  {
+    "event_id": "os_ru_murmansk_outer",
+    "lat": 69.1,
+    "lon": 33.42,
+    "event_date": "2024-08-20",
+    "notes": "Barents Sea ice-edge traffic context."
+  },
+  {
+    "event_id": "os_jp_naha",
+    "lat": 26.22,
+    "lon": 127.68,
+    "event_date": "2024-09-09",
+    "notes": "Ryukyu chain Pacific feeder."
+  },
+  {
+    "event_id": "os_jp_ishigaki",
+    "lat": 24.34,
+    "lon": 124.15,
+    "event_date": "2024-07-10",
+    "notes": "East China Sea fishing and traffic."
+  },
+  {
+    "event_id": "os_cp_cook_strait",
+    "lat": -41.28,
+    "lon": 174.0,
+    "event_date": "2024-08-14",
+    "notes": "Cook Strait ferry and cargo separation."
+  },
+  {
+    "event_id": "os_cp_magellan",
+    "lat": -52.95,
+    "lon": -70.85,
+    "event_date": "2024-09-02",
+    "notes": "Strait of Magellan pilotage zone."
+  },
+  {
+    "event_id": "os_cp_drake_passage_north",
+    "lat": -55.5,
+    "lon": -65.2,
+    "event_date": "2024-01-15",
+    "notes": "Southern Ocean research / fishing traffic (summer window)."
+  },
+  {
+    "event_id": "os_cp_lombok",
+    "lat": -8.5,
+    "lon": 116.0,
+    "event_date": "2024-08-07",
+    "notes": "Indonesian throughflow alternative route."
+  },
+  {
+    "event_id": "os_cp_sunda_strait",
+    "lat": -5.92,
+    "lon": 105.88,
+    "event_date": "2024-07-19",
+    "notes": "Java Sea\u2013Indian Ocean chokepoint."
+  },
+  {
+    "event_id": "os_cp_mozambique_channel",
+    "lat": -16.0,
+    "lon": 42.5,
+    "event_date": "2024-09-14",
+    "notes": "East Africa\u2013Madagascar bulk lane."
+  },
+  {
+    "event_id": "os_cp_cape_good_hope",
+    "lat": -34.35,
+    "lon": 18.48,
+    "event_date": "2024-08-30",
+    "notes": "Agulhas current rounding traffic."
+  },
+  {
+    "event_id": "os_cp_north_sea_central",
+    "lat": 56.0,
+    "lon": 3.5,
+    "event_date": "2024-07-27",
+    "notes": "North Sea offshore dense AIS."
+  },
+  {
+    "event_id": "os_cp_celtic_sea",
+    "lat": 51.2,
+    "lon": -6.5,
+    "event_date": "2024-09-06",
+    "notes": "Atlantic approaches UK\u2013Ireland."
+  },
+  {
+    "event_id": "os_ca_st_johns",
+    "lat": 47.58,
+    "lon": -52.68,
+    "event_date": "2024-08-17",
+    "notes": "Grand Banks fishing and offshore."
+  },
+  {
+    "event_id": "os_gl_paamiut",
+    "lat": 62.0,
+    "lon": -49.52,
+    "event_date": "2024-07-21",
+    "notes": "Labrador Sea coastal supply."
+  },
+  {
+    "event_id": "os_ar_ushuaia",
+    "lat": -54.8,
+    "lon": -68.3,
+    "event_date": "2024-12-10",
+    "notes": "Beagle Channel cruise and research traffic."
+  },
+  {
+    "event_id": "os_fk_stanley",
+    "lat": -51.7,
+    "lon": -57.85,
+    "event_date": "2024-02-14",
+    "notes": "Falklands fishing fleet anchorage."
+  },
+  {
+    "event_id": "os_cn_rizhao",
+    "lat": 35.38,
+    "lon": 119.55,
+    "event_date": "2024-08-10",
+    "notes": "Shandong coal and bulk export."
+  },
+  {
+    "event_id": "os_tw_taichung",
+    "lat": 24.28,
+    "lon": 120.52,
+    "event_date": "2024-07-16",
+    "notes": "Taiwan Strait central port."
+  },
+  {
+    "event_id": "os_jp_kitakyushu",
+    "lat": 33.88,
+    "lon": 130.88,
+    "event_date": "2024-09-01",
+    "notes": "Kanmon Strait approaches."
+  },
+  {
+    "event_id": "os_vn_danang",
+    "lat": 16.1,
+    "lon": 108.22,
+    "event_date": "2024-08-04",
+    "notes": "South China Sea central Vietnam hub."
+  },
+  {
+    "event_id": "os_bd_payra",
+    "lat": 22.28,
+    "lon": 90.28,
+    "event_date": "2024-07-02",
+    "notes": "Bay of Bengal new deep-water approaches."
+  },
+  {
+    "event_id": "os_eg_safaga",
+    "lat": 26.75,
+    "lon": 33.93,
+    "event_date": "2024-09-17",
+    "notes": "Red Sea resort and cargo feeder."
+  },
+  {
+    "event_id": "os_sd_port_sudan",
+    "lat": 19.62,
+    "lon": 37.22,
+    "event_date": "2024-06-20",
+    "notes": "Red Sea African hub (baseline maritime)."
+  },
+  {
+    "event_id": "os_er_massawa",
+    "lat": 15.61,
+    "lon": 39.45,
+    "event_date": "2024-08-09",
+    "notes": "Red Sea southern approaches Eritrea."
+  },
+  {
+    "event_id": "os_ye_aden",
+    "lat": 12.78,
+    "lon": 44.98,
+    "event_date": "2024-07-24",
+    "notes": "Gulf of Aden western hub (historical AIS density)."
+  }
+]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 import time
 from dataclasses import dataclass
@@ -47,7 +48,7 @@ class InferenceClient:
         if self._owns_client:
             self._client.close()
 
-    def _sign_headers(self, method: str, url: str) -> dict[str, str]:
+    def _sign_headers(self, method: str, url: str, *, body: bytes = b"") -> dict[str, str]:
         sec = (self._config.hmac_secret or "").strip()
         if not sec:
             return {}
@@ -57,11 +58,13 @@ class InferenceClient:
             path = "/" + path
         ts = str(int(time.time()))
         nonce = secrets.token_hex(8)
-        canonical = f"{ts}\n{nonce}\n{method.upper()}\n{path}\n"
+        body_hash = hashlib.sha256(body).hexdigest()
+        canonical = f"{ts}\n{nonce}\n{method.upper()}\n{path}\n{body_hash}\n"
         sig = hmac.new(sec.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256).hexdigest()
         return {
             "X-Nutonic-Timestamp": ts,
             "X-Nutonic-Nonce": nonce,
+            "X-Nutonic-Content-SHA256": body_hash,
             "X-Nutonic-Signature": sig,
         }
 
@@ -82,7 +85,10 @@ class InferenceClient:
         extra_headers: dict[str, str] | None = None,
     ) -> dict:
         """POST JSON with the same HMAC signing rules as ``GET`` (path from URL, IMP-092)."""
-        headers: dict[str, str] = dict(self._sign_headers("POST", url))
+        body = _json_bytes(json_body) if json_body is not None else b""
+        headers: dict[str, str] = dict(self._sign_headers("POST", url, body=body))
+        if json_body is not None:
+            headers.setdefault("Content-Type", "application/json")
         if extra_headers:
             headers.update(extra_headers)
         timeout_kw: dict = {}
@@ -95,23 +101,33 @@ class InferenceClient:
                 write=wto,
                 pool=cto,
             )
-        r = self._client.post(url, json=json_body, headers=headers or None, **timeout_kw)
+        r = self._client.post(
+            url,
+            content=body if json_body is not None else None,
+            headers=headers or None,
+            **timeout_kw,
+        )
         r.raise_for_status()
         return r.json()
 
     def probe_health_origin(self, origin: str) -> bool:
-        """GET ``{origin}/health`` — ``True`` on 2xx JSON, ``False`` on any failure (IMP-092)."""
+        """GET ``{origin}/health`` and require an explicitly healthy JSON body."""
         base = origin.strip().rstrip("/")
         if not base:
             return False
         try:
-            self.get_json(f"{base}/health")
+            data = self.get_json(f"{base}/health")
         except Exception:
             return False
-        return True
+        status = str(data.get("status") or "").strip().lower()
+        return status in {"ok", "healthy"}
 
     def __enter__(self) -> InferenceClient:
         return self
 
     def __exit__(self, *_exc: object) -> None:
         self.close()
+
+
+def _json_bytes(json_body: dict) -> bytes:
+    return json.dumps(json_body, separators=(",", ":"), sort_keys=True).encode("utf-8")

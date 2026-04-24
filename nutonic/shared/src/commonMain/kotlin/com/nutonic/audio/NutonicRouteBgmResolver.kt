@@ -29,7 +29,13 @@ private fun resolveShellBgm(shell: NutonicRoute.Shell): NutonicBgmTrack =
         ShellDetail.IntelDashboard -> NutonicBgmTrack.MusicIntel
         ShellDetail.RankGlobal -> NutonicBgmTrack.MusicRank
         ShellDetail.SetupProtocol -> NutonicBgmTrack.MusicSetup
-        ShellDetail.ProCoordinateDashboard -> NutonicBgmTrack.MusicPro
+        ShellDetail.ProCoordinateDashboard,
+        ShellDetail.ProFireWatch,
+        ShellDetail.ProOceanScout,
+        ShellDetail.ProLandShift,
+        ShellDetail.ProFloodPulse,
+        ShellDetail.ProBriefComposer,
+        -> NutonicBgmTrack.MusicPro
     }
 
 private fun tabDefault(tab: MainTab): NutonicBgmTrack =

@@ -117,11 +117,15 @@ def load_s2l2a_patch_np(
     asset_keys: Sequence[str] | None,
     max_items: int,
     include_scl: bool = False,
-) -> tuple[np.ndarray, dict[str, Any], np.ndarray | None]:
+) -> S2PatchResult:
     """
-    Return ``stack`` float32 ``(12, patch_hw, patch_hw)`` in TerraMind band order,
+    Return the shared ``S2PatchResult`` shape used by TiM local:
+    ``stack`` float32 ``(12, patch_hw, patch_hw)`` in TerraMind band order,
     metadata (item id, datetime, asset keys used), and optional SCL patch
     ``(patch_hw, patch_hw)`` float32 (class codes) when ``include_scl`` is true.
+
+    ``S2PatchResult`` is a ``NamedTuple``, so existing tuple-unpack callers remain
+    compatible while both worker families expose the same semantic return type.
     """
     rasterio = _require_stac_rasterio()
     from pystac_client import Client

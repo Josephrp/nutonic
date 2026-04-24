@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import time
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -360,23 +361,65 @@ def test_pro_job_stub_when_enabled(tmp_path, monkeypatch: pytest.MonkeyPatch) ->
     body = j.json()
     jid = body["job_id"]
     assert body.get("inference_upstream_ok") is None
-    s1 = c.get(f"/api/v1/pro/jobs/{jid}", headers=h)
-    assert s1.status_code == 200
-    assert s1.json()["status"] == "queued"
-    s2 = c.get(f"/api/v1/pro/jobs/{jid}", headers=h)
-    assert s2.json()["status"] == "completed"
+    status = None
+    for _ in range(50):
+        s1 = c.get(f"/api/v1/pro/jobs/{jid}", headers=h)
+        assert s1.status_code == 200
+        status = s1.json()
+        if status["status"] == "completed":
+            break
+        time.sleep(0.02)
+    assert status is not None
+    assert status["status"] == "completed"
+    assert status["materialization_summary"]["mode"] == "no_worker_configured"
 
 
-def test_pro_job_inference_upstream_false_when_worker_unreachable(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pro_job_required_origin_failure_surfaces_on_status(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FEATURE_PRO_JOBS", "true")
     monkeypatch.setenv("NUTONIC_LEADERBOARD_DATABASE_URL", "memory")
     monkeypatch.setenv("NUTONIC_INFERENCE_WORKER_BASE_URL", "http://127.0.0.1:59998")
+    monkeypatch.setenv("NUTONIC_PRO_REQUIRED_ORIGINS", "inference_worker")
+    monkeypatch.setenv("NUTONIC_PRO_OPTIONAL_ORIGINS", "")
     import nutonic_server.main as main
+    import nutonic_server.pro_jobs_runner as pro_jobs_runner
 
     importlib.reload(main)
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return False
+
+        def post_json(self, *a, **k):
+            raise AssertionError("should not POST when required probe fails")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(pro_jobs_runner, "InferenceClient", FakeIC)
+
     c = TestClient(main.app)
     tok = c.post("/api/v1/auth/token").json()["access_token"]
     h = {"Authorization": f"Bearer {tok}"}
     j = c.post("/api/v1/pro/jobs", headers=h, json={"center_lat": 1.0, "center_lon": 2.0})
     assert j.status_code == 200
-    assert j.json().get("inference_upstream_ok") is False
+    assert j.json().get("inference_upstream_ok") is None
+    failed = None
+    for _ in range(50):
+        s = c.get(f"/api/v1/pro/jobs/{j.json()['job_id']}", headers=h)
+        assert s.status_code == 200
+        failed = s.json()
+        if failed["status"] == "failed":
+            break
+        time.sleep(0.02)
+    assert failed is not None
+    assert failed["status"] == "failed"
+    assert failed["error_class"] == "worker_unreachable"

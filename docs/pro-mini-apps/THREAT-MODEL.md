@@ -2,7 +2,9 @@
 
 ## Request Integrity
 
-Server-to-worker requests use `X-Nutonic-Timestamp`, `X-Nutonic-Nonce`, and `X-Nutonic-Signature`. Workers reject missing signatures, timestamps outside the skew window, invalid signatures, and replayed nonces within the nonce TTL/cache window.
+Server-to-worker requests use `X-Nutonic-Timestamp`, `X-Nutonic-Nonce`, `X-Nutonic-Content-SHA256`, and `X-Nutonic-Signature`. Workers reject missing signatures, body-hash mismatches, timestamps outside the skew window, invalid signatures, and replayed nonces within the nonce TTL/cache window.
+
+The skew and in-process nonce cache cap are configurable with `NUTONIC_INFERENCE_HMAC_MAX_SKEW_SECONDS` and `NUTONIC_INFERENCE_HMAC_NONCE_CACHE_MAX` (or their non-prefixed `INFERENCE_*` aliases). The cache is process-local: multi-worker or multi-instance deployments still need sticky routing or a shared nonce store if replay resistance must hold across replicas. Treat the in-process cache as a single-worker guardrail, not a distributed replay ledger.
 
 The current canonical string is:
 
@@ -11,9 +13,10 @@ The current canonical string is:
 {nonce}
 {method}
 {path}
+{body_sha256}
 ```
 
-The request body is not included in the HMAC. Production deployments must rely on TLS inside the trusted service boundary for body integrity. If workers are exposed across untrusted networks, update the server and all workers together to include a request body hash in the canonical string.
+The request body hash is always included in the HMAC canonical string. For bodyless requests, `body_sha256` is the SHA-256 of empty bytes.
 
 ## Session Isolation
 

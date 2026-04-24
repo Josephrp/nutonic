@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from threading import Event
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +19,7 @@ def pro_client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> TestClient:
     monkeypatch.setenv("NUTONIC_PRO_MATERIALIZATION_SERVICE_URL", "http://pro.worker.test")
     monkeypatch.setenv("NUTONIC_INFERENCE_HMAC_SECRET", "test-hmac-secret")
     monkeypatch.setenv("NUTONIC_PRO_JOB_DATABASE_URL", f"sqlite:///{tmp_path / 'pro_jobs.db'}")
+    monkeypatch.setenv("NUTONIC_PRO_ARTIFACT_ROOT", str(tmp_path / "pro_artifacts"))
     deps._pro_job_stores.clear()
     deps._pro_job_runners.clear()
     return TestClient(main.app)
@@ -38,6 +40,12 @@ def _wait_for_status(c: TestClient, job_id: str, headers: dict[str, str], expect
             return last
         time.sleep(0.02)
     raise AssertionError(f"job {job_id} did not reach {expected}; last={last}")
+
+
+def _session_id(c: TestClient, headers: dict[str, str]) -> str:
+    r = c.get("/api/v1/debug/session", headers=headers)
+    assert r.status_code == 200
+    return str(r.json()["session_id"])
 
 
 def test_pro_job_calls_materialize_when_health_ok(
@@ -65,7 +73,7 @@ def test_pro_job_calls_materialize_when_health_ok(
                         "mime": "image/png",
                         "width": 512,
                         "height": 512,
-                        "inline_base64": "VERYLONG",
+                        "inline_base64": "aGVsbG8=",
                     },
                 ],
                 "tim_payload": None,
@@ -109,6 +117,97 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert sj["analysis_profile"] == "wildfire"
     assert sj["materialization_summary"]["vlm_artifacts"][0]["role"] == "mapbox_rgb"
     assert "inline_base64" not in sj["materialization_summary"]["vlm_artifacts"][0]
+    assert sj["artifacts"][0]["artifact_id"] == "mapbox_rgb"
+    assert sj["artifacts"][0]["size_bytes"] == 5
+
+    artifact = pro_client.get(
+        f"/api/v1/pro/jobs/{job_id}/artifacts/mapbox_rgb",
+        headers=headers,
+    )
+    assert artifact.status_code == 200
+    assert artifact.content == b"hello"
+
+
+def test_pro_job_calls_brief_stage_when_lfm_url_configured(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NUTONIC_LFM_VL_HINT_SERVICE_URL", "http://lfm.worker.test")
+    posts: list[tuple[str, dict | None]] = []
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return "pro.worker.test" in origin or "lfm.worker.test" in origin
+
+        def post_json(self, url: str, *, json_body=None, read_timeout_s=None, extra_headers=None):
+            posts.append((url, json_body))
+            if url.endswith("/internal/v1/materialize"):
+                return {
+                    "materialization_id": "mid-brief",
+                    "cache_key": "ck-brief",
+                    "vlm_artifacts": [],
+                    "tim_payload": {"branch": "S2L2A_full", "modalities_keys": ["LULC"], "npz_base64": "abc"},
+                    "run_manifest": {"mapbox_center_mode": "user_pin"},
+                }
+            if url.endswith("/v1/pro/brief/fuse"):
+                assert json_body["profile"] == "wildfire"
+                assert json_body["tim_summary"]["branch"] == "S2L2A_full"
+                return {
+                    "executive_summary": "Brief summary",
+                    "key_findings": ["Finding"],
+                    "confidence": "medium",
+                    "recommended_actions": ["Review source artifacts"],
+                    "sections": [{"title": "Summary", "body": "Brief summary", "confidence": "medium"}],
+                    "warnings": [],
+                    "limitations": ["demo"],
+                }
+            raise AssertionError(f"unexpected URL {url}")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(pro_jobs_runner, "InferenceClient", FakeIC)
+
+    headers = _auth_header(pro_client)
+    r = pro_client.post(
+        "/api/v1/pro/jobs",
+        headers=headers,
+        json={
+            "center_lat": 48.86,
+            "center_lon": 2.35,
+            "analysis_profile": "wildfire",
+            "enable_tim": True,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "tim_branch": "S2L2A_full",
+        },
+    )
+    assert r.status_code == 200
+    completed = _wait_for_status(pro_client, r.json()["job_id"], headers, "completed")
+    assert [url for url, _ in posts] == [
+        "http://pro.worker.test/internal/v1/materialize",
+        "http://lfm.worker.test/v1/pro/brief/fuse",
+    ]
+    assert completed["materialization_summary"]["brief_summary"]["executive_summary"] == "Brief summary"
+    assert completed["brief_artifacts"][0]["artifact_id"] == "brief_summary"
+    assert completed["on_device_payload"]["confidence_summary"] == "medium"
+    assert completed["on_device_payload"]["brief_sections"][0]["title"] == "Executive summary"
+    assert completed["on_device_payload"]["brief_sections"][0]["body"] == "Brief summary"
+
+    brief = pro_client.get(
+        f"/api/v1/pro/jobs/{r.json()['job_id']}/artifacts/brief_summary",
+        headers=headers,
+    )
+    assert brief.status_code == 200
+    assert b"Brief summary" in brief.content
 
 
 def test_pro_job_skips_materialize_when_probe_fails(
@@ -147,3 +246,205 @@ def test_pro_job_skips_materialize_when_probe_fails(
     failed = _wait_for_status(pro_client, body["job_id"], headers, "failed")
     assert failed["error_class"] == "worker_unreachable"
     assert "pro_materialization health probe failed" in failed["error_detail"]
+
+
+def test_pro_job_allows_optional_origin_probe_failure(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NUTONIC_INFERENCE_WORKER_BASE_URL", "http://optional.worker.test")
+    monkeypatch.setenv("NUTONIC_PRO_REQUIRED_ORIGINS", "pro_materialization")
+    monkeypatch.setenv("NUTONIC_PRO_OPTIONAL_ORIGINS", "inference_worker")
+    probes: list[str] = []
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            probes.append(origin)
+            return "pro.worker.test" in origin
+
+        def post_json(self, url: str, *, json_body=None, read_timeout_s=None, extra_headers=None):
+            return {
+                "materialization_id": "mid-optional-origin",
+                "cache_key": "ck-optional-origin",
+                "vlm_artifacts": [],
+                "tim_payload": None,
+                "run_manifest": {"mapbox_center_mode": "user_pin"},
+            }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(pro_jobs_runner, "InferenceClient", FakeIC)
+
+    headers = _auth_header(pro_client)
+    r = pro_client.post(
+        "/api/v1/pro/jobs",
+        headers=headers,
+        json={"center_lat": 1.0, "center_lon": 1.0},
+    )
+    assert r.status_code == 200
+    completed = _wait_for_status(pro_client, r.json()["job_id"], headers, "completed")
+    assert completed["materialization_id"] == "mid-optional-origin"
+    assert probes == ["http://optional.worker.test", "http://pro.worker.test"]
+
+
+def test_pro_job_sweeper_recovers_preexisting_queued_job(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posts: list[str] = []
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return "pro.worker.test" in origin
+
+        def post_json(self, url: str, *, json_body=None, read_timeout_s=None, extra_headers=None):
+            posts.append(url)
+            return {
+                "materialization_id": "mid-recovered",
+                "cache_key": "ck-recovered",
+                "vlm_artifacts": [],
+                "tim_payload": None,
+                "run_manifest": {"mapbox_center_mode": "user_pin"},
+            }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(pro_jobs_runner, "InferenceClient", FakeIC)
+    settings = deps.get_settings()
+    store = deps.get_pro_job_store_for_settings(settings)
+    runner = deps.get_pro_job_runner_for_settings(settings, store)
+    record = store.create_job(
+        session_id="session-recovery-test",
+        analysis_profile="brief_only",
+        request_params={"center_lat": 12.0, "center_lon": 13.0},
+    )
+
+    assert runner.sweep_once() == 1
+    last = None
+    for _ in range(50):
+        last = store.get_job(record.job_id)
+        if last is not None and last.status == "completed":
+            break
+        time.sleep(0.02)
+
+    runner.shutdown(grace_seconds=1.0)
+    assert last is not None
+    assert last.status == "completed"
+    assert last.materialization_id == "mid-recovered"
+    assert posts == ["http://pro.worker.test/internal/v1/materialize"]
+
+
+def test_pro_job_status_poll_does_not_mutate_queued_job(pro_client: TestClient) -> None:
+    headers = _auth_header(pro_client)
+    settings = deps.get_settings()
+    store = deps.get_pro_job_store_for_settings(settings)
+    record = store.create_job(
+        session_id=_session_id(pro_client, headers),
+        analysis_profile="brief_only",
+        request_params={"center_lat": 12.0, "center_lon": 13.0},
+    )
+
+    first = pro_client.get(f"/api/v1/pro/jobs/{record.job_id}", headers=headers)
+    second = pro_client.get(f"/api/v1/pro/jobs/{record.job_id}", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["status"] == "queued"
+    assert second.json()["status"] == "queued"
+    assert store.get_job(record.job_id).status == "queued"
+
+
+def test_pro_job_cancel_queued_job(pro_client: TestClient) -> None:
+    headers = _auth_header(pro_client)
+    settings = deps.get_settings()
+    store = deps.get_pro_job_store_for_settings(settings)
+    record = store.create_job(
+        session_id=_session_id(pro_client, headers),
+        analysis_profile="brief_only",
+        request_params={"center_lat": 12.0, "center_lon": 13.0},
+    )
+
+    cancelled = pro_client.post(f"/api/v1/pro/jobs/{record.job_id}/cancel", headers=headers)
+    status = pro_client.get(f"/api/v1/pro/jobs/{record.job_id}", headers=headers)
+
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert status.status_code == 200
+    assert status.json()["status"] == "cancelled"
+    assert status.json()["error_class"] == "cancelled"
+
+
+def test_pro_job_cancel_running_job_after_worker_call_returns(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    post_started = Event()
+    release_post = Event()
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return "pro.worker.test" in origin
+
+        def post_json(self, url: str, *, json_body=None, read_timeout_s=None, extra_headers=None):
+            post_started.set()
+            assert release_post.wait(timeout=2.0), "test did not release blocked worker call"
+            return {
+                "materialization_id": "mid-cancelled",
+                "cache_key": "ck-cancelled",
+                "vlm_artifacts": [],
+                "tim_payload": None,
+                "run_manifest": {"mapbox_center_mode": "user_pin"},
+            }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(pro_jobs_runner, "InferenceClient", FakeIC)
+
+    headers = _auth_header(pro_client)
+    created = pro_client.post(
+        "/api/v1/pro/jobs",
+        headers=headers,
+        json={"center_lat": 1.0, "center_lon": 1.0},
+    )
+    assert created.status_code == 200
+    job_id = created.json()["job_id"]
+    assert post_started.wait(timeout=2.0)
+
+    cancelling = pro_client.post(f"/api/v1/pro/jobs/{job_id}/cancel", headers=headers)
+    assert cancelling.status_code == 200
+    assert cancelling.json()["status"] == "cancelling"
+    release_post.set()
+
+    final = _wait_for_status(pro_client, job_id, headers, "cancelled")
+    assert final["status"] == "cancelled"
+    assert final["materialization_id"] is None

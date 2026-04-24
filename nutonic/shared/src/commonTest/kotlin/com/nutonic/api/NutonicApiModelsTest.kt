@@ -123,4 +123,11 @@ class NutonicApiModelsTest {
         val s = NutonicJson.encodeToString(RankedForfeitIn.serializer(), body)
         assertTrue(s.contains("peer_reveal"))
     }
+
+    @Test
+    fun pro_job_profile_from_wire_defaults_unknown_to_brief_only() {
+        assertEquals(ProJobProfile.OCEANSCOUT_SHIP_DETECTION, ProJobProfile.fromWireOrDefault("vessel_monitoring"))
+        assertEquals(ProJobProfile.BRIEF_ONLY, ProJobProfile.fromWireOrDefault("future_profile"))
+        assertEquals("flood_pulse", ProJobProfile.FLOOD_PULSE.wireToken())
+    }
 }

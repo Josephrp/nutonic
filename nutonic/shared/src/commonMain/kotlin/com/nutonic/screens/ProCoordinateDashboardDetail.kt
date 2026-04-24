@@ -46,6 +46,7 @@ fun ProCoordinateDashboardDetail(
     var centerLat by rememberSaveable { mutableStateOf(34.05) }
     var centerLon by rememberSaveable { mutableStateOf(-118.24) }
     var bboxHalfKm by rememberSaveable { mutableStateOf(5.0) }
+    var mapboxZoom by rememberSaveable { mutableStateOf(12) }
     var profile by rememberSaveable { mutableStateOf(ProJobProfile.BRIEF_ONLY) }
     var statusText by remember { mutableStateOf<String?>(null) }
     var currentJob by remember { mutableStateOf<ProJobStatusOut?>(null) }
@@ -69,11 +70,13 @@ fun ProCoordinateDashboardDetail(
             centerLat = centerLat,
             centerLon = centerLon,
             bboxHalfKm = bboxHalfKm,
+            mapboxZoom = mapboxZoom,
             onCenterChange = { lat, lon ->
                 centerLat = lat
                 centerLon = lon
             },
             onBboxHalfKmChange = { bboxHalfKm = it },
+            onMapboxZoomChange = { mapboxZoom = it },
         )
         ProfileSelector(profile = profile, onProfileChange = { profile = it })
         NutonicPrimaryButton(
@@ -90,6 +93,7 @@ fun ProCoordinateDashboardDetail(
                                     centerLat = centerLat,
                                     centerLon = centerLon,
                                     bboxHalfKm = bboxHalfKm,
+                                    mapboxZoom = mapboxZoom,
                                     analysisProfile = profile,
                                     enableTim = profile != ProJobProfile.BRIEF_ONLY,
                                     sentinelFetchMode = if (profile == ProJobProfile.BRIEF_ONLY) "MINIMAL_RGB" else "TERRAMIND_SPECTRAL",
@@ -133,6 +137,21 @@ fun ProCoordinateDashboardDetail(
             },
             modifier = Modifier.fillMaxWidth(),
         )
+        NutonicGhostButton(
+            text = "Refresh recent jobs",
+            enabled = proEnabled && nutonicApiClient != null,
+            onClick = {
+                val client = nutonicApiClient ?: return@NutonicGhostButton
+                scope.launch {
+                    refreshRecentProJobs(
+                        client = client,
+                        onStatus = { statusText = it },
+                        onJobs = { recentJobs = it },
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
         if (!proEnabled) {
             Text(
                 "PRO jobs are not available on this server.",
@@ -141,7 +160,7 @@ fun ProCoordinateDashboardDetail(
             )
         }
         JobStatusCard(currentJob = currentJob, statusText = statusText)
-        ArtifactGallery(currentJob?.artifacts.orEmpty())
+        ArtifactGallery(mergedArtifacts(currentJob))
         MiniAppHandoff(onOpenMiniApp)
         RecentJobs(recentJobs)
     }
@@ -181,7 +200,7 @@ private fun JobStatusCard(
         val progress = ((currentJob?.progressPct ?: 0).coerceIn(0, 100)) / 100f
         LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         currentJob?.errorClass?.let {
-            Text("Error: $it ${currentJob.errorDetail.orEmpty()}", color = MaterialTheme.colors.error)
+            Text(proErrorCopy(it, currentJob.errorDetail), color = MaterialTheme.colors.error)
         }
     }
 }
@@ -208,7 +227,10 @@ private fun MiniAppHandoff(onOpenMiniApp: (ShellDetail) -> Unit) {
             NutonicGhostButton("Ocean", { onOpenMiniApp(ShellDetail.ProOceanScout) }, Modifier.weight(1f))
             NutonicGhostButton("Land", { onOpenMiniApp(ShellDetail.ProLandShift) }, Modifier.weight(1f))
         }
-        NutonicGhostButton("Brief Composer", { onOpenMiniApp(ShellDetail.ProBriefComposer) }, Modifier.fillMaxWidth().padding(top = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            NutonicGhostButton("Flood", { onOpenMiniApp(ShellDetail.ProFloodPulse) }, Modifier.weight(1f))
+            NutonicGhostButton("Brief Composer", { onOpenMiniApp(ShellDetail.ProBriefComposer) }, Modifier.weight(1f))
+        }
     }
 }
 
@@ -222,5 +244,55 @@ private fun RecentJobs(recentJobs: List<ProJobStatusOut>) {
         recentJobs.forEach { job ->
             Text("${job.jobId.take(8)} · ${job.analysisProfile ?: job.profile.orEmpty()} · ${job.status}")
         }
+    }
+}
+
+private fun mergedArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> {
+    if (job == null) return emptyList()
+    return (
+        job.artifacts.orEmpty() +
+            job.analysisArtifacts.orEmpty() +
+            job.briefArtifacts.orEmpty() +
+            job.onDevicePayload?.overlayRefs.orEmpty()
+    ).distinctBy { artifact -> artifact.artifactId }
+}
+
+private fun proErrorCopy(
+    errorClass: String,
+    detail: String?,
+): String =
+    when (errorClass) {
+        "stac_no_coverage" -> "No satellite imagery was found for this AOI. Try a nearby point or wider date range."
+        "stac_cloud_ceiling" -> "Available scenes are too cloudy. Try a wider date range or a smaller AOI."
+        "worker_timeout" -> "Processing took too long. Retry the job, or reduce the AOI radius."
+        "worker_unreachable" -> "The required analysis service is temporarily unavailable. Try again shortly."
+        "worker_error" -> "The analysis worker failed while processing this job. Retry or choose a different AOI."
+        "input_validation" -> "The job input was rejected. Check coordinates, profile, and AOI radius."
+        "cancelled" -> "The job was cancelled."
+        else -> "Unexpected PRO job error: ${detail.orEmpty().ifBlank { errorClass }}"
+    }
+
+private suspend fun refreshRecentProJobs(
+    client: NutonicApiClient,
+    onStatus: (String) -> Unit,
+    onJobs: (List<ProJobStatusOut>) -> Unit,
+) {
+    onStatus("Requesting session token...")
+    when (val token = client.postAuthToken()) {
+        is ApiResult.Ok -> {
+            onStatus("Loading recent PRO jobs...")
+            when (val jobs = client.listProJobs(token.value.accessToken, limit = 5)) {
+                is ApiResult.Ok -> {
+                    onJobs(jobs.value)
+                    onStatus("Loaded ${jobs.value.size} recent PRO jobs")
+                }
+
+                is ApiResult.HttpFailure -> onStatus(jobs.userMessage)
+                is ApiResult.NetworkFailure -> onStatus("Network: ${jobs.debugMessage}")
+            }
+        }
+
+        is ApiResult.HttpFailure -> onStatus(token.userMessage)
+        is ApiResult.NetworkFailure -> onStatus("Network: ${token.debugMessage}")
     }
 }

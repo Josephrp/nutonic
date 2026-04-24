@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+import math
 from typing import Any, Mapping
 
 import torch
@@ -195,17 +197,98 @@ def _base_profile_block(profile: str, inputs_meta: Mapping[str, Any] | None) -> 
     }
 
 
+def _samples_from_outputs(tim_modality_outputs: Mapping[str, Any]) -> list[float]:
+    samples: list[float] = []
+
+    def visit(value: Any, *, sample_key: bool = False) -> None:
+        if sample_key and isinstance(value, list):
+            samples.extend(_finite_numbers(value))
+            return
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                visit(child, sample_key=str(key) == "sample")
+
+    visit(tim_modality_outputs)
+    return samples
+
+
+def _finite_numbers(values: list[Any]) -> list[float]:
+    out: list[float] = []
+    for value in values:
+        if not isinstance(value, (int, float)):
+            continue
+        number = float(value)
+        if math.isfinite(number):
+            out.append(number)
+    return out
+
+
+def _confidence_bins(samples: list[float]) -> dict[str, int]:
+    if not samples:
+        return {"low": 0, "medium": 0, "high": 0}
+    max_abs = max(abs(v) for v in samples) or 1.0
+    bins = {"low": 0, "medium": 0, "high": 0}
+    for value in samples:
+        score = abs(value) / max_abs
+        if score >= 0.67:
+            bins["high"] += 1
+        elif score >= 0.33:
+            bins["medium"] += 1
+        else:
+            bins["low"] += 1
+    return bins
+
+
+def _pct(count: int, total: int) -> float | None:
+    if total <= 0:
+        return None
+    return round((count / total) * 100.0, 3)
+
+
+def _stac_cloud_pct(inputs_meta: Mapping[str, Any] | None) -> float | None:
+    if not isinstance(inputs_meta, Mapping):
+        return None
+    raw = inputs_meta.get("s2_stac")
+    if not isinstance(raw, Mapping):
+        return None
+    value = raw.get("eo_cloud_cover")
+    if isinstance(value, (int, float)) and math.isfinite(float(value)):
+        return float(value)
+    return None
+
+
+def _sample_histogram(samples: list[float], *, max_bins: int = 8) -> list[dict[str, Any]]:
+    if not samples:
+        return []
+    rounded = [int(round(value)) for value in samples if math.isfinite(value)]
+    counts = Counter(rounded)
+    total = sum(counts.values())
+    return [
+        {"value": value, "count": count, "pct": _pct(count, total)}
+        for value, count in counts.most_common(max_bins)
+    ]
+
+
 def _wildfire_analytics(
     tim_modality_outputs: Mapping[str, Any],
     inputs_meta: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     out = _base_profile_block("wildfire", inputs_meta)
+    samples = _samples_from_outputs(tim_modality_outputs)
+    bins = _confidence_bins(samples)
+    elevated_count = bins["medium"] + bins["high"]
     out["burn_change"] = {
-        "changed_area_pct": None,
-        "hotspot_count": 0,
-        "confidence_bins": {"low": 0, "medium": 0, "high": 0},
+        "changed_area_pct": _pct(elevated_count, len(samples)),
+        "hotspot_count": bins["high"],
+        "confidence_bins": bins,
         "source_keys": sorted(tim_modality_outputs.keys()),
-        "thresholds": {"burn_index_delta": None, "min_cluster_px": None},
+        "sample_count": len(samples),
+        "metric_source": "tim_output_samples",
+        "thresholds": {
+            "normalized_signal_medium": 0.33,
+            "normalized_signal_high": 0.67,
+            "min_cluster_px": None,
+        },
     }
     return out
 
@@ -215,12 +298,16 @@ def _flood_analytics(
     inputs_meta: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     out = _base_profile_block("flood_pulse", inputs_meta)
+    samples = _samples_from_outputs(tim_modality_outputs)
+    bins = _confidence_bins(samples)
     out["water_change"] = {
-        "expanded_area_pct": None,
-        "inundation_polygon_count": 0,
-        "confidence_bins": {"low": 0, "medium": 0, "high": 0},
+        "expanded_area_pct": _pct(bins["high"], len(samples)),
+        "inundation_polygon_count": bins["high"],
+        "confidence_bins": bins,
         "source_keys": sorted(tim_modality_outputs.keys()),
-        "thresholds": {"water_probability": None, "min_polygon_area_m2": None},
+        "sample_count": len(samples),
+        "metric_source": "tim_output_samples",
+        "thresholds": {"normalized_water_signal_high": 0.67, "min_polygon_area_m2": None},
     }
     return out
 
@@ -230,11 +317,15 @@ def _land_shift_analytics(
     inputs_meta: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     out = _base_profile_block("land_use_change", inputs_meta)
+    samples = _samples_from_outputs(tim_modality_outputs)
+    histogram = _sample_histogram(samples)
     out["land_transition"] = {
         "transition_matrix": [],
         "top_transitions": [],
-        "raw_counts_total": 0,
-        "normalized_total_pct": 0.0,
+        "class_distribution": histogram,
+        "raw_counts_total": len(samples),
+        "normalized_total_pct": 100.0 if samples else 0.0,
+        "temporal_comparison_available": False,
         "source_keys": sorted(tim_modality_outputs.keys()),
     }
     return out
@@ -245,16 +336,29 @@ def _oceanscout_analytics(
     inputs_meta: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     out = _base_profile_block("oceanscout_ship_detection", inputs_meta)
+    samples = _samples_from_outputs(tim_modality_outputs)
+    bins = _confidence_bins(samples)
+    cloud_pct = _stac_cloud_pct(inputs_meta)
+    cloud_masked = (
+        round(len(samples) * cloud_pct / 100.0) if samples and cloud_pct is not None else None
+    )
     out["vessel_candidates"] = []
     out["observation_coverage"] = {
-        "valid_observation_count": None,
-        "cloud_masked_count": None,
+        "valid_observation_count": len(samples) if samples else None,
+        "cloud_masked_count": cloud_masked,
         "glint_limited_count": None,
-        "no_observation_count": None,
+        "no_observation_count": 0 if samples else None,
         "normalization": "valid_observation_count",
     }
-    out["evidence_level"] = "tim_pseudosar_plus_lulc" if "LULC" in tim_modality_outputs else "optical_only"
-    out["confidence"] = {"method": "profile_schema_v1", "bins": {"low": 0, "medium": 0, "high": 0}}
+    out["detection_score_summary"] = {
+        "sample_count": len(samples),
+        "candidate_signal_pct": _pct(bins["high"], len(samples)),
+        "metric_source": "tim_output_samples",
+    }
+    out["evidence_level"] = (
+        "tim_pseudosar_plus_lulc" if "LULC" in tim_modality_outputs else "optical_only"
+    )
+    out["confidence"] = {"method": "tim_output_sample_bins_v1", "bins": bins}
     out["notices"] = [
         "Candidate vessel detections are presence indicators and require corroboration.",
         "Pseudo-SAR-like TiM outputs are not equivalent to true SAR observations.",

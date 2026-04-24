@@ -183,7 +183,10 @@ class ProJobCreateIn(BaseModel):
     center_lon: float = Field(ge=-180.0, le=180.0)
     bbox_half_km: float = Field(default=5.0, gt=0, le=500.0)
     mapbox_zoom: int = Field(default=12, ge=0, le=18)
-    analysis_profile: ProJobProfile = "brief_only"
+    analysis_profile: ProJobProfile = Field(
+        default="brief_only",
+        description="Mini-app analysis profile. Legacy vessel_monitoring requests are normalized to OceanScout.",
+    )
     enable_tim: bool = False
     tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "RGB_mapbox"
     vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512", max_length=128)
@@ -203,11 +206,26 @@ class ProJobCreateIn(BaseModel):
 class ProJobCreateOut(BaseModel):
     job_id: str
     status: ProJobStatus = "queued"
-    inference_upstream_ok: bool | None = None
-    materialization_ok: bool | None = None
-    materialization_id: str | None = None
-    cache_key: str | None = None
-    materialization_error: str | None = None
+    inference_upstream_ok: bool | None = Field(
+        default=None,
+        description=(
+            "Compatibility field from the old synchronous create response. "
+            "Async jobs now report worker health through status/error_class while polling."
+        ),
+    )
+    materialization_ok: bool | None = Field(
+        default=None,
+        description=(
+            "Compatibility field from the old synchronous create response. "
+            "Async jobs now expose materialization outcome on the status resource."
+        ),
+    )
+    materialization_id: str | None = Field(default=None, description="Compatibility materialization worker id.")
+    cache_key: str | None = Field(default=None, description="Compatibility materialization cache key.")
+    materialization_error: str | None = Field(
+        default=None,
+        description="Compatibility materialization error text; new clients should prefer status/error fields.",
+    )
 
 
 class ProJobStatusOut(BaseModel):
@@ -217,18 +235,24 @@ class ProJobStatusOut(BaseModel):
     error_class: str | None = None
     error_detail: str | None = None
     progress_pct: int | None = Field(default=None, ge=0, le=100)
-    profile: str | None = None
-    analysis_profile: str | None = None
+    profile: str | None = Field(default=None, description="Compatibility alias for analysis_profile.")
+    analysis_profile: str | None = Field(default=None, description="Canonical mini-app analysis profile token.")
     started_at: str | None = None
     finished_at: str | None = None
     artifacts: list[ProArtifactRef] | None = None
     analysis_artifacts: list[ProArtifactRef] | None = None
     brief_artifacts: list[ProArtifactRef] | None = None
     scene_provenance: dict[str, Any] | None = None
-    on_device_payload: ProOnDevicePayload | None = None
-    bundle_download_url: str | None = None
-    materialization_id: str | None = None
-    cache_key: str | None = None
+    on_device_payload: ProOnDevicePayload | None = Field(
+        default=None,
+        description="Compact brief/overlay payload intended for client mini-app handoff.",
+    )
+    bundle_download_url: str | None = Field(
+        default=None,
+        description="Compatibility field; artifact refs are preferred for new clients.",
+    )
+    materialization_id: str | None = Field(default=None, description="Compatibility materialization worker id.")
+    cache_key: str | None = Field(default=None, description="Compatibility materialization cache key.")
     materialization_summary: dict[str, Any] | None = None
 
 

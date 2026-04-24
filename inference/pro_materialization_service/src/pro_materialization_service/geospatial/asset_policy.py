@@ -50,6 +50,7 @@ def validate_profile_mode_matrix(
     *,
     analysis_profile: AnalysisProfile,
     sentinel_fetch_mode: SentinelFetchMode,
+    tim_branch: TimBranch,
     enable_tim: bool,
 ) -> str | None:
     """Return error code string if a mini-app profile asks for an impossible mode."""
@@ -65,4 +66,6 @@ def validate_profile_mode_matrix(
             return "PROFILE_REQUIRES_TIM"
         if sentinel_fetch_mode == SentinelFetchMode.MINIMAL_RGB:
             return "PROFILE_REQUIRES_SENTINEL_STACK"
+        if tim_branch != TimBranch.S2L2A_FULL:
+            return "PROFILE_REQUIRES_S2L2A_FULL"
     return None

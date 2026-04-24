@@ -971,10 +971,15 @@ components:
         bbox_half_km:
           type: number
           format: double
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 500
           default: 5.0
         mapbox_zoom:
           type: integer
           format: int32
+          minimum: 0
+          maximum: 18
           default: 12
         analysis_profile:
           type: string
@@ -1021,16 +1026,17 @@ components:
           type: boolean
           nullable: true
           description: >
-            IMP-092: when `NUTONIC_INFERENCE_WORKER_BASE_URL` and/or `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL`
-            is set, `true` only if **every** configured origin responds OK to `GET {origin}/health`; `false` if any
-            probe fails; `null` when neither origin is configured.
+            Compatibility field from the pre-async PRO create response. Current async jobs report upstream
+            health through job status/error fields: required origins must pass health probes before execution,
+            while optional origins may be degraded without failing the job. New clients should poll
+            `GET /api/v1/pro/jobs/{job_id}` for execution health.
         materialization_ok:
           type: boolean
           nullable: true
           description: >
-            When `NUTONIC_PRO_MATERIALIZATION_SERVICE_URL` is set, `true` if `POST {origin}/internal/v1/materialize`
-            succeeded after health probes; `false` on worker HTTP/validation errors or when health probes failed;
-            `null` when no PRO materialization origin is configured.
+            Compatibility field from the pre-async PRO create response. Current async jobs expose
+            materialization success/failure through terminal job status, `error_class`, and
+            `materialization_summary` on the status resource.
         materialization_id:
           type: string
           nullable: true
@@ -1125,9 +1131,11 @@ components:
         profile:
           type: string
           nullable: true
+          description: Compatibility alias for analysis_profile.
         analysis_profile:
           type: string
           nullable: true
+          description: Canonical mini-app analysis profile token.
         started_at:
           type: string
           nullable: true
@@ -1155,6 +1163,7 @@ components:
           additionalProperties: true
         on_device_payload:
           nullable: true
+          description: Compact brief and overlay references for client mini-app handoff.
           allOf:
             - $ref: "#/components/schemas/ProOnDevicePayload"
         bundle_download_url:

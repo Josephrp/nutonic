@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
 
 from lfm_vl_satellite_caption_service.config import get_settings
@@ -9,9 +7,16 @@ from lfm_vl_satellite_caption_service.models import SatelliteInferRequest, Satel
 from lfm_vl_satellite_caption_service.prompts import satellite_openai_user_prompt
 
 
-def _caption(client: httpx.Client, b64: str, *, ranked_safe: bool) -> str:
+def _caption(
+    client: httpx.Client,
+    req: SatelliteInferRequest,
+) -> str:
     s = get_settings()
-    user_text = satellite_openai_user_prompt(ranked_clue_safe=ranked_safe)
+    user_text = satellite_openai_user_prompt(
+        ranked_clue_safe=req.ranked_clue_safe,
+        analysis_profile=req.analysis_profile,
+        contract_id=req.contract_id,
+    )
     url = f"{s.openai_base_url}/chat/completions"
     body = {
         "model": s.openai_model,
@@ -19,7 +24,7 @@ def _caption(client: httpx.Client, b64: str, *, ranked_safe: bool) -> str:
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{req.image_base64}"}},
                     {"type": "text", "text": user_text},
                 ],
             }
@@ -42,8 +47,13 @@ def infer_openai(req: SatelliteInferRequest, *, client: httpx.Client | None = No
     own = client is None
     c = client or httpx.Client(timeout=httpx.Timeout(300.0))
     try:
-        text = _caption(c, req.image_base64, ranked_safe=req.ranked_clue_safe)
-        return SatelliteInferResponse(caption=text, model_id=get_settings().openai_model)
+        text = _caption(c, req)
+        return SatelliteInferResponse(
+            caption=text,
+            model_id=get_settings().openai_model,
+            analysis_profile=req.analysis_profile,
+            contract_id=req.contract_id,
+        )
     finally:
         if own:
             c.close()

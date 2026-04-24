@@ -366,17 +366,29 @@ class NutonicApiClient(
         maxAttempts: Int = 90,
         onProgress: (ProJobStatusOut) -> Unit = {},
     ): ApiResult<ProJobStatusOut> {
-        repeat(maxAttempts) {
+        repeat(maxAttempts) { attempt ->
             val result = getProJob(jobId, bearerAccessToken)
-            if (result is ApiResult.Ok) {
-                onProgress(result.value)
-                if (result.value.status in terminalProJobStatuses) {
-                    return result
+            when (result) {
+                is ApiResult.Ok -> {
+                    onProgress(result.value)
+                    if (result.value.status in terminalProJobStatuses) {
+                        return result
+                    }
                 }
-            } else {
-                return result
+
+                is ApiResult.HttpFailure -> {
+                    if (!result.isTransientPollFailure() || attempt == maxAttempts - 1) {
+                        return result
+                    }
+                }
+
+                is ApiResult.NetworkFailure -> {
+                    if (attempt == maxAttempts - 1) {
+                        return result
+                    }
+                }
             }
-            delay(intervalMs + Random.nextLong(0, (intervalMs / 4).coerceAtLeast(1)))
+            delay(nextPollDelayMs(intervalMs, attempt))
         }
         return ApiResult.NetworkFailure("Polling timeout after ${maxAttempts * intervalMs / 1000}s")
     }
@@ -460,6 +472,27 @@ class NutonicApiClient(
 }
 
 private val terminalProJobStatuses = setOf("completed", "failed", "cancelled")
+
+private fun ApiResult.HttpFailure.isTransientPollFailure(): Boolean =
+    statusCode == 408 || statusCode == 429 || statusCode in 500..599
+
+private fun nextPollDelayMs(
+    intervalMs: Long,
+    attempt: Int,
+): Long {
+    val base = intervalMs.coerceAtLeast(0)
+    if (base == 0L) {
+        return 0L
+    }
+    val multiplier =
+        when {
+            attempt >= 3 -> 4L
+            attempt >= 1 -> 2L
+            else -> 1L
+        }
+    val jitter = Random.nextLong(0, (base / 4).coerceAtLeast(1))
+    return (base * multiplier).coerceAtMost(30_000L) + jitter
+}
 
 sealed class ApiResult<out T> {
     data class Ok<T>(

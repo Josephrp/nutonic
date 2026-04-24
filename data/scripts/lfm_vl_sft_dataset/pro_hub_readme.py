@@ -3,6 +3,23 @@
 from __future__ import annotations
 
 
+def _dataset_yaml_frontmatter(*, tags: tuple[str, ...]) -> str:
+    """
+    Minimal YAML header so Hugging Face Hub README validation does not warn about
+    missing dataset card metadata (see huggingface_hub README validation).
+    """
+    tag_lines = "\n".join(f"  - {tag}" for tag in tags)
+    return f"""---
+license: apache-2.0
+language:
+  - en
+tags:
+{tag_lines}
+---
+
+"""
+
+
 def _split_table(*, n_train: int, n_val: int, n_test: int, n_tiles: int | None) -> str:
     lines = [
         "## Record counts (this build)",
@@ -120,7 +137,9 @@ Temporal **Sentinel-2** image **pairs** (pre/post around a wildfire-relevant `ev
 
 {_common_tail(hub_repo_id=hub_repo_id, builder_script="build_lfm_vl_firewatch_sft.py", orchestrator_hint="pre/post pair (`*_t0.png`, `*_t1.png`)")}
 """
-    return body
+    return _dataset_yaml_frontmatter(
+        tags=("remote-sensing", "wildfire", "sentinel-2", "change-detection", "vlm-sft"),
+    ) + body
 
 
 def floodpulse_readme(
@@ -144,7 +163,9 @@ Temporal **Sentinel-2** **pairs** for flood-relevant events. **MNDWI** water mas
 
 {_common_tail(hub_repo_id=hub_repo_id, builder_script="build_lfm_vl_floodpulse_sft.py", orchestrator_hint="pre/post pair")}
 """
-    return body
+    return _dataset_yaml_frontmatter(
+        tags=("remote-sensing", "flood", "sentinel-2", "change-detection", "vlm-sft"),
+    ) + body
 
 
 def landshift_readme(
@@ -168,7 +189,9 @@ Temporal **Sentinel-2** **pairs** (longer baseline by default) over sampled loca
 
 {_common_tail(hub_repo_id=hub_repo_id, builder_script="build_lfm_vl_landshift_sft.py", orchestrator_hint="pre/post pair")}
 """
-    return body
+    return _dataset_yaml_frontmatter(
+        tags=("remote-sensing", "land-cover", "sentinel-2", "change-detection", "vlm-sft"),
+    ) + body
 
 
 def oceanscout_readme(
@@ -192,7 +215,9 @@ def oceanscout_readme(
 
 {_common_tail(hub_repo_id=hub_repo_id, builder_script="build_lfm_vl_oceanscout_sft.py", orchestrator_hint="single `*_t1.png` path in JSONL (post scene)")}
 """
-    return body
+    return _dataset_yaml_frontmatter(
+        tags=("remote-sensing", "maritime", "sentinel-2", "object-detection", "vlm-sft"),
+    ) + body
 
 
 def brief_composer_readme(
@@ -223,4 +248,6 @@ def brief_composer_readme(
         ),
     )}
 """
-    return body
+    return _dataset_yaml_frontmatter(
+        tags=("remote-sensing", "multi-image", "reasoning", "vlm-sft"),
+    ) + body

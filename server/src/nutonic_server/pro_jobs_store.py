@@ -74,6 +74,8 @@ class ProJobStore(Protocol):
         statuses: set[str] | None = None,
     ) -> list[ProJobRecord]: ...
 
+    def list_queued_jobs(self, *, limit: int = 100) -> list[ProJobRecord]: ...
+
     def transition(
         self,
         job_id: str,
@@ -183,6 +185,18 @@ class SqliteProJobStore:
         if statuses:
             stmt = stmt.where(pro_jobs.c.status.in_(sorted(statuses)))
         stmt = stmt.order_by(pro_jobs.c.created_at.desc()).limit(max(1, min(int(limit), 100)))
+        with self._lock:
+            with self._engine.connect() as conn:
+                rows = conn.execute(stmt).mappings().all()
+        return [_record_from_row(row) for row in rows]
+
+    def list_queued_jobs(self, *, limit: int = 100) -> list[ProJobRecord]:
+        stmt = (
+            select(pro_jobs)
+            .where(pro_jobs.c.status == "queued")
+            .order_by(pro_jobs.c.created_at.asc())
+            .limit(max(1, min(int(limit), 500)))
+        )
         with self._lock:
             with self._engine.connect() as conn:
                 rows = conn.execute(stmt).mappings().all()

@@ -23,7 +23,13 @@ from pro_materialization_service.geospatial.asset_version import (
     s2_band_asset_keys,
 )
 from pro_materialization_service.geospatial.bbox import square_bbox_wgs84
-from pro_materialization_service.geospatial.mapbox_static import fetch_mapbox_static_png, mapbox_access_token
+from pro_materialization_service.geospatial.mapbox_static import (
+    fetch_mapbox_static_png,
+    mapbox_access_token,
+    mapbox_retry_count,
+    mapbox_source_metadata,
+    mapbox_timeout_seconds,
+)
 from pro_materialization_service.geospatial.s2_stac_load import apply_reflectance_scale, load_s2l2a_patch_np
 from pro_materialization_service.geospatial.tim_export import rgb_mapbox_npz_from_png, s2l2a_npz_from_stack
 from pro_materialization_service.geospatial.vlm_contracts import resolve_vlm_contract
@@ -61,6 +67,21 @@ def default_datetime_interval(days: int = 120) -> str:
     return f"{start.isoformat()}/{end.isoformat()}"
 
 
+def profile_materialization_policy(profile: AnalysisProfile) -> dict[str, Any]:
+    days = {
+        AnalysisProfile.WILDFIRE: 45,
+        AnalysisProfile.OCEANSCOUT_SHIP_DETECTION: 21,
+        AnalysisProfile.LAND_USE_CHANGE: 730,
+        AnalysisProfile.FLOOD_PULSE: 30,
+        AnalysisProfile.BRIEF_ONLY: 120,
+    }[profile]
+    return {
+        "datetime_window_days": days,
+        "mapbox_timeout_seconds": mapbox_timeout_seconds(),
+        "mapbox_retry_count": mapbox_retry_count(),
+    }
+
+
 def compute_cache_key(req: MaterializeRequest) -> str:
     s2v = s2_asset_mapping_version()
     payload = {
@@ -93,6 +114,7 @@ def materialize(req: MaterializeRequest, *, client: httpx.Client | None = None) 
     profile_err = validate_profile_mode_matrix(
         analysis_profile=profile,
         sentinel_fetch_mode=mode,
+        tim_branch=TimBranch(req.tim_branch),
         enable_tim=req.enable_tim,
     )
     if profile_err:
@@ -137,6 +159,7 @@ def materialize_rgb_mapbox(
     assert hc is not None
     try:
         try:
+            policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
             raw_png, attribution = fetch_mapbox_static_png(
                 hc,
                 lon=req.longitude,
@@ -148,6 +171,8 @@ def materialize_rgb_mapbox(
                 height=mh,
                 retina=req.retina,
                 token=token,
+                timeout_s=policy["mapbox_timeout_seconds"],
+                retry_count=policy["mapbox_retry_count"],
             )
         except httpx.HTTPStatusError as e:
             raise ValueError(f"MAPBOX_HTTP_{e.response.status_code}") from e
@@ -205,6 +230,7 @@ def materialize_spectral_paths(
     assert hc is not None
     try:
         try:
+            policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
             raw_png, attribution = fetch_mapbox_static_png(
                 hc,
                 lon=req.longitude,
@@ -216,6 +242,8 @@ def materialize_spectral_paths(
                 height=mh,
                 retina=req.retina,
                 token=token,
+                timeout_s=policy["mapbox_timeout_seconds"],
+                retry_count=policy["mapbox_retry_count"],
             )
         except httpx.HTTPStatusError as e:
             raise ValueError(f"MAPBOX_HTTP_{e.response.status_code}") from e
@@ -225,7 +253,8 @@ def materialize_spectral_paths(
         if own_client:
             hc.close()
 
-    dt = (req.datetime_interval or "").strip() or default_datetime_interval()
+    profile_policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
+    dt = (req.datetime_interval or "").strip() or default_datetime_interval(profile_policy["datetime_window_days"])
     include_scl = "cloud_mask_thumb" in contract.roles
     try:
         stack, stac_meta, scl_patch = load_s2l2a_patch_np(
@@ -379,6 +408,8 @@ def _assemble_result(
         "sentinel_fetch_mode": req.sentinel_fetch_mode,
         "mapbox_center_mode": "user_pin",
         "mapbox_attribution": mapbox_attribution,
+        "mapbox_source": mapbox_source_metadata(),
+        "profile_policy": profile_materialization_policy(AnalysisProfile(req.analysis_profile)),
         "bbox_wgs84": {"west": west, "south": south, "east": east, "north": north},
         "mapbox_zoom": zoom,
         "mapbox_size_fetch": {"width": mw, "height": mh},

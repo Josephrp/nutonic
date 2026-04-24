@@ -16,6 +16,12 @@ _DEFAULT_FIRE_EVENTS = REPO_ROOT / "data" / "events" / "fire_smoke_events.json"
 _DEFAULT_FLOOD_EVENTS = REPO_ROOT / "data" / "events" / "flood_smoke_events.json"
 _DEFAULT_BRIEF_SAMPLES_FULL = 3000
 
+_EVENTS_MISSING_HINT = (
+    "Event JSON fixtures live under data/events/ (e.g. fire_smoke_events.json). "
+    "If you cloned before they were tracked, run git pull, or copy the files in, "
+    "or pass --fire-events / --flood-events explicitly."
+)
+
 # Dataset repo name suffixes (must match each builder's DEFAULT_HF_REPO ``org/name`` tail).
 _PROFILE_HF_REPO_SUFFIX = {
     "firewatch": "firewatch-sft-v1",
@@ -153,6 +159,7 @@ def main() -> int:
             ev = ev.resolve()
             if not ev.is_file():
                 print(f"{prof}: events file not found: {ev}", file=sys.stderr)
+                print(f"  {_EVENTS_MISSING_HINT}", file=sys.stderr)
                 failures.append(f"{prof}: missing events file")
                 continue
             cmd.extend(["--events", str(ev), "--max-events", max_events_arg])

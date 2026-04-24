@@ -23,6 +23,10 @@ def get_settings() -> Settings:
 def get_pro_job_store(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ProJobStore:
+    return get_pro_job_store_for_settings(settings)
+
+
+def get_pro_job_store_for_settings(settings: Settings) -> ProJobStore:
     if settings.pro_job_backend.strip().lower() != "sqlite":
         raise HTTPException(status_code=500, detail="Unsupported PRO job backend")
     url = settings.pro_job_database_url.strip()
@@ -35,10 +39,36 @@ def get_pro_job_runner(
     settings: Annotated[Settings, Depends(get_settings)],
     store: Annotated[ProJobStore, Depends(get_pro_job_store)],
 ) -> ProJobRunner:
-    key = f"{settings.pro_job_database_url.strip()}|{settings.pro_materialization_service_url.strip()}"
+    return get_pro_job_runner_for_settings(settings, store)
+
+
+def get_pro_job_runner_for_settings(settings: Settings, store: ProJobStore) -> ProJobRunner:
+    key = "|".join(
+        (
+            settings.pro_job_database_url.strip(),
+            settings.pro_materialization_service_url.strip(),
+            settings.lfm_vl_hint_service_url.strip(),
+            settings.inference_worker_base_url.strip(),
+            settings.pro_required_origins.strip(),
+            settings.pro_optional_origins.strip(),
+            settings.pro_artifact_root.strip(),
+        )
+    )
     if key not in _pro_job_runners:
         _pro_job_runners[key] = ProJobRunner(settings=settings, store=store)
     return _pro_job_runners[key]
+
+
+def start_pro_job_runner_for_settings(settings: Settings) -> ProJobRunner:
+    store = get_pro_job_store_for_settings(settings)
+    runner = get_pro_job_runner_for_settings(settings, store)
+    runner.start()
+    return runner
+
+
+def shutdown_pro_job_runners(*, grace_seconds: float = 30.0) -> None:
+    for runner in list(_pro_job_runners.values()):
+        runner.shutdown(grace_seconds=grace_seconds)
 
 
 def require_community_lb_get(

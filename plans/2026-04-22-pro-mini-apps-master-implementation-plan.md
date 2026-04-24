@@ -24,6 +24,7 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
    - TiM artifacts and overlays
    - LFM-VL narrative and action summary
    - Shareable map-ready frames
+4. **Map-first AOI entry:** Users set the PRO analysis center **by interacting with a map** (tap / drag pin, pan, zoom); manual lat/lon fields remain as an **advanced / accessibility** path that stay in sync with the pin (see §15.19, P5.1-T2, P5.1-T5).
 
 ### Engineering outcomes
 1. Remove known orchestration and security footguns.
@@ -62,7 +63,7 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 | W1 | Control-plane hardening | Persistent PRO jobs + correct status lifecycle + no poll-side effects |
 | W2 | Security and worker consistency | Replay-safe HMAC on workers; aligned STAC loading behavior |
 | W3 | Analytics primitives | TiM outputs normalized into profile-ready analytics payloads + observation-quality metadata |
-| W4 | PRO UI + API wiring | Real PRO dashboard + Kotlin API methods + status polling UX |
+| W4 | PRO UI + API wiring | Real PRO dashboard + Kotlin API methods + status polling UX + **map-based center selection** (§15.19) on every supported target |
 | W5 | Mini-app verticals | FireWatch + LandShift + OceanScout + FloodPulse + Brief Composer |
 | W6 | Reliability and launch | Perf/soak tests, observability, runbooks, rollout flags |
 
@@ -85,7 +86,8 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 | Task ID | File | Current anchors | Line-level subtasks | DoD |
 |---|---|---|---|---|
 | P0.2-T1 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/navigation/NutonicRoute.kt` | `28-46`, `133-158` | 1. Extend `ShellDetail` with dedicated routes: `ProFireWatch`, `ProOceanScout`, `ProLandShift`, `ProFloodPulse`, `ProBriefComposer`.<br>2. Add token encode/decode mappings after current `pro` token handling.<br>3. Preserve backwards token `pro` for entry dashboard route. | Typed routing supports each mini-app without ad hoc strings. |
-| P0.2-T2 | `rules/07-screens-checklist.md` | N/A | 1. Add explicit PRO mini-app screen checklist entries.<br>2. Add acceptance criteria for "no placeholder in production route". | Checklist reflects shipping PRO surface, not placeholder shell. |
+| P0.2-T2 | `rules/07-screens-checklist.md` | N/A | 1. Add explicit PRO mini-app screen checklist entries.<br>2. Add acceptance criteria for "no placeholder in production route".<br>3. Add checklist row: **PRO dashboard must offer map-based center selection** (primary) + optional numeric fields (advanced). | Checklist reflects shipping PRO surface, not placeholder shell. |
+| P0.2-T3 | `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` | new § | 1. Document **map-first coordinate workflow**: basemap, pin placement, zoom ↔ effective `bbox_half_km` / `mapbox_zoom` mapping, and sync with `center_lat`/`center_lon` sent to `POST /api/v1/pro/jobs`.<br>2. Note platform matrix (`rules/04-maps-and-gameplay.md`, `docs/map-engines.md`): reuse **`MapViewport`** patterns; Web may use simplified picker until parity.<br>3. Accessibility: manual fields + screen-reader labels for pin coordinates. | PRO orchestration spec matches shipped UX; no doc-only WGS84 typing as the only path. |
 
 ---
 
@@ -180,9 +182,10 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 | Task ID | File | Current anchors | Line-level subtasks | DoD |
 |---|---|---|---|---|
 | P5.1-T1 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/NutonicMainShell.kt` | `109`, `140`, `483`, `489` | 1. Replace `localProbeStatus = "Healthy (local check)"` with real probe request and status mapping.<br>2. Route `ShellDetail.ProCoordinateDashboard` to concrete screen instead of placeholder branch.<br>3. Show recent job cards with live status polling. | PRO tab drives real backend and renders real dashboard screen. |
-| P5.1-T2 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/screens/ProCoordinateDashboardDetail.kt` (new) | new file | 1. Lines `1-120`: coordinate entry, profile selector, run action.<br>2. Lines `121-260`: polling state machine, progress and error rendering.<br>3. Lines `261-420`: artifact gallery and mini-app navigation handoff. | Main PRO dashboard screen shipped and connected. |
+| P5.1-T2 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/screens/ProCoordinateDashboardDetail.kt` (new) | new file | 1. **Primary:** embedded **map region** (half-screen min height on phone) with **movable center pin** (tap map or drag pin); pan/zoom update `center_lat`/`center_lon` and job preview ring for `bbox_half_km` (visual circle or corner readout).<br>2. **Secondary:** collapsible **"Enter coordinates"** numeric fields (lat/lon) bi-directionally bound to pin; validate range before Run.<br>3. Profile selector + Run action; optional **"Use my location"** (system permission) fills pin when allowed.<br>4. Lines `~121-280`: polling state machine, progress, **error_class**-aware copy (§15.4).<br>5. Lines `~281-460`: artifact gallery + mini-app navigation handoff. | Dashboard ships **map-first** coordinate selection; manual entry never required for happy path. |
 | P5.1-T3 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/api/NutonicApiClient.kt` | `33-83`, `293-347` | 1. Implement `postProJob` and `getProJob` typed methods.<br>2. Add lightweight jittered polling helper for composables.<br>3. Reuse existing error model and feature-disabled copy. | Client API supports dashboard actions natively. |
 | P5.1-T4 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/api/NutonicApiModels.kt` | `148-206` | 1. Add PRO models and profile enums.<br>2. Add artifact model classes with clear discriminator fields (`kind`, `uri`, `mimeType`). | UI can render artifacts without ad hoc json parsing. |
+| P5.1-T5 | `nutonic/shared/src/commonMain/kotlin/com/nutonic/screens/pro/ProAnalysisLocationPicker.kt` (new, optional split) | new file | 1. Extract **reusable** composable: `MapViewport` (or thin wrapper) + pin state + `rememberSaveable` last center per session.<br>2. Single source of truth: `MutableState`/`StateFlow` for `(lat, lon)` consumed by dashboard and by `postProJob` builder.<br>3. Unit/UI tests: pin move updates model; manual field edit moves pin. | Map picker logic is testable and not duplicated across mini-apps. |
 
 ### Activity P5.2: Controlled gameplay handoff from PRO outputs
 
@@ -274,6 +277,7 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 |---|---|---|---|---|
 | P8.2-T1 | `rules/04-maps-and-gameplay.md` | existing doc | 1. Add explicit boundary: PRO outputs are opt-in overlays, not automatic ranked truth mutation.<br>2. Add provenance requirement for AI marker source labels. | Gameplay integrity rules remain clear while enabling PRO handoff. |
 | P8.2-T2 | `docs/GAME-ENGINE.md` | existing doc | 1. Add section describing optional PRO-to-gameplay handoff path and constraints.<br>2. Keep ranked integrity constraints unchanged. | Product docs align with implemented behavior and guardrails. |
+| P8.2-T3 | `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` | existing doc | 1. Align **§ map / AOI** narrative with §15.19 (map-first picker, zoom ↔ bbox semantics).<br>2. Cross-link `docs/map-engines.md` for per-target parity expectations. | PRO tab spec describes the same coordinate UX as the implementation plan. |
 
 ---
 
@@ -282,7 +286,7 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 1. P0 contract freeze (`docs/openapi.yaml`, `server/schemas.py`, Kotlin models/client).
 2. P1 control-plane hardening (persistent jobs + true async + status correctness).
 3. P2 security and STAC consistency (nonce replay protection + shared loader behavior).
-4. P5 baseline dashboard implementation (real create/poll UX).
+4. P5 baseline dashboard implementation (real create/poll UX + **map-first** center selection per §15.19).
 5. P3 analytics primitives (profile outputs).
 6. P6 mini-app screens and profile branches (FireWatch and LandShift first, then OceanScout and FloodPulse).
 7. P4 briefing synthesis and on-device handoff.
@@ -316,6 +320,7 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 8. No replay-accepting HMAC middleware (nonce cache required on all workers).
 9. No raw-count maritime heatmaps without observation-coverage normalization.
 10. No claim text that implies legal certainty from optical-only/pseudo-SAR evidence.
+11. **No PRO dashboard that requires typed lat/lon as the only way to set the analysis center** — map picker (or documented platform-limited equivalent) must be primary per §15.19.
 
 ---
 
@@ -376,6 +381,7 @@ This plan is organized into **projects -> activities -> file-level tasks -> line
 | L13 | **`auto` backend selection in LFM services** | P4.1-T2 "profile prompt templates" | `effective_lfm_backend` returns `transformers` if importable, else `stub`. In CI or dev, transformers may be accidentally importable, making tests non-deterministic. | Explicit `LFM_VL_BACKEND` env in all deployment configs; `auto` only for local dev. |
 | L14 | **No `proJobs` feature flag gating in Kotlin UI** | P5.1-T1 "real probe request" | `FeatureFlags.proJobs` is parsed from config but never checked in `NutonicMainShell.kt`. PRO tab is always visible regardless of server feature state. | Gate `ProTabRoot` visibility and "Run PRO" action on `serverFeatureFlags.proJobs`. |
 | L15 | **Rules/docs "mini-apps" terminology absent** | P8.2-T1 "rules/04-maps-and-gameplay.md" | The plan introduces "mini-apps" (FireWatch, OceanScout, etc.) but no rule or doc file uses this term. Risk of terminology drift between plan and the 55+ docs/rules files. | Add vocabulary entry to `rules/00-product-intent.md` or `rules/README.md`. |
+| L16 | **Form-only coordinate entry** | P5.1-T2 (pre-v0.4) | Typed lat/lon without a map is the implicit default; hemisphere mistakes and coarse AOI picking hurt trust and completion rates on mobile. | **§15.19** map-first UX; **P5.1-T5** reusable picker; P0.2-T3 / P8.2-T3 doc sync. |
 
 ---
 
@@ -934,6 +940,27 @@ suspend fun pollProJob(
 2. When `proJobs` is `false` or `null` (server unreachable), show informational copy with "PRO features are not available on this server."
 3. The PRO tab itself remains visible (it's a navigation constant), but interactive elements are disabled.
 
+### 15.19 PRO map-first coordinate selection (primary AOI entry)
+
+**Problem:** Typed `center_lat` / `center_lon` alone is slow, error-prone, and a poor fit for mobile; the plan previously implied form-first entry in P5.1-T2.
+
+**Product rule:** On every **tier-A** target (Android, iOS, Desktop) where `MapViewport` ships for SCAN, the PRO dashboard **must** show an interactive basemap with a **single analysis center pin** as the default path to set `POST /api/v1/pro/jobs` coordinates. Manual numeric fields are **advanced**, collapsed by default, and **bi-directionally synced** with the pin.
+
+**UX specification:**
+
+1. **Layout:** Upper or dominant **map card** (min ~240dp height phone, ~40% viewport tablet); below: profile selector, `bbox_half_km` / zoom controls, Run, job list.
+2. **Interactions:** Tap empty map → move pin to tap; **drag pin**; pan/zoom map — center always equals pin WGS84. Optional **"Use my location"** uses platform geolocation API when permission granted; on deny, no-op with inline message.
+3. **Visual feedback:** Dashed circle or shaded **AOI footprint** derived from `bbox_half_km` (haversine approximation acceptable for preview); updating copy: `Center 12.3456°, -98.7654°`.
+4. **Manual fields:** Expanding "Advanced" reveals lat/lon text fields; editing commits to pin and re-centers map camera when valid.
+5. **State:** Single `StateFlow` / `MutableState` holding `(centerLat, centerLon)` is the only source passed to `postProJob`; avoid duplicate mutable text state drifting from pin.
+6. **Web (tier-B):** If full `MapViewport` parity lags per `docs/map-engines.md`, ship **either** (a) embedded map with same pin semantics when SDK ready, or (b) interim **clickable static basemap** + pin (documented ADR) until interactive parity — **never** web-only raw lat/lon without a map affordance.
+7. **Accessibility:** Pin move announces updated coordinates; manual fields labeled; large hit target for pin drag per `rules/08-ux-and-performance-footguns.md`.
+8. **Tests:** Compose/UI or unit: moving pin updates model; editing fields updates pin; invalid lat/lon blocks Run with `input_validation`-style client message before POST.
+
+**API:** No OpenAPI change required — client still sends `center_lat` / `center_lon`; map is purely client UX. Optional future: `location_source: "map_pin" | "manual" | "device_gps"` on create body for analytics (non-breaking optional field).
+
+**Implementation anchors:** Reuse `MapViewport` / map controller patterns from `rules/04-maps-and-gameplay.md`; extract `ProAnalysisLocationPicker` per **P5.1-T5** if the dashboard file grows too large.
+
 ---
 
 ## 16) Updated critical-path order with v0.3 specifications
@@ -960,6 +987,7 @@ suspend fun pollProJob(
 
 4. P5: PRO Dashboard UI
    ├─ Kotlin API client methods (§15.17)
+   ├─ Map-first center selection (§15.19) + `ProAnalysisLocationPicker` (P5.1-T5)
    └─ Real create/poll UX with progress
 
 5. P3: TiM Analytics Primitives
@@ -991,6 +1019,7 @@ suspend fun pollProJob(
 | PRO gating flag: `pro_jobs` vs `pro` | `openapi.yaml`, `settings.py` | `PRO-TAB-VLM-ORCHESTRATION-SPEC.md` ("features.pro") | Canonicalize on `pro_jobs` (matches implementation); add `pro` as alias if needed |
 | "Mini-apps" terminology | This plan; `.cursor/plans/` | All 17 rules + 39 docs files (term absent) | Add vocabulary entry to `rules/00-product-intent.md`: "PRO mini-apps = FireWatch, OceanScout, LandShift, FloodPulse, Brief Composer" |
 | Forfeit endpoint naming: split vs merged | Various docs cross-refs | `openapi.yaml`: single `.../forfeit-ranked-integrity` | OpenAPI is normative; update prose cross-refs |
+| PRO AOI entry UX | This plan §15.19, P5.1-T2 | `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` (coordinate prose) | Add map-first workflow to PRO tab spec (P8.2-T3); keep API fields `center_lat`/`center_lon` |
 
 ---
 
@@ -1016,6 +1045,7 @@ suspend fun pollProJob(
 18. **No STAC scene nondeterminism in change-detection profiles.** → §15.7
 19. **No cross-AOI brief composition without validation.** → §15.8
 20. **No unversioned OceanScout shoreline buffer policy.** → §15.9
+21. **No ship-blocking PRO coordinate UX that omits an interactive map** on targets where SCAN already ships `MapViewport` → §15.19, P5.1-T2, P5.1-T5
 
 ---
 
@@ -1026,4 +1056,5 @@ suspend fun pollProJob(
 | 0.1 | 2026-04-22 | Initial comprehensive master plan with projects, activities, file-level tasks, and line-level subtasks. |
 | 0.2 | 2026-04-24 | Added repository baseline audit, explicit risk register, OceanScout integration (contracts, analytics, UI, tests), and corrected plan path typo in P8.1-T2. |
 | 0.3 | 2026-04-24 | Deep assessment of full platform implementation state across server, inference services, Kotlin client, docs, rules, and 22 plans. Added 10 footgun identifications (F1–F10), 15 unobvious logical problems (L1–L15), 18 detailed interface and process specifications (§15.1–§15.18), cross-document consistency fixes (§17), and expanded footgun closure checklist (20 items). Specified: async runner concurrency model, SQLite WAL contract, job cancellation, error taxonomy, session isolation, artifact storage/serving, STAC scene determinism, AOI validation, shoreline versioning, on-device payload bounds, expanded Pydantic schemas, Kotlin DTOs, API client methods, nonce replay cache, STAC loader unification, and feature flag gating. |
+| 0.4 | 2026-04-24 | **Map-first PRO coordinate selection:** product outcome #4; W4 exit criteria; P0.2-T2/T3 (checklist + PRO-TAB doc); P5.1-T2/T5 (dashboard + reusable picker); P8.2-T3; critical-path P5 note; §13 checklist item 11; **§15.19** full UX/process spec (pin, AOI preview, manual sync, web interim, a11y, tests); §16 P5 subtree; §17 row; §18 item 21. |
 

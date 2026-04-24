@@ -1,6 +1,6 @@
 ---
 name: PRO Mini-Apps Plan Improvements
-overview: Improve the PRO mini-apps master implementation plan by resolving 10 identified unobvious logical problems, adding detailed interface specifications for the async job pipeline, artifact storage, error taxonomy, and cross-service contracts, and tightening the process specifications for temporal determinism, session isolation, and cancellation.
+overview: Improve the PRO mini-apps master implementation plan by resolving 10 identified unobvious logical problems, adding detailed interface specifications for the async job pipeline, artifact storage, error taxonomy, and cross-service contracts, tightening the process specifications for temporal determinism, session isolation, and cancellation, and requiring **map-first PRO coordinate selection** (§15.19 in the master plan).
 todos:
   - id: assess-write
     content: Write the v0.3 update to plans/2026-04-22-pro-mini-apps-master-implementation-plan.md incorporating all 10 interface/process specifications
@@ -20,6 +20,9 @@ todos:
   - id: kotlin-client
     content: Add postProJob, getProJob, cancelProJob, listProJobs, getProArtifact methods to NutonicApiClient.kt
     status: pending
+  - id: pro-map-picker
+    content: Implement ProCoordinateDashboardDetail map-first AOI (MapViewport + pin) and optional ProAnalysisLocationPicker.kt per master plan §15.19 / P5.1-T2 / P5.1-T5
+    status: pending
 isProject: false
 ---
 
@@ -30,6 +33,22 @@ isProject: false
 The existing plan (v0.2, 2026-04-24) correctly identifies the major footguns (in-memory jobs, poll-side-effects, HMAC replay, STAC divergence, gameplay contamination) and proposes a sound wave structure (W0-W6). However, it underspecifies **10 critical interface and process contracts** that will cause implementation ambiguity or runtime failures if not resolved before W1 begins.
 
 This improvement adds concrete specifications for each gap, organized by the project they affect.
+
+---
+
+## 1b. P5 Improvement: Map-first PRO coordinate selection (synced with master plan v0.4)
+
+**Problem:** PRO job creation uses `center_lat` / `center_lon` in the API, but the client plan did not require an **easy map-based** way to set them; manual fields alone are a poor default on mobile.
+
+**Resolution (authoritative in repo):** `plans/2026-04-22-pro-mini-apps-master-implementation-plan.md` **§15.19**, **P5.1-T2**, **P5.1-T5**, **P0.2-T3**, **P8.2-T3**, product outcome **#4**, and checklist **§13 item 11** / **§18 item 21**.
+
+**Summary for implementers:**
+
+- **Primary UX:** Interactive basemap + **single draggable / tappable center pin**; pan/zoom updates the same WGS84 pair sent in `ProJobCreateIn`.
+- **Secondary UX:** Collapsible **Advanced** numeric lat/lon fields, **bi-directionally synced** with the pin (single `StateFlow` / `MutableState` source of truth).
+- **Optional:** "Use my location" when OS permission granted; AOI preview ring from `bbox_half_km`.
+- **Web interim:** Documented ADR if full `MapViewport` lags — still require a **map affordance** (e.g. static basemap + pin), not lat/lon-only.
+- **Docs:** Extend `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` (task P8.2-T3 in master plan); no OpenAPI change required unless adding optional `location_source` for analytics later.
 
 ---
 

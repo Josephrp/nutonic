@@ -16,6 +16,8 @@ on:
       - "server/**"
       - "inference/pro_materialization_service/**"
       - "tools/hf_deploy/**"
+      - "tools/live_inference_smoke.py"
+      - "tools/requirements.txt"
       - ".github/workflows/huggingface-deploy.yml"
   workflow_dispatch:
     inputs:
@@ -64,6 +66,8 @@ jobs:
               - 'inference/pro_materialization_service/**'
             tools:
               - 'tools/hf_deploy/**'
+              - 'tools/live_inference_smoke.py'
+              - 'tools/requirements.txt'
               - '.github/workflows/huggingface-deploy.yml'
 
       - id: set
@@ -211,6 +215,17 @@ jobs:
           --service lfm_vl_hint
           --repo-id Tonic/nutonic-lfm-vl-streetview
           --token-env HF_TOKEN
+      - name: Smoke test deployed LFM Space
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/live_inference_smoke.py --preset lfm-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-lfm.json
+      - name: Upload LFM smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-smoke-lfm
+          path: artifacts/hf-smoke-lfm.json
+          if-no-files-found: warn
 
   deploy-terramind-tim:
     name: HF deploy — TerraMind TiM (Tonic)
@@ -239,6 +254,17 @@ jobs:
           --service terramind_tim
           --repo-id Tonic/nutonic-terramind-tim
           --token-env HF_TOKEN
+      - name: Smoke test deployed TerraMind Space
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/live_inference_smoke.py --preset terramind-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-terramind.json
+      - name: Upload TerraMind smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-smoke-terramind
+          path: artifacts/hf-smoke-terramind.json
+          if-no-files-found: warn
 
   deploy-game-server:
     name: HF deploy — game server (NuTonic)
@@ -269,6 +295,17 @@ jobs:
           --service game_server
           --repo-id NuTonic/nutonic-game-server
           --token-env HF_TOKEN
+      - name: Smoke test deployed game server Space
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/live_inference_smoke.py --preset game-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-game.json
+      - name: Upload game server smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-smoke-game
+          path: artifacts/hf-smoke-game.json
+          if-no-files-found: warn
 
   deploy-pro-materialization:
     name: HF deploy — PRO materialization (NuTonic)
@@ -298,3 +335,16 @@ jobs:
           --service pro_materialization
           --repo-id NuTonic/nutonic-pro-materialization
           --token-env HF_TOKEN
+      - name: Smoke test deployed PRO materialization Space
+        env:
+          NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET || secrets.INFERENCE_HMAC_SECRET }}
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/live_inference_smoke.py --preset pro-deploy --timeout 45 --strict --json-report-path artifacts/hf-smoke-pro.json
+      - name: Upload PRO smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-smoke-pro
+          path: artifacts/hf-smoke-pro.json
+          if-no-files-found: warn

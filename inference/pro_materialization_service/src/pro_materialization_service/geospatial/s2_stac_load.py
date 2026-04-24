@@ -9,7 +9,7 @@ Optional deps: ``pip install nutonic-pro-materialization-service[s2]`` (``pystac
 from __future__ import annotations
 
 import math
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, NamedTuple, Sequence
 
 import numpy as np
 
@@ -29,6 +29,12 @@ EARTH_SEARCH_S2L2A_ASSET_KEYS: tuple[str, ...] = (
     "swir16",
     "swir22",
 )
+
+
+class S2PatchResult(NamedTuple):
+    stack: np.ndarray
+    meta: dict[str, Any]
+    scl_patch: np.ndarray | None = None
 
 
 def _require_stac_rasterio() -> Any:
@@ -125,20 +131,28 @@ def load_s2l2a_patch_np(
 
     west, south, east, north = _bbox_around(lon, lat, half_km)
     client = Client.open(stac_url)
-    search = client.search(
-        collections=[collection],
-        bbox=[west, south, east, north],
-        datetime=datetime_range,
-        max_items=max(1, int(max_items)),
-        query={"eo:cloud_cover": {"lt": float(max_cloud)}},
-    )
+    search_kwargs = {
+        "collections": [collection],
+        "bbox": [west, south, east, north],
+        "datetime": datetime_range,
+        "max_items": max(1, int(max_items)),
+        "query": {"eo:cloud_cover": {"lt": float(max_cloud)}},
+    }
+    try:
+        search = client.search(
+            **search_kwargs,
+            sortby=[{"field": "properties.eo:cloud_cover", "direction": "asc"}],
+        )
+    except TypeError:
+        search = client.search(**search_kwargs)
     items = list(search.items())
     if not items:
         raise RuntimeError(
             f"No STAC items for bbox=({west:.5f},{south:.5f},{east:.5f},{north:.5f}) "
             f"datetime={datetime_range!r} collection={collection!r}",
         )
-    item = min(items, key=lambda i: float(i.properties.get("eo:cloud_cover") or 999.0))
+    items.sort(key=lambda i: (float(i.properties.get("eo:cloud_cover") or 999.0), str(getattr(i, "id", ""))))
+    item = items[0]
 
     keys = tuple(asset_keys) if asset_keys is not None else EARTH_SEARCH_S2L2A_ASSET_KEYS
     if len(keys) != 12:
@@ -252,7 +266,7 @@ def load_s2l2a_patch_np(
                 boundless=False,
             ).astype(np.float32)
 
-    return stack, meta, scl_patch
+    return S2PatchResult(stack=stack, meta=meta, scl_patch=scl_patch)
 
 
 def apply_reflectance_scale(stack: np.ndarray, s2_cfg: Mapping[str, Any] | None = None) -> np.ndarray:

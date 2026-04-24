@@ -16,6 +16,7 @@ from nutonic_terramind_tim_local.capture import attach_tim_sampler_capture
 from nutonic_terramind_tim_local.terramind_patches import apply_terramind_tim_runtime_hotfixes
 from nutonic_terramind_tim_local.inputs_build import _build_inputs, load_run_config
 from nutonic_terramind_tim_local.serialize import (
+    build_profile_analytics,
     build_tim_modality_outputs,
     decode_coordinates_from_tim_dict,
     encoder_trace_summary,
@@ -149,15 +150,23 @@ def _export_row(
     *,
     map_id: str,
     location_id: str,
+    analysis_profile: str | None = None,
     inputs_aux: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     ser = (cfg.get("serialization") or {})
     sample_limit = int(ser.get("tensor_sample_limit", 0))
     enc_sample = int(ser.get("encoder_tensor_sample_limit", 0))
     tim_policy = str(ser.get("tim_outputs", "product"))
+    export_cfg = cfg.get("export") or {}
 
     tim_modality_outputs = build_tim_modality_outputs(
         model, tim_raw, tensor_sample_limit=sample_limit, policy=tim_policy
+    )
+    profile = str(
+        analysis_profile
+        or export_cfg.get("analysis_profile")
+        or cfg.get("analysis_profile")
+        or "brief_only"
     )
 
     trace = []
@@ -166,7 +175,6 @@ def _export_row(
         layers_sel = enc_layers if mode == "all" else [enc_layers[-1]]
         trace = encoder_trace_summary(layers_sel, sample_limit=enc_sample)
 
-    export_cfg = cfg.get("export") or {}
     row: dict[str, Any] = {
         "content_version": str(cfg.get("content_version", "nutonic.tim_local.v1")),
         "engine": {
@@ -181,7 +189,9 @@ def _export_row(
         },
         "map_id": map_id,
         "location_id": location_id,
+        "analysis_profile": profile,
         "tim_modality_outputs": tim_modality_outputs,
+        "profile_analytics": build_profile_analytics(profile, tim_modality_outputs, inputs_aux),
         "encoder_trace": trace,
     }
     if ser.get("include_tim_raw_keys", False):
@@ -210,6 +220,7 @@ def _export_for_inputs(
     inputs_aux: Mapping[str, Any] | None,
     map_id: str,
     location_id: str,
+    analysis_profile: str | None = None,
 ) -> dict[str, Any]:
     """
     One catalog row worth of tensors → export row, optionally with ``location_ensemble`` mean.
@@ -238,6 +249,7 @@ def _export_for_inputs(
             cfg,
             map_id=map_id,
             location_id=location_id,
+            analysis_profile=analysis_profile,
             inputs_aux=inputs_aux,
         )
         n_fin = sum(1 for la, lo in pairs if la is not None and lo is not None)
@@ -281,6 +293,7 @@ def _export_for_inputs(
         cfg,
         map_id=map_id,
         location_id=location_id,
+        analysis_profile=analysis_profile,
         inputs_aux=inputs_aux,
     )
 
@@ -315,6 +328,7 @@ def run_tim_forward_export(cfg: Mapping[str, Any]) -> dict[str, Any]:
         inputs_aux=inputs_aux,
         map_id=str(export_cfg.get("map_id", "unset_map")),
         location_id=str(export_cfg.get("location_id", "unset_location")),
+        analysis_profile=str(export_cfg.get("analysis_profile") or cfg.get("analysis_profile") or "brief_only"),
     )
 
 
@@ -373,6 +387,7 @@ def run_tim_batch_export(cfg: Mapping[str, Any]) -> list[dict[str, Any]]:
                 inputs_aux=inputs_aux,
                 map_id=mid,
                 location_id=lid,
+                analysis_profile=str(row.get("analysis_profile") or cfg.get("analysis_profile") or "brief_only"),
             )
         )
     return out_rows

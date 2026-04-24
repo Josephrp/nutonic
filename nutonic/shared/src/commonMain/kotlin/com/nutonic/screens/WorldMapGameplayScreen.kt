@@ -342,11 +342,13 @@ fun WorldMapGameplayDetail(
 
     val aiGuessStore = remember(manifestSnapshot) { manifestSnapshot?.let(::AiGuessStore) }
     val effectiveMapId = rankedForUi?.clue?.mapId ?: mapId
-    val aiForRound: LatLon? =
+    val aiForRoundResolution =
         when {
             stillLocation?.aiMarkerPhaseEnabled == false -> null
-            else -> aiGuessStore?.coordinates(effectiveMapId, locationId)
+            else -> aiGuessStore?.resolution(effectiveMapId, locationId)
         }
+    val aiForRound: LatLon? = aiForRoundResolution?.coordinates
+    val aiMarkerSource = aiForRoundResolution?.source
 
     var rankedServerOutcome by remember { mutableStateOf<RankedSubmitOut?>(null) }
     var rankedServerError by remember { mutableStateOf<String?>(null) }
@@ -821,7 +823,7 @@ fun WorldMapGameplayDetail(
                             hideSuccessOverlay = false
                             gameplayStatus =
                                 if (aiForRound != null) {
-                                    "Guess submitted. AI marker placed from manifest cache."
+                                    "Guess submitted. AI marker placed from ${aiMarkerSource ?: "known"} source."
                                 } else {
                                     "Guess submitted. AI marker unavailable for this slice — compare on map if shown."
                                 }
@@ -838,6 +840,13 @@ fun WorldMapGameplayDetail(
                 style = MaterialTheme.typography.body2,
                 color = MaterialTheme.colors.onBackground,
             )
+            aiMarkerSource?.let { source ->
+                Text(
+                    text = "AI marker source: $source",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

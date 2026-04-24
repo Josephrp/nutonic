@@ -6,6 +6,8 @@ from typing import Any, Mapping
 
 import torch
 
+from nutonic_terramind_tim_local.oceanscout_policy import OCEANSCOUT_SHORELINE_POLICY
+
 
 def _tensor_stats(t: torch.Tensor, sample_limit: int) -> dict[str, Any]:
     t = t.detach().float().cpu()
@@ -152,6 +154,114 @@ def build_tim_modality_outputs(
             outputs[internal_key] = serialize_tim_entry(internal_key, block, sample_limit=tensor_sample_limit)
 
     return outputs
+
+
+def build_profile_analytics(
+    analysis_profile: str | None,
+    tim_modality_outputs: Mapping[str, Any],
+    inputs_meta: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    profile = (analysis_profile or "brief_only").strip()
+    if profile == "wildfire":
+        return _wildfire_analytics(tim_modality_outputs, inputs_meta)
+    if profile == "flood_pulse":
+        return _flood_analytics(tim_modality_outputs, inputs_meta)
+    if profile == "land_use_change":
+        return _land_shift_analytics(tim_modality_outputs, inputs_meta)
+    if profile == "oceanscout_ship_detection":
+        return _oceanscout_analytics(tim_modality_outputs, inputs_meta)
+    return {
+        "profile": "brief_only",
+        "schema_version": "1.0",
+        "summary": {"kind": "brief_context", "confidence": "not_applicable"},
+    }
+
+
+def _base_profile_block(profile: str, inputs_meta: Mapping[str, Any] | None) -> dict[str, Any]:
+    stac = {}
+    if isinstance(inputs_meta, Mapping):
+        raw = inputs_meta.get("s2_stac")
+        if isinstance(raw, Mapping):
+            stac = {
+                "item_id": raw.get("stac_item_id"),
+                "datetime": raw.get("stac_datetime"),
+                "cloud_pct": raw.get("eo_cloud_cover"),
+            }
+    return {
+        "profile": profile,
+        "schema_version": "1.0",
+        "scene_provenance": stac or None,
+        "thresholds": {"schema_version": "1.0"},
+    }
+
+
+def _wildfire_analytics(
+    tim_modality_outputs: Mapping[str, Any],
+    inputs_meta: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    out = _base_profile_block("wildfire", inputs_meta)
+    out["burn_change"] = {
+        "changed_area_pct": None,
+        "hotspot_count": 0,
+        "confidence_bins": {"low": 0, "medium": 0, "high": 0},
+        "source_keys": sorted(tim_modality_outputs.keys()),
+        "thresholds": {"burn_index_delta": None, "min_cluster_px": None},
+    }
+    return out
+
+
+def _flood_analytics(
+    tim_modality_outputs: Mapping[str, Any],
+    inputs_meta: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    out = _base_profile_block("flood_pulse", inputs_meta)
+    out["water_change"] = {
+        "expanded_area_pct": None,
+        "inundation_polygon_count": 0,
+        "confidence_bins": {"low": 0, "medium": 0, "high": 0},
+        "source_keys": sorted(tim_modality_outputs.keys()),
+        "thresholds": {"water_probability": None, "min_polygon_area_m2": None},
+    }
+    return out
+
+
+def _land_shift_analytics(
+    tim_modality_outputs: Mapping[str, Any],
+    inputs_meta: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    out = _base_profile_block("land_use_change", inputs_meta)
+    out["land_transition"] = {
+        "transition_matrix": [],
+        "top_transitions": [],
+        "raw_counts_total": 0,
+        "normalized_total_pct": 0.0,
+        "source_keys": sorted(tim_modality_outputs.keys()),
+    }
+    return out
+
+
+def _oceanscout_analytics(
+    tim_modality_outputs: Mapping[str, Any],
+    inputs_meta: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    out = _base_profile_block("oceanscout_ship_detection", inputs_meta)
+    out["vessel_candidates"] = []
+    out["observation_coverage"] = {
+        "valid_observation_count": None,
+        "cloud_masked_count": None,
+        "glint_limited_count": None,
+        "no_observation_count": None,
+        "normalization": "valid_observation_count",
+    }
+    out["evidence_level"] = "tim_pseudosar_plus_lulc" if "LULC" in tim_modality_outputs else "optical_only"
+    out["confidence"] = {"method": "profile_schema_v1", "bins": {"low": 0, "medium": 0, "high": 0}}
+    out["notices"] = [
+        "Candidate vessel detections are presence indicators and require corroboration.",
+        "Pseudo-SAR-like TiM outputs are not equivalent to true SAR observations.",
+    ]
+    out["limitations"] = ["cloud", "sun_glint", "shoreline_ambiguity", "optical_only_constraints"]
+    out["shoreline_policy"] = dict(OCEANSCOUT_SHORELINE_POLICY)
+    return out
 
 
 def encoder_trace_summary(

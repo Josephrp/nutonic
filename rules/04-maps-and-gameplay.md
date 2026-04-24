@@ -50,6 +50,7 @@ For **batch Street View / LFM-VL hint materialization**, **progressive map zoom*
 ## Map markers (human, optional peer, AI)
 
 - **`MapViewport`** must render **legibly distinct** layers for: **(1)** the local player’s **locked** guess, **(2)** an **optional peer-hint** marker shown **only** after **Reveal uplink** (async hint, **not** a lobby or multi-submit requirement), **(3)** the **AI** marker from **cached** `ai_lat`/`ai_lon` **after** the human phase ends (`docs/GAME-ENGINE.md` §10.1, §12.2). **Provisional** drag pins before confirm remain **self-only**.
+- **PRO outputs are opt-in overlays only:** ad-hoc PRO `Coordinates` / mini-app outputs must not silently mutate shipped `ai_guesses` or ranked/non-ranked truth. If product lets a user publish a PRO output into gameplay, it must use a separate overlay source and show marker provenance such as **manifest** vs **PRO run**.
 - **Non-ranked optional `POST .../guesses/record`** may accompany lock-in for server telemetry; it **does not** change map marker semantics (`rules/05-networking-leaderboard.md`).
 - **Ranked:** Peer reveal **or** consuming **Street View / useful-hint assists** before `submit` **forfeits** verified ranked row—server-attested endpoints required (`docs/RANKED-MODE.md`, `rules/05-networking-leaderboard.md`).
 

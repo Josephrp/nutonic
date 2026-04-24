@@ -447,9 +447,42 @@ paths:
           description: Round already submitted, forfeited, or closed
 
   /api/v1/pro/jobs:
+    get:
+      tags: [pro]
+      summary: List session-owned PRO jobs
+      operationId: listProJobs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated statuses from queued,running,completed,failed,cancelled
+      responses:
+        "200":
+          description: Session-owned jobs, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProJobStatusOut"
+        "403":
+          description: features.pro_jobs is false
+
     post:
       tags: [pro]
-      summary: Create PRO materialization job (in-process queue + optional worker forward)
+      summary: Enqueue an asynchronous PRO job
       operationId: postProJob
       security:
         - bearerAuth: []
@@ -461,7 +494,7 @@ paths:
               $ref: "#/components/schemas/ProJobCreateIn"
       responses:
         "200":
-          description: Job accepted (server issues job_id; may forward to pro_materialization_service when configured)
+          description: Job accepted; worker execution happens asynchronously after enqueue
           content:
             application/json:
               schema:
@@ -472,7 +505,7 @@ paths:
   /api/v1/pro/jobs/{job_id}:
     get:
       tags: [pro]
-      summary: Poll PRO job status (in-memory store; optional worker summary when forward ran)
+      summary: Read session-owned PRO job status
       operationId: getProJob
       security:
         - bearerAuth: []
@@ -493,6 +526,64 @@ paths:
           description: features.pro_jobs is false
         "404":
           description: Unknown job
+
+  /api/v1/pro/jobs/{job_id}/cancel:
+    post:
+      tags: [pro]
+      summary: Request cancellation of a queued or running PRO job
+      operationId: cancelProJob
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancellation request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProJobCancelOut"
+        "403":
+          description: features.pro_jobs is false
+        "404":
+          description: Unknown job
+        "409":
+          description: Job is already completed or failed
+
+  /api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}:
+    get:
+      tags: [pro]
+      summary: Fetch a session-owned PRO job artifact
+      operationId: getProArtifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: artifact_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Artifact bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: features.pro_jobs is false
+        "404":
+          description: Unknown job, artifact, or artifact bytes
 
 components:
   securitySchemes:
@@ -885,6 +976,11 @@ components:
           type: integer
           format: int32
           default: 12
+        analysis_profile:
+          type: string
+          enum: [wildfire, oceanscout_ship_detection, land_use_change, flood_pulse, brief_only]
+          default: brief_only
+          description: Mini-app profile. Legacy `vessel_monitoring` requests are accepted as OceanScout by the server.
         enable_tim:
           type: boolean
           default: false
@@ -903,6 +999,14 @@ components:
           type: string
           nullable: true
           description: Optional ISO8601 interval forwarded to PRO materialization STAC search
+        scene_id_t0:
+          type: string
+          nullable: true
+          description: Optional pinned STAC item for temporal t0
+        scene_id_t1:
+          type: string
+          nullable: true
+          description: Optional pinned STAC item for temporal t1
 
     ProJobCreateOut:
       type: object
@@ -912,6 +1016,7 @@ components:
           type: string
         status:
           type: string
+          enum: [queued, running, completed, failed, cancelled]
         inference_upstream_ok:
           type: boolean
           nullable: true
@@ -936,6 +1041,54 @@ components:
           type: string
           nullable: true
 
+    ProArtifactRef:
+      type: object
+      required: [artifact_id, kind, mime_type]
+      properties:
+        artifact_id:
+          type: string
+        kind:
+          type: string
+          description: Artifact class such as geojson, png, json, npz, brief, or binary
+        mime_type:
+          type: string
+        size_bytes:
+          type: integer
+          nullable: true
+        profile:
+          type: string
+          nullable: true
+        download_url:
+          type: string
+          nullable: true
+
+    ProBriefSection:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        confidence:
+          type: string
+          nullable: true
+
+    ProOnDevicePayload:
+      type: object
+      properties:
+        brief_sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProBriefSection"
+        overlay_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProArtifactRef"
+        confidence_summary:
+          type: string
+          nullable: true
+
     ProJobStatusOut:
       type: object
       required: [job_id, status]
@@ -944,19 +1097,92 @@ components:
           type: string
         status:
           type: string
+          enum: [queued, running, completed, failed, cancelled]
+        status_reason:
+          type: string
+          nullable: true
+        error_class:
+          type: string
+          nullable: true
+          enum:
+            - stac_no_coverage
+            - stac_cloud_ceiling
+            - worker_timeout
+            - worker_unreachable
+            - worker_error
+            - input_validation
+            - cancelled
+            - internal
+          description: Nullable except for classified terminal failures.
+        error_detail:
+          type: string
+          nullable: true
+        progress_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+        profile:
+          type: string
+          nullable: true
+        analysis_profile:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          nullable: true
+        finished_at:
+          type: string
+          nullable: true
+        artifacts:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ProArtifactRef"
+        analysis_artifacts:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ProArtifactRef"
+        brief_artifacts:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ProArtifactRef"
+        scene_provenance:
+          type: object
+          nullable: true
+          additionalProperties: true
+        on_device_payload:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ProOnDevicePayload"
         bundle_download_url:
           type: string
           nullable: true
+          description: Compatibility field; artifact refs are preferred for new clients.
         materialization_id:
           type: string
           nullable: true
+          description: Compatibility field for materialization worker id.
         cache_key:
           type: string
           nullable: true
+          description: Compatibility field for materialization cache key.
         materialization_summary:
           type: object
           nullable: true
           additionalProperties: true
+
+    ProJobCancelOut:
+      type: object
+      required: [ok, status]
+      properties:
+        ok:
+          type: boolean
+        status:
+          type: string
+          enum: [cancelled, cancelling]
 
     CacheManifest:
       type: object

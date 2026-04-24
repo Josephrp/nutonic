@@ -16,6 +16,14 @@ class TimBranch(StrEnum):
     RGB_MAPBOX = "RGB_mapbox"
 
 
+class AnalysisProfile(StrEnum):
+    WILDFIRE = "wildfire"
+    OCEANSCOUT_SHIP_DETECTION = "oceanscout_ship_detection"
+    LAND_USE_CHANGE = "land_use_change"
+    FLOOD_PULSE = "flood_pulse"
+    BRIEF_ONLY = "brief_only"
+
+
 def validate_mode_matrix(
     *,
     sentinel_fetch_mode: SentinelFetchMode,
@@ -35,4 +43,26 @@ def validate_mode_matrix(
         if enable_tim and tim_branch not in (TimBranch.S2L2A_FULL, TimBranch.RGB_MAPBOX):
             return "TIM_BRANCH_INVALID"
         return None
+    return None
+
+
+def validate_profile_mode_matrix(
+    *,
+    analysis_profile: AnalysisProfile,
+    sentinel_fetch_mode: SentinelFetchMode,
+    enable_tim: bool,
+) -> str | None:
+    """Return error code string if a mini-app profile asks for an impossible mode."""
+    if analysis_profile == AnalysisProfile.BRIEF_ONLY:
+        return None
+    if analysis_profile in (
+        AnalysisProfile.WILDFIRE,
+        AnalysisProfile.OCEANSCOUT_SHIP_DETECTION,
+        AnalysisProfile.LAND_USE_CHANGE,
+        AnalysisProfile.FLOOD_PULSE,
+    ):
+        if not enable_tim:
+            return "PROFILE_REQUIRES_TIM"
+        if sentinel_fetch_mode == SentinelFetchMode.MINIMAL_RGB:
+            return "PROFILE_REQUIRES_SENTINEL_STACK"
     return None

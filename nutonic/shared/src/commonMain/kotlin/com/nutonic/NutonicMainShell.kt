@@ -43,9 +43,15 @@ import com.nutonic.navigation.NutonicRoute
 import com.nutonic.navigation.ShellDetail
 import com.nutonic.screens.CommunityLeaderboardPanel
 import com.nutonic.screens.GameRolePicker
+import com.nutonic.screens.ProCoordinateDashboardDetail
 import com.nutonic.screens.RankedPlaySession
 import com.nutonic.screens.ShellDetailPlaceholder
 import com.nutonic.screens.WorldMapGameplayDetail
+import com.nutonic.screens.pro.ProBriefComposerScreen
+import com.nutonic.screens.pro.ProFireWatchScreen
+import com.nutonic.screens.pro.ProFloodPulseScreen
+import com.nutonic.screens.pro.ProLandShiftScreen
+import com.nutonic.screens.pro.ProOceanScoutScreen
 import com.nutonic.settings.SettingsRepository
 import com.nutonic.shell.ScanHubScreen
 import com.nutonic.style.NutonicColors
@@ -137,6 +143,19 @@ fun NutonicMainShell(
                             },
                         )
 
+                    ShellDetail.ProCoordinateDashboard ->
+                        ProCoordinateDashboardDetail(
+                            nutonicApiClient = nutonicApiClient,
+                            serverFeatureFlags = serverFeatureFlags,
+                            onBack = { clearDetail() },
+                            onOpenMiniApp = ::goDetail,
+                        )
+                    ShellDetail.ProFireWatch -> ProFireWatchScreen(onBack = { clearDetail() })
+                    ShellDetail.ProOceanScout -> ProOceanScoutScreen(onBack = { clearDetail() })
+                    ShellDetail.ProLandShift -> ProLandShiftScreen(onBack = { clearDetail() })
+                    ShellDetail.ProFloodPulse -> ProFloodPulseScreen(onBack = { clearDetail() })
+                    ShellDetail.ProBriefComposer -> ProBriefComposerScreen(onBack = { clearDetail() })
+
                     else -> ShellDetailPlaceholder(detail = detail, onBack = { clearDetail() })
                 }
             } else {
@@ -181,7 +200,12 @@ fun NutonicMainShell(
                             onOpenDetail = ::goDetail,
                         )
 
-                    MainTab.Pro -> ProTabRoot(onOpenDetail = ::goDetail)
+                    MainTab.Pro ->
+                        ProTabRoot(
+                            onOpenDetail = ::goDetail,
+                            nutonicApiClient = nutonicApiClient,
+                            serverFeatureFlags = serverFeatureFlags,
+                        )
                 }
             }
         }
@@ -447,8 +471,14 @@ private fun RowToggle(
 }
 
 @Composable
-private fun ProTabRoot(onOpenDetail: (ShellDetail) -> Unit) {
-    var localProbeStatus by remember { mutableStateOf("Idle") }
+private fun ProTabRoot(
+    onOpenDetail: (ShellDetail) -> Unit,
+    nutonicApiClient: NutonicApiClient?,
+    serverFeatureFlags: FeatureFlags?,
+) {
+    val scope = rememberCoroutineScope()
+    val proEnabled = serverFeatureFlags?.proJobs == true
+    var probeStatus by remember { mutableStateOf("Idle") }
     Column(
         modifier =
             Modifier
@@ -477,16 +507,41 @@ private fun ProTabRoot(onOpenDetail: (ShellDetail) -> Unit) {
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("TiM / on-device VLM health", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("Local probe: $localProbeStatus", style = MaterialTheme.typography.body2)
+            Text("Server probe: $probeStatus", style = MaterialTheme.typography.body2)
             NutonicGhostButton(
-                text = "Run local PRO probe",
-                onClick = { localProbeStatus = "Healthy (local check)" },
+                text = "Refresh PRO server probe",
+                enabled = nutonicApiClient != null,
+                onClick = {
+                    val client = nutonicApiClient ?: return@NutonicGhostButton
+                    scope.launch {
+                        probeStatus =
+                            when (val r = client.getConfig()) {
+                                is ApiResult.Ok ->
+                                    if (r.value.features.proJobs) {
+                                        "Available"
+                                    } else {
+                                        "Disabled by server"
+                                    }
+
+                                is ApiResult.HttpFailure -> r.userMessage
+                                is ApiResult.NetworkFailure -> "Network: ${r.debugMessage}"
+                            }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
+        if (!proEnabled) {
+            Text(
+                "PRO features are not available on this server yet.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.error,
             )
         }
         NutonicPrimaryButton(
             text = "Open PRO coordinate dashboard",
             onClick = { onOpenDetail(ShellDetail.ProCoordinateDashboard) },
+            enabled = proEnabled,
             modifier = Modifier.fillMaxWidth(),
         )
     }

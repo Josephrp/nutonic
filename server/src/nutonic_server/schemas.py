@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class TokenResponse(BaseModel):
@@ -147,21 +147,62 @@ class RankedForfeitOut(BaseModel):
     status: str = "forfeited"
 
 
+ProJobProfile = Literal[
+    "wildfire",
+    "oceanscout_ship_detection",
+    "land_use_change",
+    "flood_pulse",
+    "brief_only",
+]
+ProJobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
+
+
+class ProArtifactRef(BaseModel):
+    artifact_id: str = Field(max_length=128)
+    kind: str = Field(max_length=64)
+    mime_type: str = Field(max_length=128)
+    size_bytes: int | None = Field(default=None, ge=0)
+    profile: str | None = Field(default=None, max_length=128)
+    download_url: str | None = None
+
+
+class ProBriefSection(BaseModel):
+    title: str = Field(max_length=128)
+    body: str = Field(max_length=2000)
+    confidence: str | None = Field(default=None, max_length=64)
+
+
+class ProOnDevicePayload(BaseModel):
+    brief_sections: list[ProBriefSection] = Field(default_factory=list)
+    overlay_refs: list[ProArtifactRef] = Field(default_factory=list)
+    confidence_summary: str | None = Field(default=None, max_length=512)
+
+
 class ProJobCreateIn(BaseModel):
     center_lat: float = Field(ge=-90.0, le=90.0)
     center_lon: float = Field(ge=-180.0, le=180.0)
     bbox_half_km: float = Field(default=5.0, gt=0, le=500.0)
     mapbox_zoom: int = Field(default=12, ge=0, le=18)
+    analysis_profile: ProJobProfile = "brief_only"
     enable_tim: bool = False
     tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "RGB_mapbox"
     vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512", max_length=128)
     sentinel_fetch_mode: Literal["MINIMAL_RGB", "TERRAMIND_SPECTRAL", "FULL_STAC"] = "MINIMAL_RGB"
     datetime_interval: str | None = Field(default=None, max_length=128)
+    scene_id_t0: str | None = Field(default=None, max_length=256)
+    scene_id_t1: str | None = Field(default=None, max_length=256)
+
+    @field_validator("analysis_profile", mode="before")
+    @classmethod
+    def normalize_analysis_profile(cls, v: object) -> object:
+        if str(v).strip() == "vessel_monitoring":
+            return "oceanscout_ship_detection"
+        return v
 
 
 class ProJobCreateOut(BaseModel):
     job_id: str
-    status: str = "queued"
+    status: ProJobStatus = "queued"
     inference_upstream_ok: bool | None = None
     materialization_ok: bool | None = None
     materialization_id: str | None = None
@@ -171,11 +212,29 @@ class ProJobCreateOut(BaseModel):
 
 class ProJobStatusOut(BaseModel):
     job_id: str
-    status: str
+    status: ProJobStatus
+    status_reason: str | None = None
+    error_class: str | None = None
+    error_detail: str | None = None
+    progress_pct: int | None = Field(default=None, ge=0, le=100)
+    profile: str | None = None
+    analysis_profile: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    artifacts: list[ProArtifactRef] | None = None
+    analysis_artifacts: list[ProArtifactRef] | None = None
+    brief_artifacts: list[ProArtifactRef] | None = None
+    scene_provenance: dict[str, Any] | None = None
+    on_device_payload: ProOnDevicePayload | None = None
     bundle_download_url: str | None = None
     materialization_id: str | None = None
     cache_key: str | None = None
-    materialization_summary: dict | None = None
+    materialization_summary: dict[str, Any] | None = None
+
+
+class ProJobCancelOut(BaseModel):
+    ok: bool = True
+    status: str
 
 
 class CacheManifestOut(BaseModel):

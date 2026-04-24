@@ -17,3 +17,20 @@ def test_health_and_infer_stub() -> None:
     assert r.status_code == 200
     assert "stub" in r.json()["caption"].lower()
     assert r.json()["pipeline"] == "satellite_lfm_vl_specialist"
+
+
+def test_pro_caption_alias_preserves_profile_context() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/v1/pro/caption",
+        json={
+            "task": "caption",
+            "image_base64": "Zm9v",
+            "analysis_profile": "wildfire",
+            "contract_id": "nutonic.pro.caption.v1",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["analysis_profile"] == "wildfire"
+    assert body["contract_id"] == "nutonic.pro.caption.v1"

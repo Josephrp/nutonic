@@ -43,6 +43,16 @@ sealed class ShellDetail {
     data object SetupProtocol : ShellDetail()
 
     data object ProCoordinateDashboard : ShellDetail()
+
+    data object ProFireWatch : ShellDetail()
+
+    data object ProOceanScout : ShellDetail()
+
+    data object ProLandShift : ShellDetail()
+
+    data object ProFloodPulse : ShellDetail()
+
+    data object ProBriefComposer : ShellDetail()
 }
 
 private const val PREFIX_SHELL = "shell."
@@ -141,6 +151,11 @@ private fun ShellDetail.token(): String =
         ShellDetail.RankGlobal -> "rank"
         ShellDetail.SetupProtocol -> "setup"
         ShellDetail.ProCoordinateDashboard -> "pro"
+        ShellDetail.ProFireWatch -> "pro-firewatch"
+        ShellDetail.ProOceanScout -> "pro-oceanscout"
+        ShellDetail.ProLandShift -> "pro-landshift"
+        ShellDetail.ProFloodPulse -> "pro-floodpulse"
+        ShellDetail.ProBriefComposer -> "pro-brief"
     }
 
 private fun decodeDetail(token: String): ShellDetail? =
@@ -154,5 +169,10 @@ private fun decodeDetail(token: String): ShellDetail? =
         "rank" -> ShellDetail.RankGlobal
         "setup" -> ShellDetail.SetupProtocol
         "pro" -> ShellDetail.ProCoordinateDashboard
+        "pro-firewatch" -> ShellDetail.ProFireWatch
+        "pro-oceanscout" -> ShellDetail.ProOceanScout
+        "pro-landshift" -> ShellDetail.ProLandShift
+        "pro-floodpulse" -> ShellDetail.ProFloodPulse
+        "pro-brief" -> ShellDetail.ProBriefComposer
         else -> null
     }

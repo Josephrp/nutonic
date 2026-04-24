@@ -6,11 +6,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from lfm_vl_hint_service.config import get_settings
-from lfm_vl_hint_service.dispatch import effective_lfm_backend, infer_suggestions, narrative_fuse_text
+from lfm_vl_hint_service.dispatch import effective_lfm_backend, infer_suggestions, narrative_fuse_text, pro_brief_fuse_text
 from lfm_vl_hint_service.models import SuggestionsFromFramesRequest, SuggestionsFromFramesResponse
 
 
@@ -39,6 +39,47 @@ class NarrativeFuseRequest(BaseModel):
 
 class NarrativeFuseResponse(BaseModel):
     narrative: str
+
+
+class ProArtifactRef(BaseModel):
+    artifact_id: str
+    kind: str
+    mime_type: str | None = None
+    profile: str | None = None
+    download_url: str | None = None
+
+
+class ProBriefJobInput(BaseModel):
+    job_id: str
+    profile: str | None = None
+    center_lat: float | None = Field(default=None, ge=-90.0, le=90.0)
+    center_lon: float | None = Field(default=None, ge=-180.0, le=180.0)
+    summary: dict[str, Any] | None = None
+
+
+class ProBriefFuseRequest(BaseModel):
+    profile: str = "brief_only"
+    tim_summary: dict[str, Any] | None = None
+    artifact_refs: list[ProArtifactRef] = Field(default_factory=list)
+    jobs: list[ProBriefJobInput] = Field(default_factory=list)
+    force_compose: bool = False
+    max_compose_distance_km: float = Field(default=500.0, gt=0.0)
+
+
+class ProBriefSection(BaseModel):
+    title: str
+    body: str
+    confidence: str | None = None
+
+
+class ProBriefFuseResponse(BaseModel):
+    executive_summary: str
+    key_findings: list[str]
+    confidence: str
+    recommended_actions: list[str]
+    sections: list[ProBriefSection]
+    warnings: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
 
 
 @app.get("/health")
@@ -85,6 +126,22 @@ def narrative_fuse(req: NarrativeFuseRequest) -> NarrativeFuseResponse:
     caps = [(c.viewpoint_id, c.text) for c in req.captions]
     text = narrative_fuse_text(caps)
     return NarrativeFuseResponse(narrative=text)
+
+
+@app.post("/v1/pro/brief/fuse", response_model=ProBriefFuseResponse)
+def pro_brief_fuse(req: ProBriefFuseRequest) -> ProBriefFuseResponse:
+    """Profile-aware PRO brief composer with conservative confidence language."""
+    payload = pro_brief_fuse_text(
+        profile=req.profile,
+        tim_summary=req.tim_summary,
+        artifact_refs=[a.model_dump(mode="json") for a in req.artifact_refs],
+        jobs=[j.model_dump(mode="json") for j in req.jobs],
+        force_compose=req.force_compose,
+        max_compose_distance_km=req.max_compose_distance_km,
+    )
+    if payload.get("error") == "aoi_mismatch":
+        raise HTTPException(status_code=422, detail=payload)
+    return ProBriefFuseResponse.model_validate(payload)
 
 
 def _mount_gradio_if_requested(application: FastAPI) -> FastAPI:

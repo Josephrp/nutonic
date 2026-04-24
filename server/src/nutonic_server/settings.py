@@ -129,6 +129,54 @@ class Settings(BaseSettings):
         ),
     )
 
+    pro_job_backend: str = Field(
+        default="sqlite",
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_BACKEND", "PRO_JOB_BACKEND"),
+        description="PRO job persistence backend. Only `sqlite` is implemented today.",
+    )
+
+    pro_job_database_url: str = Field(
+        default="sqlite:///data/nutonic_pro_jobs.db",
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_DATABASE_URL", "PRO_JOB_DATABASE_URL"),
+        description="SQLAlchemy URL for persisted PRO job status and artifact metadata.",
+    )
+
+    pro_required_origins: str = Field(
+        default="pro_materialization",
+        validation_alias=AliasChoices("NUTONIC_PRO_REQUIRED_ORIGINS", "PRO_REQUIRED_ORIGINS"),
+        description="Comma-separated PRO origin names that must pass health probes before a job runs.",
+    )
+
+    pro_optional_origins: str = Field(
+        default="inference_worker",
+        validation_alias=AliasChoices("NUTONIC_PRO_OPTIONAL_ORIGINS", "PRO_OPTIONAL_ORIGINS"),
+        description="Comma-separated PRO origin names that may be degraded without failing the job.",
+    )
+
+    pro_job_ttl_seconds: int = Field(
+        default=86_400,
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_TTL_SECONDS", "PRO_JOB_TTL_SECONDS"),
+        description="Retention window for terminal PRO jobs and their artifacts.",
+    )
+
+    pro_max_concurrent_jobs: int = Field(
+        default=2,
+        validation_alias=AliasChoices("NUTONIC_PRO_MAX_CONCURRENT_JOBS", "PRO_MAX_CONCURRENT_JOBS"),
+        description="Maximum number of concurrently running in-process PRO jobs.",
+    )
+
+    pro_job_poll_interval_seconds: float = Field(
+        default=2.0,
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_POLL_INTERVAL_SECONDS", "PRO_JOB_POLL_INTERVAL_SECONDS"),
+        description="Default server-side PRO runner poll interval for future queue sweepers.",
+    )
+
+    pro_artifact_root: str = Field(
+        default="data/pro_artifacts",
+        validation_alias=AliasChoices("NUTONIC_PRO_ARTIFACT_ROOT", "PRO_ARTIFACT_ROOT"),
+        description="Filesystem root for PRO job artifact bytes.",
+    )
+
     inference_hmac_secret: str = Field(
         default="",
         validation_alias=AliasChoices(
@@ -175,6 +223,12 @@ class Settings(BaseSettings):
             return []
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    def pro_required_origin_names(self) -> list[str]:
+        return _split_csv(self.pro_required_origins)
+
+    def pro_optional_origin_names(self) -> list[str]:
+        return _split_csv(self.pro_optional_origins)
+
     jwt_secret: str = Field(
         default="dev-only-change-in-production-min-32b!!",
         validation_alias=AliasChoices("NUTONIC_JWT_SECRET", "JWT_SECRET"),
@@ -189,3 +243,7 @@ class Settings(BaseSettings):
 
 def load_settings() -> Settings:
     return Settings()
+
+
+def _split_csv(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]

@@ -204,3 +204,101 @@ data class RankedForfeitOut(
     val ok: Boolean = true,
     val status: String,
 )
+
+@Serializable
+enum class ProJobProfile {
+    @SerialName("wildfire")
+    WILDFIRE,
+
+    @SerialName("oceanscout_ship_detection")
+    OCEANSCOUT_SHIP_DETECTION,
+
+    @SerialName("land_use_change")
+    LAND_USE_CHANGE,
+
+    @SerialName("flood_pulse")
+    FLOOD_PULSE,
+
+    @SerialName("brief_only")
+    BRIEF_ONLY,
+}
+
+@Serializable
+data class ProJobCreateIn(
+    @SerialName("center_lat") val centerLat: Double,
+    @SerialName("center_lon") val centerLon: Double,
+    @SerialName("bbox_half_km") val bboxHalfKm: Double = 5.0,
+    @SerialName("mapbox_zoom") val mapboxZoom: Int = 12,
+    @SerialName("analysis_profile") val analysisProfile: ProJobProfile = ProJobProfile.BRIEF_ONLY,
+    @SerialName("enable_tim") val enableTim: Boolean = false,
+    @SerialName("tim_branch") val timBranch: String = "RGB_mapbox",
+    @SerialName("vlm_contract_id") val vlmContractId: String = "nutonic.pro.vlm.v1_512",
+    @SerialName("sentinel_fetch_mode") val sentinelFetchMode: String = "MINIMAL_RGB",
+    @SerialName("datetime_interval") val datetimeInterval: String? = null,
+    @SerialName("scene_id_t0") val sceneIdT0: String? = null,
+    @SerialName("scene_id_t1") val sceneIdT1: String? = null,
+)
+
+@Serializable
+data class ProJobCreateOut(
+    @SerialName("job_id") val jobId: String,
+    val status: String = "queued",
+    @SerialName("inference_upstream_ok") val inferenceUpstreamOk: Boolean? = null,
+    @SerialName("materialization_ok") val materializationOk: Boolean? = null,
+    @SerialName("materialization_id") val materializationId: String? = null,
+    @SerialName("cache_key") val cacheKey: String? = null,
+    @SerialName("materialization_error") val materializationError: String? = null,
+)
+
+@Serializable
+data class ProArtifactRef(
+    @SerialName("artifact_id") val artifactId: String,
+    val kind: String,
+    @SerialName("mime_type") val mimeType: String,
+    @SerialName("size_bytes") val sizeBytes: Long? = null,
+    val profile: String? = null,
+    @SerialName("download_url") val downloadUrl: String? = null,
+)
+
+@Serializable
+data class ProBriefSection(
+    val title: String,
+    val body: String,
+    val confidence: String? = null,
+)
+
+@Serializable
+data class ProOnDevicePayload(
+    @SerialName("brief_sections") val briefSections: List<ProBriefSection> = emptyList(),
+    @SerialName("overlay_refs") val overlayRefs: List<ProArtifactRef> = emptyList(),
+    @SerialName("confidence_summary") val confidenceSummary: String? = null,
+)
+
+@Serializable
+data class ProJobStatusOut(
+    @SerialName("job_id") val jobId: String,
+    val status: String,
+    @SerialName("status_reason") val statusReason: String? = null,
+    @SerialName("error_class") val errorClass: String? = null,
+    @SerialName("error_detail") val errorDetail: String? = null,
+    @SerialName("progress_pct") val progressPct: Int? = null,
+    val profile: String? = null,
+    @SerialName("analysis_profile") val analysisProfile: String? = null,
+    @SerialName("started_at") val startedAt: String? = null,
+    @SerialName("finished_at") val finishedAt: String? = null,
+    val artifacts: List<ProArtifactRef>? = null,
+    @SerialName("analysis_artifacts") val analysisArtifacts: List<ProArtifactRef>? = null,
+    @SerialName("brief_artifacts") val briefArtifacts: List<ProArtifactRef>? = null,
+    @SerialName("scene_provenance") val sceneProvenance: JsonObject? = null,
+    @SerialName("on_device_payload") val onDevicePayload: ProOnDevicePayload? = null,
+    @SerialName("bundle_download_url") val bundleDownloadUrl: String? = null,
+    @SerialName("materialization_id") val materializationId: String? = null,
+    @SerialName("cache_key") val cacheKey: String? = null,
+    @SerialName("materialization_summary") val materializationSummary: JsonObject? = null,
+)
+
+@Serializable
+data class ProJobCancelOut(
+    val ok: Boolean = true,
+    val status: String,
+)

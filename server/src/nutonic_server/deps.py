@@ -7,13 +7,38 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from nutonic_server.jwt_tokens import decode_bearer_token
+from nutonic_server.pro_jobs_runner import ProJobRunner
+from nutonic_server.pro_jobs_store import ProJobStore, create_pro_job_store
 from nutonic_server.settings import Settings, load_settings
 
 _bearer = HTTPBearer(auto_error=False)
+_pro_job_stores: dict[str, ProJobStore] = {}
+_pro_job_runners: dict[str, ProJobRunner] = {}
 
 
 def get_settings() -> Settings:
     return load_settings()
+
+
+def get_pro_job_store(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ProJobStore:
+    if settings.pro_job_backend.strip().lower() != "sqlite":
+        raise HTTPException(status_code=500, detail="Unsupported PRO job backend")
+    url = settings.pro_job_database_url.strip()
+    if url not in _pro_job_stores:
+        _pro_job_stores[url] = create_pro_job_store(url)
+    return _pro_job_stores[url]
+
+
+def get_pro_job_runner(
+    settings: Annotated[Settings, Depends(get_settings)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
+) -> ProJobRunner:
+    key = f"{settings.pro_job_database_url.strip()}|{settings.pro_materialization_service_url.strip()}"
+    if key not in _pro_job_runners:
+        _pro_job_runners[key] = ProJobRunner(settings=settings, store=store)
+    return _pro_job_runners[key]
 
 
 def require_community_lb_get(

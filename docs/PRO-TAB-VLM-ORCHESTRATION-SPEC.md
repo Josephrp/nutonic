@@ -20,7 +20,7 @@
 
 ### 1.1 Purpose
 
-The **PRO** tab is a **non-game coordinate intelligence dashboard** (`rules/01`): the user supplies **WGS84** (typed, pasted, or map pick) and optionally a **short natural-language ask** (schema-capped). The client **POST**s to the **game server**, which forwards to a **standalone PRO materialization service** that:
+The **PRO** tab is a **non-game coordinate intelligence dashboard** (`rules/01`): the user chooses the analysis center through a **map-first AOI picker** with a movable pin; typed or pasted WGS84 is an advanced/accessibility path that stays synchronized with the pin. The client **POST**s `center_lat` / `center_lon` to the **game server**, which forwards to a **standalone PRO materialization service** that:
 
 1. **Acquires** **Mapbox** (or equivalent) **static** basemap tiles/stills and **Sentinel-2** assets via **STAC** (service keys **never** in `commonMain`, `rules/04`).  
 2. **Downsamples / crops / reprojects** rasters to **two families of contracts** documented in OpenAPI:  
@@ -87,7 +87,7 @@ sequenceDiagram
   U->>C: Submit lat, lon (+ optional ask)
   C->>G: POST /api/v1/pro/jobs
   G->>G: Validate JWT, rate-limit, job_id
-  G->>P: POST /internal/pro/materialize (coords, bbox, modes)
+  G->>P: POST /internal/v1/materialize (coords, bbox, modes)
   P->>M: Mapbox static fetch
   P->>S: Sentinel L2A (policy-limited)
   P->>P: Downsample → vlm_image_set + tim_input_contract
@@ -109,7 +109,7 @@ sequenceDiagram
 
 **Alignment:** **Geospatial → resize → TiM / generate** follows `plans/2026-04-07-terramind-gradio-spaces-comprehensive-demo.md` and `plans/2026-04-07-tim-standalone-gradio-poi-dataset.md`; **split deployables** are documented in **`docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`** §5.3.
 
-**Internal HTTP path (disambiguation):** the game server’s call to the standalone materialization tier is **`POST /internal/pro/materialize`** (private network, HMAC/mTLS per thin orchestrator plan). It is **not** a client-visible URL; document the exact path in **`server/docs/TOPOLOGY.md`** if you rename routers.
+**Internal HTTP path (disambiguation):** the game server’s call to the standalone materialization tier is **`POST /internal/v1/materialize`** (private network, HMAC/mTLS per thin orchestrator plan). It is **not** a client-visible URL; document the exact path in **`server/docs/TOPOLOGY.md`** if you rename routers.
 
 ---
 
@@ -123,8 +123,14 @@ sequenceDiagram
 
 ### 3.1 PRO entitlement (initial build)
 
-- **Client:** **PRO** entry points are **gate-aware** (disabled UI, upsell copy, or hidden actions when `features.pro` is false)—product may still show the tab shell.
-- **Game server:** For **valid registered clients**, **`GET /api/v1/pro/entitlement`** (or JWT claim `features.pro`) **always returns allowed** in the **initial build**, so engineering can ship **gated UX** before billing is wired. Tighten to real **SKU / receipt** checks in OpenAPI when product enables paywalls (`plans/2026-04-07-game-server-thin-orchestrator.md`).
+- **Client:** **PRO** entry points are **gate-aware** (disabled UI, upsell copy, or hidden actions when `features.pro_jobs` is false)—product may still show the tab shell.
+- **Game server:** For **valid registered clients**, **`GET /api/v1/config`** exposes `features.pro_jobs`; engineering can ship **gated UX** before billing is wired. Tighten to real **SKU / receipt** checks in OpenAPI when product enables paywalls (`plans/2026-04-07-game-server-thin-orchestrator.md`).
+
+### 3.2 Map-First AOI Workflow
+
+The PRO dashboard must present a map as the primary coordinate input on targets where SCAN already ships map rendering. The user taps or drags a single center pin; pan/zoom keeps the pin as the effective AOI center and previews the `bbox_half_km` footprint. Manual `center_lat` / `center_lon` fields are collapsed by default, labeled for assistive tech, range-validated, and bi-directionally synced with the pin before any `POST /api/v1/pro/jobs` request.
+
+`mapbox_zoom` remains a request field because it affects materialized basemap framing, but `bbox_half_km` is the analysis radius control. Web may ship an interim clickable static basemap if full `MapViewport` parity lags; raw lat/lon-only entry is not acceptable for a production PRO route.
 
 ---
 
@@ -132,7 +138,7 @@ sequenceDiagram
 
 ### 4.1 Game server (thin)
 
-- **Clamp** `latitude` ∈ [−90, 90], `longitude` ∈ [−180, 180]; **reject** NaN/Inf; **precision** ≤ 6 dp in logs (`rules/05`).  
+- **Clamp** `center_lat` ∈ [−90, 90], `center_lon` ∈ [−180, 180]; **reject** NaN/Inf; **precision** ≤ 6 dp in logs (`rules/05`).
 - **Rate limits** per **IP / device id / JWT sub** on `POST .../pro/jobs`; **caps** on `bbox_half_km`, bytes, bundle size (e.g. **≤ 8–12 MiB** gzip mobile), max concurrent jobs.  
 - **`POST .../pro/jobs`** → internal **`PRO_MATERIALIZATION_SERVICE_URL`** (HMAC/mTLS per **`plans/2026-04-07-game-server-thin-orchestrator.md`** §0.1); then optional **`TERRAMIND_TIM_URL`** / **`TERRAMIND_GENERATE_URL`** using **handles** (URLs, checksums) produced by materialization—**not** by re-hosting Sentinel COGs or large NPZ streams inside the game process. **Normative:** the game server is **control plane** (JWT, job ids, **poll JSON**, **signed `bundle_download_url`** or **HTTP redirect** to object storage for **`ProVisionBundle`** bytes per §5); **heavy raster IO** stays in **`inference/pro_materialization_service/`** and TerraMind workers. **No** `torch` in `server/`.
 
@@ -270,8 +276,8 @@ If the VLM returns **JSON** in the assistant text, client may **parse** (strict 
 Implementers replace paths and wire **OpenAPI** components per product.
 
 - **`POST /api/v1/pro/jobs`**  
-  - Body: `{ "latitude": number, "longitude": number, "bbox_half_km"?: number, "user_ask"?: string, "sentinel_fetch_mode"?: "MINIMAL_RGB" | "TERRAMIND_SPECTRAL" | "FULL_STAC", "enable_tim"?: boolean, "tim_modalities"?: string[], "pro_inference_route"?: "ON_DEVICE_VLM_PRIMARY" | "SERVER_TERRAMIND_GENERATE_PRIMARY" | "HYBRID" }` — **`tim_modalities`** must be a **subset** of IBM-allowed imagined modalities when `enable_tim` is true; server may **override** route or modality list for policy / capacity. Include **`Coordinates`** when product wants **TiM-derived** map pin / **AI-guess** hydration.  
-  - Response: `{ "job_id": "uuid", "poll_url": "...", "estimated_seconds": number }`
+  - Body: `{ "center_lat": number, "center_lon": number, "bbox_half_km"?: number, "mapbox_zoom"?: number, "analysis_profile"?: "wildfire" | "oceanscout_ship_detection" | "land_use_change" | "flood_pulse" | "brief_only", "sentinel_fetch_mode"?: "MINIMAL_RGB" | "TERRAMIND_SPECTRAL" | "FULL_STAC", "enable_tim"?: boolean, "scene_id_t0"?: string, "scene_id_t1"?: string }` — `center_lat` / `center_lon` come from the map pin unless the advanced numeric fields are explicitly used. Include **`Coordinates`** when product wants **TiM-derived** map pin / **AI-guess** hydration.
+  - Response: `{ "job_id": "uuid", "status": "queued" }`
 
 - **`GET /api/v1/pro/jobs/{job_id}`**  
   - Response: `{ "status": "...", "progress": 0.0-1.0, "message_key": "FETCHING_SENTINEL", "bundle_url"?: "...", "content_version"?: "...", "error"?: { "code": "...", "detail": "..." } }`
@@ -280,7 +286,7 @@ Implementers replace paths and wire **OpenAPI** components per product.
   - Headers: `ETag`, `Cache-Control`  
   - Body: binary per §5
 
-- **Optional:** **`DELETE /api/v1/pro/jobs/{job_id}`** — best-effort cancel.
+- **`POST /api/v1/pro/jobs/{job_id}/cancel`** — best-effort cancel.
 
 **Auth:** **`POST /api/v1/pro/jobs`** (and poll **`GET`**) use the same **game-server session / JWT** model as other authenticated APIs (`rules/05-networking-leaderboard.md`) so the server can **rate-limit** and **cache** materialization. **Initial entitlement** behavior: **§3.1**.
 

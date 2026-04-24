@@ -12,9 +12,11 @@ from typing import Any
 import httpx
 
 from pro_materialization_service.geospatial.asset_policy import (
+    AnalysisProfile,
     SentinelFetchMode,
     TimBranch,
     validate_mode_matrix,
+    validate_profile_mode_matrix,
 )
 from pro_materialization_service.geospatial.asset_version import (
     s2_asset_mapping_version,
@@ -71,6 +73,7 @@ def compute_cache_key(req: MaterializeRequest) -> str:
         "mapbox_zoom": req.mapbox_zoom,
         "mapbox_size": req.mapbox_size,
         "max_cloud_cover": req.max_cloud_cover,
+        "analysis_profile": req.analysis_profile,
         "retina": req.retina,
         "s2_asset_mapping_version": s2v,
         "sentinel_fetch_mode": req.sentinel_fetch_mode,
@@ -86,6 +89,14 @@ def compute_cache_key(req: MaterializeRequest) -> str:
 def materialize(req: MaterializeRequest, *, client: httpx.Client | None = None) -> MaterializeResult:
     """Dispatch by ``sentinel_fetch_mode`` (``plans/2026-04-12-...`` §5.3)."""
     mode = SentinelFetchMode(req.sentinel_fetch_mode)
+    profile = AnalysisProfile(req.analysis_profile)
+    profile_err = validate_profile_mode_matrix(
+        analysis_profile=profile,
+        sentinel_fetch_mode=mode,
+        enable_tim=req.enable_tim,
+    )
+    if profile_err:
+        raise ValueError(profile_err)
     if mode == SentinelFetchMode.MINIMAL_RGB:
         return materialize_rgb_mapbox(req, client=client)
     return materialize_spectral_paths(req, client=client)

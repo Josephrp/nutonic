@@ -92,6 +92,32 @@ def test_minimal_rgb_tim_wrong_branch(fake_mapbox_png) -> None:
     assert r.json()["detail"]["code"] == "TIM_BRANCH_REQUIRES_RGB_MAPBOX"
 
 
+def test_profile_requires_tim_and_sentinel_stack(fake_mapbox_png) -> None:
+    client = TestClient(app)
+    no_tim = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "analysis_profile": "wildfire",
+        },
+    )
+    assert no_tim.status_code == 422
+    assert no_tim.json()["detail"]["code"] == "PROFILE_REQUIRES_TIM"
+
+    minimal_rgb = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "analysis_profile": "wildfire",
+            "enable_tim": True,
+        },
+    )
+    assert minimal_rgb.status_code == 422
+    assert minimal_rgb.json()["detail"]["code"] == "PROFILE_REQUIRES_SENTINEL_STACK"
+
+
 def test_terramind_spectral_requires_s2_tim_when_rgb_tim(fake_mapbox_png) -> None:
     client = TestClient(app)
     r = client.post(

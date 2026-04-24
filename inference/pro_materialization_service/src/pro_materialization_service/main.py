@@ -83,6 +83,8 @@ def _materialize_http_errors(e: ValueError) -> NoReturn:
         "TIM_BRANCH_REQUIRES_RGB_MAPBOX",
         "TIM_BRANCH_REQUIRES_S2L2A_FULL",
         "TIM_BRANCH_INVALID",
+        "PROFILE_REQUIRES_TIM",
+        "PROFILE_REQUIRES_SENTINEL_STACK",
     ):
         raise HTTPException(status_code=422, detail={"code": code}) from e
     if code in ("STAC_NO_ITEMS", "S2L2A_INCOMPLETE"):

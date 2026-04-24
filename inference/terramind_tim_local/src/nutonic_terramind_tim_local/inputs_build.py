@@ -101,7 +101,7 @@ def _stac_s12_tensor(
     dt = str(s2.get("datetime") or in_cfg.get("datetime") or "").strip()
     if not dt:
         raise ValueError("inputs.s2.datetime (or inputs.datetime / batch row) is required for STAC S2")
-    stack, meta = load_s2l2a_patch_np(
+    patch = load_s2l2a_patch_np(
         lat=lat,
         lon=lon,
         datetime_range=dt,
@@ -113,6 +113,8 @@ def _stac_s12_tensor(
         asset_keys=s2.get("asset_keys"),
         max_items=int(s2.get("max_items", 20)),
     )
+    stack = patch.stack
+    meta = patch.meta
     stack = apply_reflectance_scale(stack, s2)
     t = torch.from_numpy(stack).unsqueeze(0).to(device)
     return t, meta

@@ -6,14 +6,20 @@ Keep in sync with ``streetview_pano_service/inference_hmac.py``.
 
 from __future__ import annotations
 
+import collections
 import hashlib
 import hmac
 import os
+import threading
 import time
 from typing import Callable
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
+_NONCE_LOCK = threading.Lock()
+_NONCE_CACHE: collections.OrderedDict[str, float] = collections.OrderedDict()
+_MAX_NONCE_CACHE = 10_000
 
 
 def hmac_secret() -> str:
@@ -58,6 +64,27 @@ def verify_inbound_hmac(request: Request, *, max_skew_s: int = 300) -> str | Non
     if not hmac.compare_digest(expected, str(sig).strip()):
         return "invalid X-Nutonic-Signature"
 
+    nonce_err = _check_and_record_nonce(str(nonce).strip(), float(ts_i), max_skew_s)
+    if nonce_err is not None:
+        return nonce_err
+
+    return None
+
+
+def _check_and_record_nonce(nonce: str, ts: float, max_skew_s: int) -> str | None:
+    with _NONCE_LOCK:
+        if nonce in _NONCE_CACHE:
+            return "replayed X-Nutonic-Nonce"
+        cutoff = time.time() - max_skew_s
+        while _NONCE_CACHE:
+            oldest_nonce, oldest_ts = next(iter(_NONCE_CACHE.items()))
+            if oldest_ts < cutoff:
+                _NONCE_CACHE.pop(oldest_nonce)
+            else:
+                break
+        while len(_NONCE_CACHE) >= _MAX_NONCE_CACHE:
+            _NONCE_CACHE.popitem(last=False)
+        _NONCE_CACHE[nonce] = ts
     return None
 
 

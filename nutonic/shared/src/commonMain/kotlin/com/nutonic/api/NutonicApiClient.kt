@@ -14,7 +14,9 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.delay
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
 
 /**
  * Thin REST client for `docs/openapi.yaml` (`IMP-070`).
@@ -267,6 +269,118 @@ class NutonicApiClient(
             ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
         }
 
+    suspend fun postProJob(
+        body: ProJobCreateIn,
+        bearerAccessToken: String,
+    ): ApiResult<ProJobCreateOut> =
+        try {
+            val response: HttpResponse =
+                http.post(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("Authorization", "Bearer $bearerAccessToken")
+                    setBody(body)
+                }
+            decodeResponse(response)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun getProJob(
+        jobId: String,
+        bearerAccessToken: String,
+    ): ApiResult<ProJobStatusOut> =
+        getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs/" + encodePathSegment(jobId)) {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+
+    suspend fun listProJobs(
+        bearerAccessToken: String,
+        limit: Int = 20,
+        status: String? = null,
+    ): ApiResult<List<ProJobStatusOut>> {
+        val params =
+            buildList {
+                add("limit=${limit.coerceIn(1, 100)}")
+                status?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    add("status=${it.encodeURLParameter()}")
+                }
+            }.joinToString("&")
+        return getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs?$params") {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+    }
+
+    suspend fun cancelProJob(
+        jobId: String,
+        bearerAccessToken: String,
+    ): ApiResult<ProJobCancelOut> =
+        try {
+            val response: HttpResponse =
+                http.post(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs/" + encodePathSegment(jobId) + "/cancel") {
+                    header("Authorization", "Bearer $bearerAccessToken")
+                }
+            decodeResponse(response)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun getProArtifact(
+        jobId: String,
+        artifactId: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> =
+        try {
+            val url =
+                originTrimmed.trimEnd('/') +
+                    "/api/v1/pro/jobs/" +
+                    encodePathSegment(jobId) +
+                    "/artifacts/" +
+                    encodePathSegment(artifactId)
+            val response: HttpResponse =
+                http.get(url) {
+                    header("Authorization", "Bearer $bearerAccessToken")
+                }
+            when {
+                response.status.isSuccess() -> ApiResult.Ok(response.body())
+                else ->
+                    ApiResult.HttpFailure(
+                        response.status.value,
+                        stubUserMessageForStatus(response.status.value, null),
+                        null,
+                    )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun pollProJob(
+        jobId: String,
+        bearerAccessToken: String,
+        intervalMs: Long = 2_000,
+        maxAttempts: Int = 90,
+        onProgress: (ProJobStatusOut) -> Unit = {},
+    ): ApiResult<ProJobStatusOut> {
+        repeat(maxAttempts) {
+            val result = getProJob(jobId, bearerAccessToken)
+            if (result is ApiResult.Ok) {
+                onProgress(result.value)
+                if (result.value.status in terminalProJobStatuses) {
+                    return result
+                }
+            } else {
+                return result
+            }
+            delay(intervalMs + Random.nextLong(0, (intervalMs / 4).coerceAtLeast(1)))
+        }
+        return ApiResult.NetworkFailure("Polling timeout after ${maxAttempts * intervalMs / 1000}s")
+    }
+
     private fun leaderboardUrl(mapId: String): String =
         originTrimmed.trimEnd('/') + "/api/v1/maps/" + encodePathSegment(mapId) + "/leaderboard"
 
@@ -344,6 +458,8 @@ class NutonicApiClient(
             }
         }
 }
+
+private val terminalProJobStatuses = setOf("completed", "failed", "cancelled")
 
 sealed class ApiResult<out T> {
     data class Ok<T>(

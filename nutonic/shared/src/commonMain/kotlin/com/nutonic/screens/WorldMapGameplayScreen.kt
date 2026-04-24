@@ -51,6 +51,7 @@ import com.nutonic.audio.NutonicBgmTrack
 import com.nutonic.cache.AiGuessStore
 import com.nutonic.cache.CachedDocumentWithMergeOutcome
 import com.nutonic.cache.ContentCacheRepository
+import com.nutonic.cache.ProOverlayGuessRepository
 import com.nutonic.cache.ShippedManifestMergeOutcome
 import com.nutonic.cache.locationForMap
 import com.nutonic.cache.ensurePlayableLocationFromShipped
@@ -143,6 +144,7 @@ fun WorldMapGameplayDetail(
     localLeaderboardRepository: LocalNonRankedLeaderboardRepository? = null,
     nutonicApiClient: NutonicApiClient? = null,
     guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
+    proOverlayGuessRepository: ProOverlayGuessRepository? = null,
     /** When set, local truth/score HUD is suppressed until server [postRankedRoundSubmit] resolves (W6). */
     rankedSession: RankedPlaySession? = null,
     onBack: () -> Unit,
@@ -340,7 +342,10 @@ fun WorldMapGameplayDetail(
         referenceStillFailed = referenceStill == null
     }
 
-    val aiGuessStore = remember(manifestSnapshot) { manifestSnapshot?.let(::AiGuessStore) }
+    val aiGuessStore =
+        remember(manifestSnapshot, proOverlayGuessRepository) {
+            manifestSnapshot?.let { AiGuessStore(it, proOverlayGuessRepository) }
+        }
     val effectiveMapId = rankedForUi?.clue?.mapId ?: mapId
     val aiForRoundResolution =
         when {

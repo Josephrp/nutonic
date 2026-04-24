@@ -1012,6 +1012,10 @@ components:
           type: string
           nullable: true
           description: Optional pinned STAC item for temporal t1
+        scene_id_t2:
+          type: string
+          nullable: true
+          description: Optional pinned STAC item for temporal t2
 
     ProJobCreateOut:
       type: object

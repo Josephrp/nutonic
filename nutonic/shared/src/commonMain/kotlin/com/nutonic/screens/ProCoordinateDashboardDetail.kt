@@ -27,6 +27,8 @@ import com.nutonic.api.ProArtifactRef
 import com.nutonic.api.ProJobCreateIn
 import com.nutonic.api.ProJobProfile
 import com.nutonic.api.ProJobStatusOut
+import com.nutonic.cache.ProOverlayGuess
+import com.nutonic.map.LatLon
 import com.nutonic.navigation.ShellDetail
 import com.nutonic.screens.pro.ProAnalysisLocationPicker
 import com.nutonic.style.NutonicGhostButton
@@ -38,8 +40,11 @@ import kotlinx.coroutines.launch
 fun ProCoordinateDashboardDetail(
     nutonicApiClient: NutonicApiClient?,
     serverFeatureFlags: FeatureFlags?,
+    currentMapId: String,
     onBack: () -> Unit,
-    onOpenMiniApp: (ShellDetail) -> Unit,
+    onOpenMiniApp: (ShellDetail, ProJobStatusOut?) -> Unit,
+    onOpenGameplay: () -> Unit,
+    onPublishGameplayOverlay: (ProOverlayGuess) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val proEnabled = serverFeatureFlags?.proJobs == true
@@ -51,6 +56,7 @@ fun ProCoordinateDashboardDetail(
     var statusText by remember { mutableStateOf<String?>(null) }
     var currentJob by remember { mutableStateOf<ProJobStatusOut?>(null) }
     var recentJobs by remember { mutableStateOf<List<ProJobStatusOut>>(emptyList()) }
+    var lastOverlayCandidate by remember { mutableStateOf<ProGameplayOverlayCandidate?>(null) }
 
     Column(
         modifier =
@@ -118,6 +124,19 @@ fun ProCoordinateDashboardDetail(
                                             currentJob = polled.value
                                             recentJobs = listOf(polled.value) + recentJobs.take(4)
                                             statusText = "Job ${polled.value.status}"
+                                            if (polled.value.status == "completed") {
+                                                lastOverlayCandidate =
+                                                    ProGameplayOverlayCandidate(
+                                                        mapId = currentMapId,
+                                                        jobId = polled.value.jobId,
+                                                        profile =
+                                                            polled.value.analysisProfile
+                                                                ?: polled.value.profile
+                                                                ?: profile.wireToken(),
+                                                        center = LatLon(centerLat, centerLon).normalized(),
+                                                        artifactId = preferredOverlayArtifact(mergedArtifacts(polled.value)),
+                                                    )
+                                            }
                                         }
 
                                         is ApiResult.HttpFailure -> statusText = polled.userMessage
@@ -161,9 +180,35 @@ fun ProCoordinateDashboardDetail(
         }
         JobStatusCard(currentJob = currentJob, statusText = statusText)
         ArtifactGallery(mergedArtifacts(currentJob))
-        MiniAppHandoff(onOpenMiniApp)
+        GameplayOverlayHandoff(
+            candidate = lastOverlayCandidate,
+            currentMapId = currentMapId,
+            onPublish = {
+                onPublishGameplayOverlay(it.toOverlayGuess())
+                statusText = "Published PRO overlay for gameplay map $currentMapId."
+            },
+            onOpenGameplay = onOpenGameplay,
+        )
+        MiniAppHandoff(currentJob = currentJob, onOpenMiniApp = onOpenMiniApp)
         RecentJobs(recentJobs)
     }
+}
+
+private data class ProGameplayOverlayCandidate(
+    val mapId: String,
+    val jobId: String,
+    val profile: String,
+    val center: LatLon,
+    val artifactId: String?,
+) {
+    fun toOverlayGuess(): ProOverlayGuess =
+        ProOverlayGuess(
+            mapId = mapId,
+            coordinates = center,
+            jobId = jobId,
+            profile = profile,
+            artifactId = artifactId,
+        )
 }
 
 @Composable
@@ -219,17 +264,51 @@ private fun ArtifactGallery(artifacts: List<ProArtifactRef>) {
 }
 
 @Composable
-private fun MiniAppHandoff(onOpenMiniApp: (ShellDetail) -> Unit) {
+private fun GameplayOverlayHandoff(
+    candidate: ProGameplayOverlayCandidate?,
+    currentMapId: String,
+    onPublish: (ProGameplayOverlayCandidate) -> Unit,
+    onOpenGameplay: () -> Unit,
+) {
+    NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text("Gameplay overlay handoff", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        if (candidate == null) {
+            Text(
+                "Run a PRO job to publish its center as an explicit gameplay AI overlay. This never changes manifest truth or shipped AI guesses.",
+                style = MaterialTheme.typography.caption,
+            )
+            return@NutonicGlassCard
+        }
+        Text(
+            "Ready for map $currentMapId · ${candidate.profile} · job ${candidate.jobId.take(8)}",
+            style = MaterialTheme.typography.body2,
+        )
+        Text(
+            "Overlay coordinate ${candidate.center.latitude.format()} / ${candidate.center.longitude.format()} is kept separate from manifest data.",
+            style = MaterialTheme.typography.caption,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            NutonicGhostButton("Publish overlay", { onPublish(candidate) }, Modifier.weight(1f))
+            NutonicGhostButton("Open gameplay", onOpenGameplay, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun MiniAppHandoff(
+    currentJob: ProJobStatusOut?,
+    onOpenMiniApp: (ShellDetail, ProJobStatusOut?) -> Unit,
+) {
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
         Text("Open mini-app", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            NutonicGhostButton("Fire", { onOpenMiniApp(ShellDetail.ProFireWatch) }, Modifier.weight(1f))
-            NutonicGhostButton("Ocean", { onOpenMiniApp(ShellDetail.ProOceanScout) }, Modifier.weight(1f))
-            NutonicGhostButton("Land", { onOpenMiniApp(ShellDetail.ProLandShift) }, Modifier.weight(1f))
+            NutonicGhostButton("Fire", { onOpenMiniApp(ShellDetail.ProFireWatch, currentJob) }, Modifier.weight(1f))
+            NutonicGhostButton("Ocean", { onOpenMiniApp(ShellDetail.ProOceanScout, currentJob) }, Modifier.weight(1f))
+            NutonicGhostButton("Land", { onOpenMiniApp(ShellDetail.ProLandShift, currentJob) }, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            NutonicGhostButton("Flood", { onOpenMiniApp(ShellDetail.ProFloodPulse) }, Modifier.weight(1f))
-            NutonicGhostButton("Brief Composer", { onOpenMiniApp(ShellDetail.ProBriefComposer) }, Modifier.weight(1f))
+            NutonicGhostButton("Flood", { onOpenMiniApp(ShellDetail.ProFloodPulse, currentJob) }, Modifier.weight(1f))
+            NutonicGhostButton("Brief Composer", { onOpenMiniApp(ShellDetail.ProBriefComposer, currentJob) }, Modifier.weight(1f))
         }
     }
 }
@@ -256,6 +335,14 @@ private fun mergedArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> {
             job.onDevicePayload?.overlayRefs.orEmpty()
     ).distinctBy { artifact -> artifact.artifactId }
 }
+
+private fun preferredOverlayArtifact(artifacts: List<ProArtifactRef>): String? =
+    artifacts
+        .firstOrNull { artifact ->
+            artifact.kind == "geojson" ||
+                artifact.mimeType == "application/geo+json" ||
+                artifact.artifactId.contains("overlay", ignoreCase = true)
+        }?.artifactId
 
 private fun proErrorCopy(
     errorClass: String,

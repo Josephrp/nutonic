@@ -31,6 +31,9 @@ class MaterializeRequest(BaseModel):
     vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512", max_length=128)
     enable_tim: bool = False
     tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "RGB_mapbox"
+    scene_id_t0: str | None = Field(default=None, max_length=256)
+    scene_id_t1: str | None = Field(default=None, max_length=256)
+    scene_id_t2: str | None = Field(default=None, max_length=256)
 
 
 class VlmArtifact(BaseModel):

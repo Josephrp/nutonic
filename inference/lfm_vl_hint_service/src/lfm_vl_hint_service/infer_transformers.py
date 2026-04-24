@@ -19,7 +19,13 @@ from PIL import Image
 
 from lfm_vl_hint_service.config import get_settings
 from lfm_vl_hint_service.models import SuggestionItem, SuggestionsFromFramesRequest, SuggestionsFromFramesResponse
-from lfm_vl_hint_service.prompts import narrative_system_prompt, narrative_user_payload, streetview_user_prompt
+from lfm_vl_hint_service.prompts import (
+    narrative_system_prompt,
+    narrative_user_payload,
+    pro_brief_system_prompt,
+    pro_brief_user_payload,
+    streetview_user_prompt,
+)
 from lfm_vl_hint_service.spaces_zero import apply_zero_gpu
 
 _model: Any = None
@@ -214,6 +220,60 @@ def narrative_fuse_transformers(captions: list[tuple[str, str]]) -> str:
         "max_new_tokens": min(512, settings.max_new_tokens),
         "do_sample": True,
         "temperature": 0.2,
+    }
+    output_ids = _model_generate_gpu(gen_kwargs)
+    new_tokens = output_ids[:, in_len:]
+    return processor.batch_decode(new_tokens, skip_special_tokens=True)[0].strip()
+
+
+def pro_brief_fuse_transformers(
+    *,
+    profile: str,
+    profile_label: str,
+    tim_summary: dict[str, Any] | None,
+    artifact_refs: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    limitations: list[str],
+) -> str:
+    model, processor = ensure_transformers_model_loaded()
+    device = model.device
+    settings = get_settings()
+    conversation: list[dict[str, Any]] = [
+        {"role": "system", "content": pro_brief_system_prompt(profile)},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": pro_brief_user_payload(
+                        profile=profile,
+                        profile_label=profile_label,
+                        tim_summary=tim_summary,
+                        artifact_refs=artifact_refs,
+                        jobs=jobs,
+                        limitations=limitations,
+                    ),
+                },
+            ],
+        },
+    ]
+    inputs = processor.apply_chat_template(
+        conversation,
+        add_generation_prompt=True,
+        return_tensors="pt",
+        return_dict=True,
+        tokenize=True,
+    )
+    if hasattr(inputs, "to"):
+        inputs = inputs.to(device)
+    else:
+        inputs = {k: v.to(device) if hasattr(v, "to") else v for k, v in inputs.items()}
+    in_len = int(inputs["input_ids"].shape[1])
+    gen_kwargs = {
+        **inputs,
+        "max_new_tokens": min(700, settings.max_new_tokens),
+        "do_sample": True,
+        "temperature": 0.1,
     }
     output_ids = _model_generate_gpu(gen_kwargs)
     new_tokens = output_ids[:, in_len:]

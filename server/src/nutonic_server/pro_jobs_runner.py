@@ -165,12 +165,14 @@ class ProJobRunner:
                 materialization_summary = dict(materialization_summary)
                 materialization_summary["tim_summary"] = tim_summary
                 materialization_summary["brief_summary"] = brief_summary
+            scene_provenance = _scene_provenance_from_materialization(mat) if pro_url else None
             self._store.complete(
                 job_id,
                 artifacts=artifacts,
                 materialization_summary=materialization_summary,
                 materialization_id=materialization_id,
                 cache_key=cache_key,
+                scene_provenance=scene_provenance,
             )
 
     def _probe_required_origins(self, ic: InferenceClient) -> list[str]:
@@ -220,6 +222,8 @@ def summarize_materialize_worker_response(data: dict[str, Any]) -> dict[str, Any
             "bbox_wgs84",
             "vlm_canvas",
             "s2_asset_mapping_version",
+            "scene_provenance",
+            "temporal_slices",
         )
         if isinstance(rm, dict) and k in rm
     }
@@ -241,6 +245,14 @@ def summarize_materialize_worker_response(data: dict[str, Any]) -> dict[str, Any
             "has_npz": bool(tim_payload.get("npz_base64")),
         }
     return out
+
+
+def _scene_provenance_from_materialization(data: dict[str, Any]) -> dict[str, Any] | None:
+    run_manifest = data.get("run_manifest")
+    if not isinstance(run_manifest, dict):
+        return None
+    scene_provenance = run_manifest.get("scene_provenance")
+    return scene_provenance if isinstance(scene_provenance, dict) else None
 
 
 def summarize_brief_worker_response(data: dict[str, Any]) -> dict[str, Any]:
@@ -271,21 +283,38 @@ def _tim_summary_from_materialization(data: dict[str, Any]) -> dict[str, Any]:
 
 def _materialization_request(job: ProJobRecord) -> dict[str, Any]:
     params = dict(job.request_params)
+    requires_spectral = _profile_requires_spectral_tim(job.analysis_profile)
     request = {
         "latitude": params.get("center_lat"),
         "longitude": params.get("center_lon"),
         "bbox_half_km": params.get("bbox_half_km", 5.0),
         "mapbox_zoom": params.get("mapbox_zoom", 12),
-        "enable_tim": params.get("enable_tim", False),
-        "tim_branch": params.get("tim_branch", "RGB_mapbox"),
+        "enable_tim": True if requires_spectral else params.get("enable_tim", False),
+        "tim_branch": _profile_tim_branch(params.get("tim_branch"), job.analysis_profile),
         "vlm_contract_id": params.get("vlm_contract_id", "nutonic.pro.vlm.v1_512"),
-        "sentinel_fetch_mode": params.get("sentinel_fetch_mode", "MINIMAL_RGB"),
+        "sentinel_fetch_mode": _profile_sentinel_fetch_mode(params.get("sentinel_fetch_mode"), job.analysis_profile),
         "analysis_profile": job.analysis_profile,
     }
-    for key in ("datetime_interval", "scene_id_t0", "scene_id_t1"):
+    for key in ("datetime_interval", "scene_id_t0", "scene_id_t1", "scene_id_t2"):
         if params.get(key):
             request[key] = params[key]
     return request
+
+
+def _profile_requires_spectral_tim(profile: str) -> bool:
+    return profile in {"wildfire", "oceanscout_ship_detection", "land_use_change", "flood_pulse"}
+
+
+def _profile_tim_branch(raw: object, profile: str) -> str:
+    if _profile_requires_spectral_tim(profile):
+        return "S2L2A_full"
+    return str(raw or "RGB_mapbox")
+
+
+def _profile_sentinel_fetch_mode(raw: object, profile: str) -> str:
+    if _profile_requires_spectral_tim(profile):
+        return "TERRAMIND_SPECTRAL"
+    return str(raw or "MINIMAL_RGB")
 
 
 def _brief_request(

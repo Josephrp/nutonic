@@ -261,6 +261,7 @@ data class ProJobCreateIn(
     @SerialName("datetime_interval") val datetimeInterval: String? = null,
     @SerialName("scene_id_t0") val sceneIdT0: String? = null,
     @SerialName("scene_id_t1") val sceneIdT1: String? = null,
+    @SerialName("scene_id_t2") val sceneIdT2: String? = null,
 )
 
 @Serializable

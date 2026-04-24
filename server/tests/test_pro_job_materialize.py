@@ -109,7 +109,9 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert len(posts) == 1
     assert posts[0][0] == "http://pro.worker.test/internal/v1/materialize"
     assert posts[0][1]["latitude"] == 48.86
-    assert posts[0][1]["sentinel_fetch_mode"] == "MINIMAL_RGB"
+    assert posts[0][1]["sentinel_fetch_mode"] == "TERRAMIND_SPECTRAL"
+    assert posts[0][1]["enable_tim"] is True
+    assert posts[0][1]["tim_branch"] == "S2L2A_full"
     assert posts[0][1]["analysis_profile"] == "wildfire"
     assert sj["materialization_id"] == "mid-test"
     assert sj["cache_key"] == "ck-test"

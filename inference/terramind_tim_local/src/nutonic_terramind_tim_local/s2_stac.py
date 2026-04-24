@@ -120,6 +120,7 @@ def load_s2l2a_patch_np(
     asset_keys: Sequence[str] | None,
     max_items: int,
     include_scl: bool = False,
+    scene_id: str | None = None,
 ) -> S2PatchResult:
     """
     Return ``stack`` float32 ``(12, patch_hw, patch_hw)`` in TerraMind band order
@@ -141,6 +142,8 @@ def load_s2l2a_patch_np(
         "max_items": max(1, int(max_items)),
         "query": {"eo:cloud_cover": {"lt": float(max_cloud)}},
     }
+    if scene_id:
+        search_kwargs["ids"] = [scene_id]
     try:
         search = client.search(
             **search_kwargs,
@@ -150,11 +153,22 @@ def load_s2l2a_patch_np(
         search = client.search(**search_kwargs)
     items = list(search.items())
     if not items:
+        if scene_id:
+            raise RuntimeError(
+                f"No STAC item for pinned scene_id={scene_id!r} bbox=({west:.5f},{south:.5f},{east:.5f},{north:.5f}) "
+                f"datetime={datetime_range!r} collection={collection!r}",
+            )
         raise RuntimeError(
             f"No STAC items for bbox=({west:.5f},{south:.5f},{east:.5f},{north:.5f}) "
             f"datetime={datetime_range!r} collection={collection!r}"
         )
-    items.sort(key=lambda i: (float(i.properties.get("eo:cloud_cover") or 999.0), str(getattr(i, "id", ""))))
+    items.sort(
+        key=lambda i: (
+            float(i.properties.get("eo:cloud_cover") or 999.0),
+            i.datetime.isoformat() if i.datetime else "",
+            str(getattr(i, "id", "")),
+        ),
+    )
     item = items[0]
 
     keys = tuple(asset_keys) if asset_keys is not None else EARTH_SEARCH_S2L2A_ASSET_KEYS
@@ -172,6 +186,7 @@ def load_s2l2a_patch_np(
         "eo_cloud_cover": item.properties.get("eo:cloud_cover"),
         "reference_asset": ref_key,
         "band_asset_keys": [],
+        "scene_id_requested": scene_id,
     }
 
     with rasterio.open(ref_href) as ref:
@@ -283,6 +298,7 @@ def stac_s2_params_from_cfg(in_cfg: Mapping[str, Any], row: Mapping[str, Any]) -
         "max_cloud",
         "max_items",
         "asset_keys",
+        "scene_id",
     ):
         if row.get(k) is not None:
             s2[k] = row[k]

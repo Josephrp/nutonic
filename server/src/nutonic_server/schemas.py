@@ -194,6 +194,7 @@ class ProJobCreateIn(BaseModel):
     datetime_interval: str | None = Field(default=None, max_length=128)
     scene_id_t0: str | None = Field(default=None, max_length=256)
     scene_id_t1: str | None = Field(default=None, max_length=256)
+    scene_id_t2: str | None = Field(default=None, max_length=256)
 
     @field_validator("analysis_profile", mode="before")
     @classmethod

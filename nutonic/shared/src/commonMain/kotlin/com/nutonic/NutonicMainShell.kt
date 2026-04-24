@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.sp
 import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
 import com.nutonic.api.NutonicApiClient
+import com.nutonic.api.ProJobStatusOut
 import com.nutonic.cache.ContentCacheRepository
+import com.nutonic.cache.ProOverlayGuessRepository
 import com.nutonic.leaderboard.GuessRecordOutboxRepository
 import com.nutonic.leaderboard.LocalNonRankedLeaderboardRepository
 import com.nutonic.navigation.NutonicRoute
@@ -80,6 +82,8 @@ fun NutonicMainShell(
 
     /** Server-ranked round from `POST /api/v1/ranked/rounds/start`; cleared on non-ranked play or back (W6). */
     var rankedPlaySession by remember { mutableStateOf<RankedPlaySession?>(null) }
+    var proSelectedJob by remember { mutableStateOf<ProJobStatusOut?>(null) }
+    val proOverlayGuessRepository = remember { ProOverlayGuessRepository() }
 
     fun setMapContext(
         id: String,
@@ -91,6 +95,14 @@ fun NutonicMainShell(
 
     fun goDetail(d: ShellDetail) {
         onChangeShell(shell.copy(detail = d))
+    }
+
+    fun goProMiniApp(
+        d: ShellDetail,
+        job: ProJobStatusOut?,
+    ) {
+        proSelectedJob = job
+        goDetail(d)
     }
 
     fun clearDetail() {
@@ -120,6 +132,7 @@ fun NutonicMainShell(
                             localLeaderboardRepository = localNonRankedLeaderboardRepository,
                             nutonicApiClient = nutonicApiClient,
                             guessRecordOutboxRepository = guessRecordOutboxRepository,
+                            proOverlayGuessRepository = proOverlayGuessRepository,
                             rankedSession = rankedPlaySession,
                             onBack = {
                                 rankedPlaySession = null
@@ -147,14 +160,43 @@ fun NutonicMainShell(
                         ProCoordinateDashboardDetail(
                             nutonicApiClient = nutonicApiClient,
                             serverFeatureFlags = serverFeatureFlags,
+                            currentMapId = mapContextId,
                             onBack = { clearDetail() },
-                            onOpenMiniApp = ::goDetail,
+                            onOpenMiniApp = ::goProMiniApp,
+                            onOpenGameplay = { goDetail(ShellDetail.WorldMapGameplay) },
+                            onPublishGameplayOverlay = { overlay ->
+                                proOverlayGuessRepository.publish(overlay)
+                            },
                         )
-                    ShellDetail.ProFireWatch -> ProFireWatchScreen(onBack = { clearDetail() })
-                    ShellDetail.ProOceanScout -> ProOceanScoutScreen(onBack = { clearDetail() })
-                    ShellDetail.ProLandShift -> ProLandShiftScreen(onBack = { clearDetail() })
-                    ShellDetail.ProFloodPulse -> ProFloodPulseScreen(onBack = { clearDetail() })
-                    ShellDetail.ProBriefComposer -> ProBriefComposerScreen(onBack = { clearDetail() })
+                    ShellDetail.ProFireWatch ->
+                        ProFireWatchScreen(
+                            job = proSelectedJob,
+                            onBack = { clearDetail() },
+                            onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
+                        )
+                    ShellDetail.ProOceanScout ->
+                        ProOceanScoutScreen(
+                            job = proSelectedJob,
+                            onBack = { clearDetail() },
+                            onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
+                        )
+                    ShellDetail.ProLandShift ->
+                        ProLandShiftScreen(
+                            job = proSelectedJob,
+                            onBack = { clearDetail() },
+                            onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
+                        )
+                    ShellDetail.ProFloodPulse ->
+                        ProFloodPulseScreen(
+                            job = proSelectedJob,
+                            onBack = { clearDetail() },
+                            onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
+                        )
+                    ShellDetail.ProBriefComposer ->
+                        ProBriefComposerScreen(
+                            job = proSelectedJob,
+                            onBack = { clearDetail() },
+                        )
 
                     else -> ShellDetailPlaceholder(detail = detail, onBack = { clearDetail() })
                 }
@@ -205,6 +247,8 @@ fun NutonicMainShell(
                             onOpenDetail = ::goDetail,
                             nutonicApiClient = nutonicApiClient,
                             serverFeatureFlags = serverFeatureFlags,
+                            currentMapId = mapContextId,
+                            proOverlayCount = proOverlayGuessRepository.all().size,
                         )
                 }
             }
@@ -475,10 +519,26 @@ private fun ProTabRoot(
     onOpenDetail: (ShellDetail) -> Unit,
     nutonicApiClient: NutonicApiClient?,
     serverFeatureFlags: FeatureFlags?,
+    currentMapId: String,
+    proOverlayCount: Int,
 ) {
     val scope = rememberCoroutineScope()
     val proEnabled = serverFeatureFlags?.proJobs == true
     var probeStatus by remember { mutableStateOf("Idle") }
+    var recentJobs by remember { mutableStateOf<List<ProJobStatusOut>>(emptyList()) }
+    var recentStatus by remember { mutableStateOf("Not loaded") }
+
+    LaunchedEffect(proEnabled, nutonicApiClient) {
+        val client = nutonicApiClient
+        if (proEnabled && client != null) {
+            refreshProTabProbeAndJobs(
+                client = client,
+                onProbe = { probeStatus = it },
+                onRecentStatus = { recentStatus = it },
+                onJobs = { recentJobs = it },
+            )
+        }
+    }
     Column(
         modifier =
             Modifier
@@ -508,28 +568,36 @@ private fun ProTabRoot(
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("TiM / on-device VLM health", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text("Server probe: $probeStatus", style = MaterialTheme.typography.body2)
+            Text("Current gameplay map: $currentMapId · published PRO overlays: $proOverlayCount", style = MaterialTheme.typography.caption)
             NutonicGhostButton(
                 text = "Refresh PRO server probe",
                 enabled = nutonicApiClient != null,
                 onClick = {
                     val client = nutonicApiClient ?: return@NutonicGhostButton
                     scope.launch {
-                        probeStatus =
-                            when (val r = client.getConfig()) {
-                                is ApiResult.Ok ->
-                                    if (r.value.features.proJobs) {
-                                        "Available"
-                                    } else {
-                                        "Disabled by server"
-                                    }
-
-                                is ApiResult.HttpFailure -> r.userMessage
-                                is ApiResult.NetworkFailure -> "Network: ${r.debugMessage}"
-                            }
+                        refreshProTabProbeAndJobs(
+                            client = client,
+                            onProbe = { probeStatus = it },
+                            onRecentStatus = { recentStatus = it },
+                            onJobs = { recentJobs = it },
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Recent PRO jobs", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(recentStatus, style = MaterialTheme.typography.caption)
+            if (recentJobs.isEmpty()) {
+                Text("No recent jobs for this session.", style = MaterialTheme.typography.body2)
+            }
+            recentJobs.take(5).forEach { job ->
+                Text(
+                    "${job.jobId.take(8)} · ${job.analysisProfile ?: job.profile.orEmpty()} · ${job.status} · ${job.progressPct ?: 0}%",
+                    style = MaterialTheme.typography.body2,
+                )
+            }
         }
         if (!proEnabled) {
             Text(
@@ -544,6 +612,47 @@ private fun ProTabRoot(
             enabled = proEnabled,
             modifier = Modifier.fillMaxWidth(),
         )
+    }
+}
+
+private suspend fun refreshProTabProbeAndJobs(
+    client: NutonicApiClient,
+    onProbe: (String) -> Unit,
+    onRecentStatus: (String) -> Unit,
+    onJobs: (List<ProJobStatusOut>) -> Unit,
+) {
+    onProbe(
+        when (val config = client.getConfig()) {
+            is ApiResult.Ok ->
+                if (config.value.features.proJobs) {
+                    "Available"
+                } else {
+                    "Disabled by server"
+                }
+            is ApiResult.HttpFailure -> config.userMessage
+            is ApiResult.NetworkFailure -> "Network: ${config.debugMessage}"
+        },
+    )
+    onRecentStatus("Requesting session token...")
+    val token =
+        when (val auth = client.postAuthToken()) {
+            is ApiResult.Ok -> auth.value.accessToken
+            is ApiResult.HttpFailure -> {
+                onRecentStatus(auth.userMessage)
+                return
+            }
+            is ApiResult.NetworkFailure -> {
+                onRecentStatus("Network: ${auth.debugMessage}")
+                return
+            }
+        }
+    when (val jobs = client.listProJobs(token, limit = 5)) {
+        is ApiResult.Ok -> {
+            onJobs(jobs.value)
+            onRecentStatus("Loaded ${jobs.value.size} recent job(s).")
+        }
+        is ApiResult.HttpFailure -> onRecentStatus(jobs.userMessage)
+        is ApiResult.NetworkFailure -> onRecentStatus("Network: ${jobs.debugMessage}")
     }
 }
 

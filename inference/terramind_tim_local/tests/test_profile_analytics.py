@@ -34,6 +34,7 @@ def test_oceanscout_profile_analytics_uses_tim_samples_for_coverage() -> None:
     assert out["observation_coverage"]["cloud_masked_count"] == 1
     assert out["detection_score_summary"]["candidate_signal_pct"] == 50.0
     assert out["confidence"]["bins"] == {"low": 1, "medium": 1, "high": 2}
+    assert out["vessel_candidates"][0]["claim_safety"] == "presence_indicator_not_legal_assertion"
 
 
 def test_change_profiles_emit_stable_sections() -> None:
@@ -51,11 +52,14 @@ def test_change_profiles_use_tim_samples_for_metrics() -> None:
 
     assert wildfire["burn_change"]["changed_area_pct"] == 75.0
     assert wildfire["burn_change"]["hotspot_count"] == 1
+    assert wildfire["burn_change"]["heat_clusters"][0]["confidence"] == "high"
     assert flood["water_change"]["expanded_area_pct"] == 25.0
+    assert flood["water_change"]["affected_area_proxy_pct"] == 75.0
     assert land["land_transition"]["raw_counts_total"] == 4
     assert land["land_transition"]["class_distribution"][0] == {
         "value": 1,
         "count": 2,
         "pct": 50.0,
     }
-    assert land["land_transition"]["temporal_comparison_available"] is False
+    assert land["land_transition"]["temporal_comparison_available"] is True
+    assert land["land_transition"]["top_transitions"][0]["from"] == "0"

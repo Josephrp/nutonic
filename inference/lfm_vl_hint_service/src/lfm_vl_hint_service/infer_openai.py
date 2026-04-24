@@ -12,7 +12,13 @@ from lfm_vl_hint_service.models import (
     SuggestionsFromFramesRequest,
     SuggestionsFromFramesResponse,
 )
-from lfm_vl_hint_service.prompts import narrative_system_prompt, narrative_user_payload, streetview_user_prompt
+from lfm_vl_hint_service.prompts import (
+    narrative_system_prompt,
+    narrative_user_payload,
+    pro_brief_system_prompt,
+    pro_brief_user_payload,
+    streetview_user_prompt,
+)
 
 
 def _chat_completion(
@@ -92,6 +98,41 @@ def narrative_fuse_openai(
         messages = [
             {"role": "system", "content": narrative_system_prompt()},
             {"role": "user", "content": narrative_user_payload(captions)},
+        ]
+        return _chat_completion(c, settings, messages=messages, max_tokens=max_tokens)
+    finally:
+        if own_client:
+            c.close()
+
+
+def pro_brief_fuse_openai(
+    *,
+    profile: str,
+    profile_label: str,
+    tim_summary: dict[str, Any] | None,
+    artifact_refs: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    limitations: list[str],
+    client: httpx.Client | None = None,
+    max_tokens: int = 700,
+) -> str:
+    settings = get_settings()
+    own_client = client is None
+    c = client or httpx.Client(timeout=httpx.Timeout(120.0))
+    try:
+        messages = [
+            {"role": "system", "content": pro_brief_system_prompt(profile)},
+            {
+                "role": "user",
+                "content": pro_brief_user_payload(
+                    profile=profile,
+                    profile_label=profile_label,
+                    tim_summary=tim_summary,
+                    artifact_refs=artifact_refs,
+                    jobs=jobs,
+                    limitations=limitations,
+                ),
+            },
         ]
         return _chat_completion(c, settings, messages=messages, max_tokens=max_tokens)
     finally:

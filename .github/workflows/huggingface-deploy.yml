@@ -1,5 +1,6 @@
 # Deploy Python services to Hugging Face Docker Spaces after targeted pytest.
-# Secrets: HF_TOKEN_TONIC (Spaces under Tonic), HF_TOKEN_NUTONIC (Spaces under NuTonic).
+# Required (per namespace): HF_TOKEN_TONIC, HF_TOKEN_NUTONIC — OR a single HF_TOKEN if that
+# Hub user/token has write on both orgs (see tools/hf_deploy/README.md §Troubleshooting).
 # Optional runtime secrets are forwarded as env vars so deploy_space.py can push them to the Space.
 # See tools/hf_deploy/README.md
 
@@ -202,7 +203,7 @@ jobs:
           hf --version
       - name: Deploy Space (hf upload + runtime sync)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC || secrets.HF_TOKEN }}
           TONIC_LFM_OPENAI_API_KEY: ${{ secrets.TONIC_LFM_OPENAI_API_KEY }}
           TONIC_LFM_OPENAI_BASE_URL: ${{ secrets.TONIC_LFM_OPENAI_BASE_URL }}
         run: >
@@ -231,7 +232,7 @@ jobs:
           hf --version
       - name: Deploy Space (hf upload + runtime sync)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC || secrets.HF_TOKEN }}
           TONIC_TERRAMIND_HF_TOKEN: ${{ secrets.TONIC_TERRAMIND_HF_TOKEN }}
         run: >
           python tools/hf_deploy/deploy_space.py
@@ -259,7 +260,7 @@ jobs:
           hf --version
       - name: Deploy Space (hf upload + runtime sync)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC || secrets.HF_TOKEN }}
           NUTONIC_JWT_SECRET: ${{ secrets.NUTONIC_JWT_SECRET }}
           NUTONIC_LEADERBOARD_DATABASE_URL: ${{ secrets.NUTONIC_LEADERBOARD_DATABASE_URL }}
           NUTONIC_RANKED_DATABASE_URL: ${{ secrets.NUTONIC_RANKED_DATABASE_URL }}
@@ -289,7 +290,7 @@ jobs:
           hf --version
       - name: Deploy Space (hf upload + runtime sync)
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC || secrets.HF_TOKEN }}
           NUTONIC_MAPBOX_ACCESS_TOKEN: ${{ secrets.NUTONIC_MAPBOX_ACCESS_TOKEN }}
           NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET }}
         run: >

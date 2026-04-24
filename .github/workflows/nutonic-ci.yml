@@ -209,11 +209,39 @@ jobs:
           echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
           echo "MAPS_API_KEY=CI_STUB" >> local.properties
 
-      - name: Install WiX Toolset (Compose Desktop MSI)
-        run: choco install wixtoolset -y --no-progress
+      # Compose unpacks WiX 3.11 under nutonic/build/wix311. Some runners expose WIX_PATH / PATH to a
+      # WiX 4+ layout (no candle/light), which breaks JDK 21 jpackage — unset WIX_PATH, unzip, then pin it.
+      - name: Prepare WiX 3.x (pin WIX_PATH for jpackage)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset WIX_PATH || true
+          ./gradlew.bat --no-configuration-cache :downloadWix :unzipWix
+          ROOT="$(pwd)"
+          WIX_ROOT="$ROOT/build/wix311"
+          if [[ -f "$WIX_ROOT/candle.exe" ]]; then
+            echo "WIX_PATH=$WIX_ROOT" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          CANDLE="$(find "$WIX_ROOT" -name candle.exe -type f -print -quit 2>/dev/null || true)"
+          if [[ -n "$CANDLE" ]]; then
+            echo "WIX_PATH=$(dirname "$CANDLE")" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "WiX candle.exe not found under $WIX_ROOT" >&2
+          find "$WIX_ROOT" -maxdepth 4 -type f 2>/dev/null | head -40 >&2 || true
+          exit 1
 
       - name: Package release MSI
-        run: ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
+        shell: bash
+        env:
+          TEMP: D:/jpktmp
+          TMP: D:/jpktmp
+          TMPDIR: D:/jpktmp
+        run: |
+          set -euo pipefail
+          mkdir -p "D:/jpktmp" 2>/dev/null || true
+          ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -306,9 +334,26 @@ jobs:
         run: ./gradlew --no-configuration-cache :shared:linkDebugFrameworkIosSimulatorArm64
 
       - name: Zip shared.framework
+        shell: bash
         run: |
-          cd shared/build/bin/iosSimulatorArm64/debugFramework
-          zip -r "$GITHUB_WORKSPACE/ios-shared-debug-framework.zip" shared.framework
+          set -euo pipefail
+          CAND=(
+            "shared/build/bin/iosSimulatorArm64/debugFramework/shared.framework"
+            "shared/build/bin/iosSimulatorArm64/DebugFramework/shared.framework"
+          )
+          FW=""
+          for p in "${CAND[@]}"; do
+            if [[ -d "$p" ]]; then FW="$p"; break; fi
+          done
+          if [[ -z "$FW" ]]; then
+            FW="$(find shared/build -type d -name shared.framework 2>/dev/null | grep -i iosSimulator | head -1 || true)"
+          fi
+          if [[ -z "$FW" || ! -d "$FW" ]]; then
+            echo "Could not locate shared.framework after linkDebugFrameworkIosSimulatorArm64" >&2
+            find shared/build -type d -name "*.framework" 2>/dev/null | head -40 >&2 || true
+            exit 1
+          fi
+          ( cd "$(dirname "$FW")" && zip -r "$GITHUB_WORKSPACE/ios-shared-debug-framework.zip" "$(basename "$FW")" )
 
       - uses: actions/upload-artifact@v4
         with:

@@ -23,6 +23,15 @@ python tools/hf_deploy/deploy_space.py --service lfm_vl_hint --repo-id YOUR_USER
 |--------|---------|
 | `HF_TOKEN_TONIC` | Write token for **Tonic** Spaces (LFM hints, TerraMind). |
 | `HF_TOKEN_NUTONIC` | Write token for **NuTonic** Spaces (game server, PRO materialization). |
+| `HF_TOKEN` (optional fallback) | When `HF_TOKEN_TONIC` or `HF_TOKEN_NUTONIC` is unset, the workflow falls back to this secret for that job. Use only if one Hub identity can **write** to both `Tonic/…` and `NuTonic/…` Space repos (scoped fine-grained token or org member with repo write). |
+
+### Troubleshooting: `Missing HF_TOKEN in environment` in Actions
+
+The deploy step sets runner env **`HF_TOKEN`** from GitHub secrets. That variable is **empty** when **none** of the configured secrets for that job are defined.
+
+1. In the repo: **Settings → Secrets and variables → Actions**, add **`HF_TOKEN_TONIC`** and **`HF_TOKEN_NUTONIC`** (recommended), **or** a single **`HF_TOKEN`** as in the table above.
+2. Confirm the token can **`hf upload`** to the target Space (`Tonic/nutonic-lfm-vl-streetview`, `NuTonic/nutonic-game-server`, etc.).
+3. Fork PRs do not receive secrets; deploy jobs are expected to fail or be skipped for untrusted forks unless you use a different policy.
 
 Optional **runtime** secrets (see `profiles/*.yaml` — each maps a Hugging Face Space secret key to a **repository secret** whose value is exported under the **same name** as an env var in the deploy job):
 

@@ -208,6 +208,13 @@ def main() -> int:
     token = os.environ.get(args.token_env, "").strip()
     if not token and not args.dry_run:
         print(f"Missing {args.token_env} in environment.", file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            print(
+                "GitHub Actions: set repository secrets HF_TOKEN_TONIC and HF_TOKEN_NUTONIC "
+                "(or HF_TOKEN as fallback if one token can write to both org Spaces). "
+                "See tools/hf_deploy/README.md.",
+                file=sys.stderr,
+            )
         return 2
 
     stage = _stage_service(args.service)

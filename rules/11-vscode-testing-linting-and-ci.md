@@ -124,10 +124,10 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 | **quality-and-unit-tests** | `ubuntu-latest` | `./gradlew --continue quality test` (one invocation; `--continue` so lint and tests both run even if one fails); Android SDK via **setup-android before** `local.properties`; **Checks** from JUnit XML; artifacts for tests + detekt. |
 | **android-debug-apk** | `ubuntu-latest` | `:androidApp:assembleDebug` → APK artifact. |
 | **desktop-deb** | `ubuntu-latest` | `:desktopApp:packageReleaseDeb` → `.deb` artifact. |
-| **desktop-msi** | `windows-latest` | `:desktopApp:packageReleaseMsi` after **WiX** (`choco install wixtoolset`) → `.msi` artifact. |
+| **desktop-msi** | `windows-latest` | After `:downloadWix` / `:unzipWix`, CI **unsets** inherited `WIX_PATH`, then sets `WIX_PATH` to the folder containing `candle.exe` under `nutonic/build/wix311` (Compose’s WiX 3.11). Packaging uses **short** `TEMP`/`TMP` on `D:/jpktmp` to reduce `jpackage` long-path failures. **MSI metadata** stays WiX-safe (see `desktopApp/build.gradle.kts`: no `:` in Start Menu group, ASCII description). |
 | **desktop-dmg** | `macos-latest` | `:desktopApp:packageReleaseDmg` → `.dmg` artifact (unsigned; notarization still manual). |
 | **web-bundles** | `ubuntu-latest` | `:webApp:jsBrowserProductionWebpack` → upload **`webApp/build/dist/js/productionExecutable/`** tree. |
-| **ios-framework** | `macos-latest` | `:shared:linkDebugFrameworkIosSimulatorArm64` → zipped `shared.framework`. |
+| **ios-framework** | `macos-latest` | `:shared:linkDebugFrameworkIosSimulatorArm64` → zip **`shared.framework`** from the resolved `…/iosSimulatorArm64/…Framework/` path (fallback `find` if Gradle layout changes). Kotlin/Native: `Dispatchers.IO` is not public on iOS — use `Dispatchers.Default` in `iosMain` `actual val ioDispatcher` (see `shared/src/iosMain/.../platform.ios.kt`). |
 
 ### Release installers + GitHub Release (`.github/workflows/nutonic-release.yml`)
 

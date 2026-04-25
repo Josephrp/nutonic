@@ -92,6 +92,13 @@ def main() -> int:
     p.add_argument("--ee-project", default=None, help="Accepted for compatibility; forwarded via env if needed.")
     p.add_argument("--max-cloud-pct", type=float, default=30.0)
     p.add_argument(
+        "--sentinel-mode",
+        choices=("minimal", "full"),
+        default="minimal",
+        help="Forwarded to temporal builders. Use ``minimal`` for lean COG downloads (recommended on cloud); "
+        "``full`` pulls every STAC asset and is slow / brittle.",
+    )
+    p.add_argument(
         "--brief-samples",
         type=int,
         default=None,
@@ -151,7 +158,16 @@ def main() -> int:
         prof_work = out_root / "_work" / f"{prof}_work"
         cmd = [sys.executable, str(script), "--out-dir", str(prof_out)]
         if prof != "brief":
-            cmd.extend(["--work-dir", str(prof_work), "--max-cloud-pct", str(args.max_cloud_pct)])
+            cmd.extend(
+                [
+                    "--work-dir",
+                    str(prof_work),
+                    "--max-cloud-pct",
+                    str(args.max_cloud_pct),
+                    "--sentinel-mode",
+                    str(args.sentinel_mode),
+                ]
+            )
             if args.skip_existing:
                 cmd.append("--skip-existing")
         if prof in {"firewatch", "floodpulse"}:

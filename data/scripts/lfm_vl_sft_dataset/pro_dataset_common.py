@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -140,6 +141,12 @@ def fetch_temporal_pair_for_event(
         max_cloud_pct=cfg.max_cloud_pct,
     )
     if pre_scene is None or post_scene is None:
+        print(
+            f"[{event_id}] temporal pair: STAC search returned pre={pre_scene is not None} "
+            f"post={post_scene is not None} (check network to {cfg.stac_url}, "
+            f"``--max-cloud-pct``, date windows, or try ``--sentinel-mode minimal``).",
+            file=sys.stderr,
+        )
         return None
 
     client = Client.open(cfg.stac_url)
@@ -169,6 +176,14 @@ def fetch_temporal_pair_for_event(
         session=session,
     )
     if pre_errs or post_errs:
+        print(
+            f"[{event_id}] temporal pair: STAC matched scenes but asset download failed "
+            f"(sentinel_mode={cfg.sentinel_mode!r}). pre_errors={pre_errs[:5]!r} "
+            f"post_errors={post_errs[:5]!r}. "
+            "Try ``--sentinel-mode minimal`` (lean allowlist), clear partial files under work-dir, "
+            "or fix outbound HTTPS to COG hosts.",
+            file=sys.stderr,
+        )
         return None
 
     return TemporalPairResult(

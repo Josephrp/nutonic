@@ -100,7 +100,12 @@ def main() -> int:
     p.add_argument("--max-cloud-pct", type=float, default=30.0)
     p.add_argument("--stac-url", default="https://earth-search.aws.element84.com/v1")
     p.add_argument("--collection", default="sentinel-2-l2a")
-    p.add_argument("--sentinel-mode", choices=("minimal", "full"), default="full")
+    p.add_argument(
+        "--sentinel-mode",
+        choices=("minimal", "full"),
+        default="minimal",
+        help="``minimal`` downloads only bands required by this script (recommended). ``full`` downloads all STAC assets (slow).",
+    )
     p.add_argument("--native-tile", type=int, default=512)
     p.add_argument("--stride", type=int, default=128)
     p.add_argument("--output-size", type=int, default=224)

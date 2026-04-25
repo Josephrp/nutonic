@@ -136,23 +136,20 @@ def upload_dataset_folder(
         upload_large = getattr(api, "upload_large_folder", None)
         if callable(upload_large):
             # huggingface_hub has had API signature changes across versions.
-            # We already constructed ``HfApi(token=token)``, so passing a token kwarg is optional
-            # and may not be accepted in older versions.
-            try:
-                upload_large(
-                    folder_path=str(root),
-                    repo_id=repo_id,
-                    repo_type="dataset",
-                    token=token,
-                    commit_message="Dataset sync from nutonic build",
-                )
-            except TypeError:
-                upload_large(
-                    folder_path=str(root),
-                    repo_id=repo_id,
-                    repo_type="dataset",
-                    commit_message="Dataset sync from nutonic build",
-                )
+            # We call it with only the kwargs it actually supports.
+            import inspect
+
+            sig = inspect.signature(upload_large)
+            supported = set(sig.parameters.keys())
+            kwargs = {
+                "folder_path": str(root),
+                "repo_id": repo_id,
+                "repo_type": "dataset",
+                "token": token,
+                "commit_message": "Dataset sync from nutonic build",
+            }
+            kwargs = {k: v for k, v in kwargs.items() if k in supported}
+            upload_large(**kwargs)
             return
         api.upload_folder(
             folder_path=str(root),

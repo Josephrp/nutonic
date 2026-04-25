@@ -286,37 +286,6 @@ fun ProBriefComposerScreen(
 }
 
 @Composable
-private fun ProMiniAppScreen(
-    title: String,
-    summary: String,
-    sections: List<String>,
-    onBack: () -> Unit,
-) {
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        NutonicGhostButton(text = "Back", onClick = onBack, modifier = Modifier.fillMaxWidth())
-        Text(title, style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
-        Text(summary, style = MaterialTheme.typography.body2)
-        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-            Text("Panels", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            sections.forEach { section ->
-                Text("• $section", style = MaterialTheme.typography.body2)
-            }
-        }
-        Text(
-            "Artifact-backed rendering will populate this screen from the selected PRO job bundle.",
-            style = MaterialTheme.typography.caption,
-        )
-    }
-}
-
-@Composable
 private fun ArtifactLine(
     label: String,
     artifact: ProArtifactRef?,

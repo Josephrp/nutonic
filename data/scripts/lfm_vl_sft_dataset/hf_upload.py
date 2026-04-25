@@ -7,7 +7,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Iterable
 
 
 def _resolve_hf_token(explicit: str | None) -> str:
@@ -72,8 +71,10 @@ def _maybe_shard_for_hub(root: Path) -> Path:
         # We still trust the shard script to be deterministic.
         return dst
 
-    repo_root = Path(__file__).resolve().parents[2]
-    shard_script = repo_root / "data" / "scripts" / "shard_lfm_vl_dataset_for_hub.py"
+    # ``hf_upload.py`` lives under ``data/scripts/lfm_vl_sft_dataset/`` — repo root is *not*
+    # ``parents[2]`` (that would be ``data/`` and yields broken ``data/data/scripts/...``).
+    _scripts_dir = Path(__file__).resolve().parent.parent
+    shard_script = _scripts_dir / "shard_lfm_vl_dataset_for_hub.py"
     if not shard_script.is_file():
         raise FileNotFoundError(f"Missing sharding utility: {shard_script}")
 

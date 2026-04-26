@@ -281,6 +281,63 @@ def test_terramind_spectral_fc_scl_contract_three_artifacts(fake_mapbox_png, mon
     assert data["run_manifest"].get("vlm_cloud_mask", {}).get("scl_asset_key") == "scl"
 
 
+def test_terramind_spectral_s2_only_contract_no_mapbox_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
+    stack = np.zeros((12, 224, 224), dtype=np.float32) + 100.0
+    stack[7] += 2000.0
+    stack[11] += 1500.0
+    meta = {
+        "stac_item_id": "S2A_TEST",
+        "stac_datetime": "2024-01-01T00:00:00Z",
+        "eo_cloud_cover": 1.0,
+        "band_asset_keys": [],
+        "scl_asset_key": "scl",
+    }
+    scl = np.zeros((224, 224), dtype=np.float32)
+    scl[60:100, 60:100] = 9.0
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        assert kwargs.get("include_scl") is True
+        return stack, meta, scl
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    roles = [a["role"] for a in data["vlm_artifacts"]]
+    assert roles == ["sentinel_fc", "cloud_mask_thumb"]
+    assert data["run_manifest"]["mapbox_source"]["provider"] == "none"
+
+
+def test_full_stac_s2_only_rgb_tim_requires_mapbox_contract(fake_mapbox_png) -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "sentinel_fetch_mode": "FULL_STAC",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "enable_tim": True,
+            "tim_branch": "RGB_mapbox",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "TIM_RGB_REQUIRES_MAPBOX_VLM_CONTRACT"
+
+
 def test_profile_materialization_records_temporal_scenes_and_profile_artifacts(
     fake_mapbox_png,
     monkeypatch: pytest.MonkeyPatch,

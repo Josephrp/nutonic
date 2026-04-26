@@ -39,7 +39,8 @@ class S2PatchResult(NamedTuple):
 
 def _require_stac_rasterio() -> Any:
     try:
-        import rasterio  # noqa: F401
+        import rasterio
+        import rasterio.warp  # noqa: F401 — ensure ``rasterio.warp.*`` is bound (lazy submodules)
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             "Sentinel materialization needs rasterio (pip install nutonic-pro-materialization-service[s2])",
@@ -50,8 +51,6 @@ def _require_stac_rasterio() -> Any:
         raise ImportError(
             "Sentinel materialization needs pystac-client (pip install nutonic-pro-materialization-service[s2])",
         ) from e
-    import rasterio
-
     return rasterio
 
 

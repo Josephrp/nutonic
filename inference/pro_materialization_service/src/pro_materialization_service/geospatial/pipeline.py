@@ -270,55 +270,62 @@ def materialize_spectral_paths(
     *,
     client: httpx.Client | None = None,
 ) -> MaterializeResult:
-    """``TERRAMIND_SPECTRAL`` / ``FULL_STAC``: Mapbox + Sentinel-2 stack (P2)."""
+    """``TERRAMIND_SPECTRAL`` / ``FULL_STAC``: Sentinel-2 stack (P2); Mapbox only if ``mapbox_rgb`` is in the contract."""
     mode = SentinelFetchMode(req.sentinel_fetch_mode)
     tim_branch = TimBranch(req.tim_branch)
     err = validate_mode_matrix(sentinel_fetch_mode=mode, tim_branch=tim_branch, enable_tim=req.enable_tim)
     if err:
         raise ValueError(err)
 
-    token = mapbox_access_token()
-    if not token:
-        raise ValueError("MAPBOX_TOKEN_MISSING")
-
     try:
         contract = resolve_vlm_contract(req.vlm_contract_id)
     except ValueError:
         raise ValueError("UNKNOWN_VLM_CONTRACT") from None
 
-    mid = str(uuid.uuid4())
-    cache_key = compute_cache_key(req)
+    if req.enable_tim and tim_branch == TimBranch.RGB_MAPBOX and "mapbox_rgb" not in contract.roles:
+        raise ValueError("TIM_RGB_REQUIRES_MAPBOX_VLM_CONTRACT")
+
+    needs_mapbox = "mapbox_rgb" in contract.roles
+    raw_png = b""
+    attribution = "none"
     zoom = float(_clamp_zoom(req.mapbox_zoom))
     mw = _clamp_mapbox_size(req.mapbox_size)
     mh = mw
+    mid = str(uuid.uuid4())
+    cache_key = compute_cache_key(req)
 
-    own_client = client is None
-    hc = httpx.Client() if own_client else client
-    assert hc is not None
-    try:
+    if needs_mapbox:
+        token = mapbox_access_token()
+        if not token:
+            raise ValueError("MAPBOX_TOKEN_MISSING")
+
+        own_client = client is None
+        hc = httpx.Client() if own_client else client
+        assert hc is not None
         try:
-            policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
-            raw_png, attribution = fetch_mapbox_static_png(
-                hc,
-                lon=req.longitude,
-                lat=req.latitude,
-                zoom=zoom,
-                bearing=req.mapbox_bearing,
-                pitch=req.mapbox_pitch,
-                width=mw,
-                height=mh,
-                retina=req.retina,
-                token=token,
-                timeout_s=policy["mapbox_timeout_seconds"],
-                retry_count=policy["mapbox_retry_count"],
-            )
-        except httpx.HTTPStatusError as e:
-            raise ValueError(f"MAPBOX_HTTP_{e.response.status_code}") from e
-        except httpx.RequestError:
-            raise ValueError("MAPBOX_TRANSPORT_ERROR") from None
-    finally:
-        if own_client:
-            hc.close()
+            try:
+                policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
+                raw_png, attribution = fetch_mapbox_static_png(
+                    hc,
+                    lon=req.longitude,
+                    lat=req.latitude,
+                    zoom=zoom,
+                    bearing=req.mapbox_bearing,
+                    pitch=req.mapbox_pitch,
+                    width=mw,
+                    height=mh,
+                    retina=req.retina,
+                    token=token,
+                    timeout_s=policy["mapbox_timeout_seconds"],
+                    retry_count=policy["mapbox_retry_count"],
+                )
+            except httpx.HTTPStatusError as e:
+                raise ValueError(f"MAPBOX_HTTP_{e.response.status_code}") from e
+            except httpx.RequestError:
+                raise ValueError("MAPBOX_TRANSPORT_ERROR") from None
+        finally:
+            if own_client:
+                hc.close()
 
     profile = AnalysisProfile(req.analysis_profile)
     profile_policy = profile_materialization_policy(profile)
@@ -1172,7 +1179,12 @@ def _assemble_result(
     temporal_stac_meta: dict[str, dict[str, Any]] | None,
     temporal_stacks: dict[str, Any] | None,
 ) -> MaterializeResult:
-    vlm_png = resize_png_to_rgb_square(raw_mapbox_png, contract.width, contract.height)
+    mapbox_in_contract = "mapbox_rgb" in contract.roles
+    vlm_png = (
+        resize_png_to_rgb_square(raw_mapbox_png, contract.width, contract.height)
+        if mapbox_in_contract
+        else b""
+    )
     west, south, east, north = square_bbox_wgs84(req.latitude, req.longitude, req.bbox_half_km)
 
     artifacts: list[VlmArtifact] = []
@@ -1255,6 +1267,8 @@ def _assemble_result(
                 modalities_keys=["S2L2A"],
             )
         else:
+            if not mapbox_in_contract:
+                raise ValueError("TIM_RGB_REQUIRES_MAPBOX_VLM_CONTRACT")
             npz_bytes = rgb_mapbox_npz_from_png(vlm_png)
             tim_payload = TimPayload(
                 branch=tim_branch.value,
@@ -1270,7 +1284,7 @@ def _assemble_result(
         "sentinel_fetch_mode": req.sentinel_fetch_mode,
         "mapbox_center_mode": "user_pin",
         "mapbox_attribution": mapbox_attribution,
-        "mapbox_source": mapbox_source_metadata(),
+        "mapbox_source": mapbox_source_metadata() if mapbox_in_contract else {"provider": "none", "note": "no_mapbox_rgb_in_vlm_contract"},
         "profile_policy": profile_materialization_policy(profile),
         "bbox_wgs84": {"west": west, "south": south, "east": east, "north": north},
         "mapbox_zoom": zoom,

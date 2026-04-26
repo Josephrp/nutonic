@@ -83,6 +83,7 @@ def _materialize_http_errors(e: ValueError) -> NoReturn:
         "TIM_BRANCH_REQUIRES_RGB_MAPBOX",
         "TIM_BRANCH_REQUIRES_S2L2A_FULL",
         "TIM_BRANCH_INVALID",
+        "TIM_RGB_REQUIRES_MAPBOX_VLM_CONTRACT",
         "PROFILE_REQUIRES_TIM",
         "PROFILE_REQUIRES_SENTINEL_STACK",
         "PROFILE_REQUIRES_S2L2A_FULL",

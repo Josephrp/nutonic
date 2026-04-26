@@ -51,6 +51,23 @@ Future variables (placeholders — **not read by `server/` yet**): `DATABASE_URL
 
 Normative contract: **`../docs/openapi.yaml`** at repo root (hand-maintained; FastAPI may diverge until a generator step is added). **`servers[0].url`** must be the deployment **origin only** (no `/api/v1` suffix); operation paths include the full **`/api/v1/...`** prefix so URL joiners resolve correctly. **`pytest`** includes a check that documented paths/methods match the FastAPI app.
 
+## CI deployment
+
+The game server is deployed by **`.github/workflows/huggingface-deploy.yml`**, not by the general **`nutonic-ci.yml`** workflow.
+
+| Item | Current behavior |
+|------|------------------|
+| Trigger | Push to `main` touching `server/**`, `tools/hf_deploy/**`, `tools/live_inference_smoke.py`, `tools/requirements.txt`, or the deploy workflow; or manual **workflow_dispatch** target `game_server` / `all`. |
+| Test gate | `pip install -e "./server[dev]"` followed by `pytest server/tests -q`. |
+| Deploy command | `python tools/hf_deploy/deploy_space.py --service game_server --repo-id NuTonic/nutonic-game-server --token-env HF_TOKEN`. |
+| Upload shape | Docker Space mirror containing `server/Dockerfile`, `server/pyproject.toml`, `server/src/`, optional `server/README.md` as `README.package.md`, and `tools/hf_deploy/templates/readme_game_server.md` as the Space README. |
+| Runtime profile | `tools/hf_deploy/profiles/game_server.yaml`: `cpu-basic`, `FEATURE_RANKED=false`, `FEATURE_COMMUNITY_LB_POST=false`, `FEATURE_PRO_JOBS=false`, `NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH=false`. |
+| Hub auth | `HF_TOKEN_NUTONIC`, then `HF_TOKEN`, then `HF_API_WRITE`. |
+| Runtime secrets | `NUTONIC_JWT_SECRET` is pushed to the Space as `JWT_SECRET`; `NUTONIC_LEADERBOARD_DATABASE_URL` and `NUTONIC_RANKED_DATABASE_URL` are pushed under the same names when set. |
+| Post-deploy smoke | `python tools/live_inference_smoke.py --preset game-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-game.json`. |
+
+The deployed Space defaults are intentionally conservative: ranked, community writes, PRO jobs, and manifest truth are off until the Space profile or Space settings opt in. Enabling live PRO on the game server also requires worker URLs and the same `NUTONIC_INFERENCE_HMAC_SECRET` used by any HMAC-protected worker.
+
 ## Docker
 
 ```bash

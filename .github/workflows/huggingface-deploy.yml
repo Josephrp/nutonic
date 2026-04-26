@@ -11,7 +11,9 @@ on:
     branches:
       - main
     paths:
+      - "inference/streetview_pano_service/**"
       - "inference/lfm_vl_hint_service/**"
+      - "inference/lfm_vl_satellite_caption_service/**"
       - "inference/terramind_tim_local/**"
       - "server/**"
       - "inference/pro_materialization_service/**"
@@ -26,7 +28,9 @@ on:
         type: choice
         options:
           - all
+          - streetview_pano
           - lfm_vl_hint
+          - lfm_vl_satellite
           - terramind_tim
           - game_server
           - pro_materialization
@@ -44,7 +48,9 @@ jobs:
     name: Path / dispatch gate
     runs-on: ubuntu-latest
     outputs:
+      streetview: ${{ steps.set.outputs.streetview }}
       lfm: ${{ steps.set.outputs.lfm }}
+      satellite: ${{ steps.set.outputs.satellite }}
       tim: ${{ steps.set.outputs.tim }}
       server: ${{ steps.set.outputs.server }}
       pro: ${{ steps.set.outputs.pro }}
@@ -56,8 +62,12 @@ jobs:
         if: github.event_name == 'push'
         with:
           filters: |
+            streetview:
+              - 'inference/streetview_pano_service/**'
             lfm:
               - 'inference/lfm_vl_hint_service/**'
+            satellite:
+              - 'inference/lfm_vl_satellite_caption_service/**'
             tim:
               - 'inference/terramind_tim_local/**'
             server:
@@ -74,39 +84,67 @@ jobs:
         shell: bash
         run: |
           set_deploy_flags() {
-            echo "lfm=$1" >> "$GITHUB_OUTPUT"
-            echo "tim=$2" >> "$GITHUB_OUTPUT"
-            echo "server=$3" >> "$GITHUB_OUTPUT"
-            echo "pro=$4" >> "$GITHUB_OUTPUT"
+            echo "streetview=$1" >> "$GITHUB_OUTPUT"
+            echo "lfm=$2" >> "$GITHUB_OUTPUT"
+            echo "satellite=$3" >> "$GITHUB_OUTPUT"
+            echo "tim=$4" >> "$GITHUB_OUTPUT"
+            echo "server=$5" >> "$GITHUB_OUTPUT"
+            echo "pro=$6" >> "$GITHUB_OUTPUT"
           }
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             T="${{ github.event.inputs.targets }}"
             case "$T" in
               all)
-                set_deploy_flags true true true true ;;
+                set_deploy_flags true true true true true true ;;
+              streetview_pano)
+                set_deploy_flags true false false false false false ;;
               lfm_vl_hint)
-                set_deploy_flags true false false false ;;
+                set_deploy_flags false true false false false false ;;
+              lfm_vl_satellite)
+                set_deploy_flags false false true false false false ;;
               terramind_tim)
-                set_deploy_flags false true false false ;;
+                set_deploy_flags false false false true false false ;;
               game_server)
-                set_deploy_flags false false true false ;;
+                set_deploy_flags false false false false true false ;;
               pro_materialization)
-                set_deploy_flags false false false true ;;
+                set_deploy_flags false false false false false true ;;
               *)
-                set_deploy_flags true true true true ;;
+                set_deploy_flags true true true true true true ;;
             esac
           else
+            STREETVIEW='${{ steps.filter.outputs.streetview }}'
             LFM='${{ steps.filter.outputs.lfm }}'
+            SAT='${{ steps.filter.outputs.satellite }}'
             TIM='${{ steps.filter.outputs.tim }}'
             SRV='${{ steps.filter.outputs.server }}'
             PRO='${{ steps.filter.outputs.pro }}'
             TOOLS='${{ steps.filter.outputs.tools }}'
             if [ "$TOOLS" = "true" ]; then
-              set_deploy_flags true true true true
+              set_deploy_flags true true true true true true
             else
-              set_deploy_flags "${LFM:-false}" "${TIM:-false}" "${SRV:-false}" "${PRO:-false}"
+              set_deploy_flags "${STREETVIEW:-false}" "${LFM:-false}" "${SAT:-false}" "${TIM:-false}" "${SRV:-false}" "${PRO:-false}"
             fi
           fi
+
+  pytest-streetview-pano:
+    name: Pytest — streetview_pano_service
+    needs: changes
+    if: needs.changes.outputs.streetview == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test
+        run: |
+          pip install -U pip
+          pip install pytest
+          pip install -e "./inference/streetview_pano_service[dev]"
+          python -m pytest inference/streetview_pano_service/tests -q
 
   pytest-lfm-vl-hint:
     name: Pytest — lfm_vl_hint_service
@@ -127,6 +165,26 @@ jobs:
           pip install pytest
           pip install -e "./inference/lfm_vl_hint_service[dev]"
           python -m pytest inference/lfm_vl_hint_service/tests -q
+
+  pytest-lfm-vl-satellite:
+    name: Pytest — lfm_vl_satellite_caption_service
+    needs: changes
+    if: needs.changes.outputs.satellite == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test
+        run: |
+          pip install -U pip
+          pip install pytest
+          pip install -e "./inference/lfm_vl_satellite_caption_service[dev]"
+          python -m pytest inference/lfm_vl_satellite_caption_service/tests -q
 
   pytest-terramind-tim:
     name: Pytest — terramind_tim_local
@@ -187,6 +245,48 @@ jobs:
           pip install -e "./inference/pro_materialization_service"
           python -m pytest inference/pro_materialization_service/tests -q
 
+  deploy-streetview-pano:
+    name: HF deploy — Street View pano (Tonic)
+    needs: [changes, pytest-streetview-pano]
+    if: needs.changes.outputs.streetview == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC || secrets.HF_TOKEN || secrets.HF_API_WRITE }}
+          TONIC_GOOGLE_MAPS_API_KEY: ${{ secrets.TONIC_GOOGLE_MAPS_API_KEY || secrets.GOOGLE_MAPS_API_KEY }}
+          NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET || secrets.INFERENCE_HMAC_SECRET }}
+        run: >
+          python tools/hf_deploy/deploy_space.py
+          --service streetview_pano
+          --repo-id Tonic/nutonic-streetview-pano
+          --token-env HF_TOKEN
+      - name: Smoke test deployed Street View Space
+        env:
+          NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET || secrets.INFERENCE_HMAC_SECRET }}
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/live_inference_smoke.py --preset streetview-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-streetview.json
+      - name: Upload Street View smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-smoke-streetview
+          path: artifacts/hf-smoke-streetview.json
+          if-no-files-found: warn
+
   deploy-lfm-vl-hint:
     name: HF deploy — LFM-VL Street View (Tonic)
     needs: [changes, pytest-lfm-vl-hint]
@@ -225,6 +325,46 @@ jobs:
         with:
           name: hf-smoke-lfm
           path: artifacts/hf-smoke-lfm.json
+          if-no-files-found: warn
+
+  deploy-lfm-vl-satellite:
+    name: HF deploy — LFM-VL satellite (Tonic)
+    needs: [changes, pytest-lfm-vl-satellite]
+    if: needs.changes.outputs.satellite == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC || secrets.HF_TOKEN || secrets.HF_API_WRITE }}
+          TONIC_LFM_SATELLITE_OPENAI_API_KEY: ${{ secrets.TONIC_LFM_SATELLITE_OPENAI_API_KEY }}
+          TONIC_LFM_SATELLITE_OPENAI_BASE_URL: ${{ secrets.TONIC_LFM_SATELLITE_OPENAI_BASE_URL }}
+        run: >
+          python tools/hf_deploy/deploy_space.py
+          --service lfm_vl_satellite
+          --repo-id Tonic/nutonic-lfm-vl-satellite
+          --token-env HF_TOKEN
+      - name: Smoke test deployed satellite Space
+        run: |
+          pip install -r tools/requirements.txt
+          python tools/live_inference_smoke.py --preset satellite-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-satellite.json
+      - name: Upload satellite smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-smoke-satellite
+          path: artifacts/hf-smoke-satellite.json
           if-no-files-found: warn
 
   deploy-terramind-tim:

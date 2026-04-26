@@ -152,6 +152,11 @@ These warnings do **not** come from PM2; they come from the JVM running **`gradl
 
 ---
 
-## 9. Future: Python `server/` tests
+## 9. Python server and inference deploys
 
-When `server/tests` exists, add a PM2 app that runs e.g. **`uv run pytest`** or **`python -m pytest`**, with **`cwd`:** `server`, and **`out_file` / `error_file`** under **`logs/`**, following the same gitignore rule.
+Python server and inference tests now run in GitHub Actions:
+
+- **`.github/workflows/nutonic-ci.yml`** runs `server/tests` plus tested inference/data/tool packages on pull requests and manual dispatch.
+- **`.github/workflows/huggingface-deploy.yml`** runs targeted pytest before each Hugging Face Space deployment, then calls `tools/hf_deploy/deploy_space.py` and `tools/live_inference_smoke.py`.
+
+PM2 remains the local runbook for Gradle/KMP checks only. Do not treat PM2 as the deployment mechanism for the Python game server or inference workers.

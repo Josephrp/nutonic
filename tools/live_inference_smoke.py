@@ -5,12 +5,16 @@ Live smoke client for deployed NU:TONIC HF Spaces.
 Runs lightweight checks against:
 - Game server (NuTonic/nutonic-game-server)
 - LFM-VL hint service (Tonic/nutonic-lfm-vl-streetview)
+- Street View pano service (Tonic/nutonic-streetview-pano)
+- LFM-VL satellite caption service (Tonic/nutonic-lfm-vl-satellite)
 - TerraMind TiM Space (Tonic/nutonic-terramind-tim)
 - PRO materialization (NuTonic/nutonic-pro-materialization)
 
 Defaults are derived from Space repo IDs, but you can override URLs with env vars:
 - NUTONIC_GAME_SERVER_URL
 - NUTONIC_LFM_VL_HINT_URL
+- NUTONIC_STREETVIEW_PANO_URL
+- NUTONIC_LFM_VL_SATELLITE_URL
 - NUTONIC_TERRAMIND_TIM_URL
 - NUTONIC_PRO_MATERIALIZATION_URL
 """
@@ -37,6 +41,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PRESET_CHOICES = (
     "full",
     "lfm-deploy",
+    "streetview-deploy",
+    "satellite-deploy",
     "terramind-deploy",
     "game-deploy",
     "pro-deploy",
@@ -47,6 +53,10 @@ PRESET_CHOICES = (
 def _preset_services(preset: str) -> set[str]:
     if preset == "lfm-deploy":
         return {"lfm"}
+    if preset == "streetview-deploy":
+        return {"streetview"}
+    if preset == "satellite-deploy":
+        return {"satellite"}
     if preset == "terramind-deploy":
         return {"tim"}
     if preset == "game-deploy":
@@ -54,8 +64,8 @@ def _preset_services(preset: str) -> set[str]:
     if preset == "pro-deploy":
         return {"pro"}
     if preset == "pro-readiness":
-        return {"lfm", "tim", "pro", "game"}
-    return {"lfm", "tim", "pro", "game"}
+        return {"lfm", "streetview", "satellite", "tim", "pro", "game"}
+    return {"lfm", "streetview", "satellite", "tim", "pro", "game"}
 
 
 def _load_dotenv() -> None:
@@ -72,6 +82,13 @@ def _load_dotenv() -> None:
 def _space_url_from_repo_id(repo_id: str) -> str:
     slug = repo_id.strip().lower().replace("/", "-")
     return f"https://{slug}.hf.space"
+
+
+def _tiny_png_base64() -> str:
+    return (
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+        "/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    )
 
 
 def _env_url(url_key: str, repo_key: str, default_repo_id: str) -> str:
@@ -256,6 +273,16 @@ def main(argv: list[str] | None = None) -> int:
             "NUTONIC_LFM_VL_HINT_REPO_ID",
             "Tonic/nutonic-lfm-vl-streetview",
         ),
+        "streetview_pano": _env_url(
+            "NUTONIC_STREETVIEW_PANO_URL",
+            "NUTONIC_STREETVIEW_PANO_REPO_ID",
+            "Tonic/nutonic-streetview-pano",
+        ),
+        "lfm_vl_satellite": _env_url(
+            "NUTONIC_LFM_VL_SATELLITE_URL",
+            "NUTONIC_LFM_VL_SATELLITE_REPO_ID",
+            "Tonic/nutonic-lfm-vl-satellite",
+        ),
         "terramind_tim": _env_url(
             "NUTONIC_TERRAMIND_TIM_URL",
             "NUTONIC_TERRAMIND_TIM_REPO_ID",
@@ -295,6 +322,60 @@ def main(argv: list[str] | None = None) -> int:
                 results.append(r)
             else:
                 results.append(_skip("lfm.narrative_fuse", "Skipped (use --run-lfm-narrative)."))
+
+        # Street View pano
+        if "streetview" in services:
+            streetview_health_url = f"{urls['streetview_pano']}/health"
+            streetview_headers = nutonic_hmac_headers_from_env("GET", streetview_health_url)
+            r, _ = _request_json(
+                client,
+                "GET",
+                streetview_health_url,
+                name="streetview.health",
+                headers=streetview_headers,
+            )
+            results.append(r)
+            sample_url = f"{urls['streetview_pano']}/api/v1/panos/sample"
+            sample_headers = nutonic_hmac_headers_from_env("POST", sample_url)
+            r, _ = _request_json(
+                client,
+                "POST",
+                sample_url,
+                name="streetview.panos_sample",
+                headers=sample_headers,
+                json_body={
+                    "request_id": "hf_live_smoke",
+                    "center": {"lat": args.lat, "lon": args.lon},
+                    "count": 1,
+                    "sampling_mode": "OMNI_SINGLE_PANO",
+                    "image_width": 64,
+                    "image_height": 64,
+                },
+            )
+            results.append(r)
+
+        # Satellite caption
+        if "satellite" in services:
+            r, _ = _request_json(
+                client,
+                "GET",
+                f"{urls['lfm_vl_satellite']}/health",
+                name="satellite.health",
+            )
+            results.append(r)
+            r, _ = _request_json(
+                client,
+                "POST",
+                f"{urls['lfm_vl_satellite']}/v1/infer",
+                name="satellite.infer",
+                json_body={
+                    "task": "caption",
+                    "image_base64": _tiny_png_base64(),
+                    "ranked_clue_safe": True,
+                    "prompt_template_version": "satellite-v1",
+                },
+            )
+            results.append(r)
 
         # TerraMind TiM
         if "tim" in services:

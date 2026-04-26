@@ -358,6 +358,7 @@ def _artifact_refs_from_materialization(settings: Settings, job: ProJobRecord, d
         artifact_id = _unique_artifact_id(_safe_artifact_id(role) or f"artifact_{i}", seen, i)
         mime_type = str(artifact.get("mime") or "application/octet-stream")
         kind = _artifact_kind(mime_type)
+        contract = _artifact_contract(job.analysis_profile, role, artifact_id, mime_type)
         size_bytes = _persist_inline_artifact(
             artifact_root=settings.pro_artifact_root,
             job_id=job.job_id,
@@ -372,6 +373,10 @@ def _artifact_refs_from_materialization(settings: Settings, job: ProJobRecord, d
                 "mime_type": mime_type,
                 "size_bytes": size_bytes,
                 "profile": job.analysis_profile,
+                "contract_id": contract["contract_id"],
+                "role": role,
+                "category": contract["category"],
+                "required_for_profile": contract["required_for_profile"],
             }
         )
     return refs
@@ -389,7 +394,62 @@ def _persist_brief_artifact(settings: Settings, job: ProJobRecord, data: dict[st
         "mime_type": "application/json",
         "size_bytes": len(encoded),
         "profile": "brief_only",
+        "contract_id": "pro.brief.summary.v1",
+        "role": artifact_id,
+        "category": "brief",
+        "required_for_profile": False,
     }
+
+
+_PROFILE_ARTIFACT_CONTRACTS: dict[str, dict[str, tuple[str, str, bool]]] = {
+    "wildfire": {
+        "firewatch_burn_change_heatmap": ("pro.firewatch.burn_change_heatmap.v1", "heatmap", True),
+        "firewatch_hotspots": ("pro.firewatch.hotspots.v1", "metrics", True),
+        "firewatch_hotspots_geojson": ("pro.firewatch.hotspots_geojson.v1", "overlay", True),
+        "firewatch_metrics": ("pro.firewatch.metrics.v1", "metrics", True),
+    },
+    "oceanscout_ship_detection": {
+        "vessel_overlay": ("pro.oceanscout.vessel_overlay.v1", "overlay", True),
+        "vessel_candidates": ("pro.oceanscout.vessel_candidates.v1", "metrics", True),
+        "lane_heatmap": ("pro.oceanscout.lane_heatmap.v1", "heatmap", True),
+        "observation_coverage": ("pro.oceanscout.observation_coverage.v1", "coverage", True),
+        "incursion_events": ("pro.oceanscout.incursion_events.v1", "metrics", False),
+    },
+    "land_use_change": {
+        "land_transition_matrix": ("pro.landshift.transition_matrix.v1", "metrics", True),
+        "land_top_transitions": ("pro.landshift.top_transitions.v1", "metrics", True),
+        "land_change_heatmap": ("pro.landshift.change_heatmap.v1", "heatmap", True),
+        "land_change_hotspots": ("pro.landshift.change_hotspots.v1", "overlay", True),
+    },
+    "flood_pulse": {
+        "flood_before_water_extent": ("pro.floodpulse.before_water_extent.v1", "overlay", True),
+        "flood_after_water_extent": ("pro.floodpulse.after_water_extent.v1", "overlay", True),
+        "flood_expansion_heatmap": ("pro.floodpulse.expansion_heatmap.v1", "heatmap", True),
+        "flood_water_change_metrics": ("pro.floodpulse.water_change_metrics.v1", "metrics", True),
+        "flood_inundation_polygons": ("pro.floodpulse.inundation_polygons.v1", "overlay", True),
+    },
+}
+
+_VLM_IMAGE_ROLES = {"mapbox_rgb", "sentinel_fc", "cloud_mask_thumb"}
+
+
+def _artifact_contract(profile: str, role: str, artifact_id: str, mime_type: str) -> dict[str, object]:
+    profile_contracts = _PROFILE_ARTIFACT_CONTRACTS.get(profile, {})
+    contract = profile_contracts.get(role) or profile_contracts.get(artifact_id)
+    if contract is not None:
+        contract_id, category, required = contract
+        return {"contract_id": contract_id, "category": category, "required_for_profile": required}
+    if role in _VLM_IMAGE_ROLES or mime_type.startswith("image/"):
+        return {
+            "contract_id": f"pro.vlm_image.{_safe_artifact_id(role) or artifact_id}.v1",
+            "category": "vlm_image",
+            "required_for_profile": role == "mapbox_rgb",
+        }
+    if mime_type == "application/geo+json":
+        return {"contract_id": f"pro.{profile}.overlay.{artifact_id}.v1", "category": "overlay", "required_for_profile": False}
+    if mime_type == "application/json":
+        return {"contract_id": f"pro.{profile}.json.{artifact_id}.v1", "category": "metrics", "required_for_profile": False}
+    return {"contract_id": f"pro.{profile}.artifact.{artifact_id}.v1", "category": "binary", "required_for_profile": False}
 
 
 def _artifact_kind(mime_type: str) -> str:

@@ -40,3 +40,6 @@ actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
 
 actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
     iosNutonicBlob("guess-record-outbox.json")
+
+actual fun createProVlmModelBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("pro-vlm-model-cache.json")

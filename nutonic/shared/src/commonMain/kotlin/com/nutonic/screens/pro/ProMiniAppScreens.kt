@@ -76,6 +76,7 @@ fun ProFireWatchScreen(
             if (hotspots == null) {
                 Text("No hotspot artifact is attached to the selected job.", style = MaterialTheme.typography.caption)
             }
+        MissingRequiredArtifacts(job)
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Brief handoff", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
@@ -136,6 +137,7 @@ fun ProOceanScoutScreen(
                 "OceanScout outputs are presence indicators only; coverage and cloud limits must be reviewed before claims.",
                 style = MaterialTheme.typography.caption,
             )
+            MissingRequiredArtifacts(job)
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Brief handoff", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
@@ -180,6 +182,7 @@ fun ProLandShiftScreen(
             Text("Change hotspots", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             ArtifactLine("Hotspot GeoJSON", artifacts.firstOrNull { it.artifactId == "land_change_hotspots" })
             Text("Transitions are proxy classes derived from temporal spectral changes and require source-scene review.", style = MaterialTheme.typography.caption)
+            MissingRequiredArtifacts(job)
         }
         NutonicGhostButton("Open Brief Composer", onOpenBriefComposer, Modifier.fillMaxWidth())
     }
@@ -218,6 +221,7 @@ fun ProFloodPulseScreen(
             ArtifactLine("Water change metrics JSON", artifacts.firstOrNull { it.artifactId == "flood_water_change_metrics" })
             ArtifactLine("Inundation polygons GeoJSON", artifacts.firstOrNull { it.artifactId == "flood_inundation_polygons" })
             Text("FloodPulse polygons are decision-support geometry and should be reviewed against source scenes.", style = MaterialTheme.typography.caption)
+            MissingRequiredArtifacts(job)
         }
         NutonicGhostButton("Open Brief Composer", onOpenBriefComposer, Modifier.fillMaxWidth())
     }
@@ -314,6 +318,46 @@ private fun SourceToggle(
 }
 
 private fun fireWatchArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> = proArtifacts(job)
+
+@Composable
+private fun MissingRequiredArtifacts(job: ProJobStatusOut?) {
+    val expected = expectedRequiredArtifactIds(job?.analysisProfile ?: job?.profile)
+    if (expected.isEmpty() || job?.status != "completed") {
+        return
+    }
+    val present =
+        proArtifacts(job)
+            .filter { it.requiredForProfile }
+            .map { it.artifactId }
+            .toSet()
+    val missing = expected.filterNot { it in present }
+    if (missing.isNotEmpty()) {
+        Text(
+            "Missing required profile artifacts: ${missing.joinToString()}",
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.error,
+        )
+    }
+}
+
+private fun expectedRequiredArtifactIds(profile: String?): List<String> =
+    when (profile) {
+        "wildfire" ->
+            listOf("firewatch_burn_change_heatmap", "firewatch_hotspots", "firewatch_hotspots_geojson", "firewatch_metrics")
+        "oceanscout_ship_detection" ->
+            listOf("vessel_overlay", "vessel_candidates", "lane_heatmap", "observation_coverage")
+        "land_use_change" ->
+            listOf("land_transition_matrix", "land_top_transitions", "land_change_heatmap", "land_change_hotspots")
+        "flood_pulse" ->
+            listOf(
+                "flood_before_water_extent",
+                "flood_after_water_extent",
+                "flood_expansion_heatmap",
+                "flood_water_change_metrics",
+                "flood_inundation_polygons",
+            )
+        else -> emptyList()
+    }
 
 private fun proArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> =
     if (job == null) {

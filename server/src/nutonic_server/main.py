@@ -49,6 +49,7 @@ from nutonic_server.schemas import (
     ProJobCreateIn,
     ProJobCreateOut,
     ProJobStatusOut,
+    ProVlmModelManifest,
     ProOnDevicePayload,
     RankedClueOut,
     RankedForfeitIn,
@@ -453,6 +454,33 @@ def pro_job_status(
     return _pro_status_out(row)
 
 
+@app.get("/api/v1/pro/vlm/model-manifest", tags=["pro"], response_model=ProVlmModelManifest)
+def pro_vlm_model_manifest(
+    s: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    __: Annotated[dict[str, object], Depends(require_session_jwt)],
+) -> ProVlmModelManifest:
+    contract_ids = s.pro_vlm_model_contract_id_list()
+    if not (
+        s.pro_vlm_model_bundle_id.strip()
+        and s.pro_vlm_model_revision.strip()
+        and s.pro_vlm_model_download_url.strip()
+        and s.pro_vlm_model_sha256.strip()
+        and s.pro_vlm_model_size_bytes > 0
+        and contract_ids
+    ):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="PRO VLM model manifest is not configured")
+    return ProVlmModelManifest(
+        model_bundle_id=s.pro_vlm_model_bundle_id.strip(),
+        revision=s.pro_vlm_model_revision.strip(),
+        download_url=s.pro_vlm_model_download_url.strip(),
+        sha256=s.pro_vlm_model_sha256.strip().lower(),
+        size_bytes=s.pro_vlm_model_size_bytes,
+        runtime=s.pro_vlm_model_runtime.strip() or "leap",
+        contract_ids=contract_ids,
+    )
+
+
 @app.post("/api/v1/pro/jobs/{job_id}/cancel", tags=["pro"], response_model=ProJobCancelOut)
 def pro_cancel_job(
     job_id: str,
@@ -551,6 +579,10 @@ def _artifact_ref(job_id: str, raw: dict[str, object]) -> ProArtifactRef:
         mime_type=str(raw.get("mime_type") or "application/octet-stream"),
         size_bytes=raw.get("size_bytes") if isinstance(raw.get("size_bytes"), int) else None,
         profile=str(raw.get("profile") or "") or None,
+        contract_id=str(raw.get("contract_id") or "") or None,
+        role=str(raw.get("role") or "") or None,
+        category=str(raw.get("category") or "") or None,
+        required_for_profile=bool(raw.get("required_for_profile")),
         download_url=download_url,
     )
 

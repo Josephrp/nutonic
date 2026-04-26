@@ -282,6 +282,10 @@ data class ProArtifactRef(
     @SerialName("mime_type") val mimeType: String,
     @SerialName("size_bytes") val sizeBytes: Long? = null,
     val profile: String? = null,
+    @SerialName("contract_id") val contractId: String? = null,
+    val role: String? = null,
+    val category: String? = null,
+    @SerialName("required_for_profile") val requiredForProfile: Boolean = false,
     @SerialName("download_url") val downloadUrl: String? = null,
 )
 
@@ -297,6 +301,33 @@ data class ProOnDevicePayload(
     @SerialName("brief_sections") val briefSections: List<ProBriefSection> = emptyList(),
     @SerialName("overlay_refs") val overlayRefs: List<ProArtifactRef> = emptyList(),
     @SerialName("confidence_summary") val confidenceSummary: String? = null,
+    @SerialName("vlm_image_set") val vlmImageSet: List<ProVlmImageRef> = emptyList(),
+    @SerialName("vlm_prompt_injection") val vlmPromptInjection: JsonObject? = null,
+    @SerialName("on_device_model_hint") val onDeviceModelHint: String? = null,
+    @SerialName("model_bundle_id") val modelBundleId: String? = null,
+)
+
+@Serializable
+data class ProVlmImageRef(
+    val role: String,
+    val url: String? = null,
+    @SerialName("inline_ref") val inlineRef: String? = null,
+    @SerialName("artifact_id") val artifactId: String? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val mime: String? = null,
+)
+
+@Serializable
+data class ProVlmModelManifest(
+    @SerialName("model_bundle_id") val modelBundleId: String,
+    val revision: String,
+    @SerialName("download_url") val downloadUrl: String,
+    @SerialName("sha256") val sha256: String,
+    @SerialName("size_bytes") val sizeBytes: Long,
+    @SerialName("runtime") val runtime: String,
+    @SerialName("min_app_version") val minAppVersion: String? = null,
+    @SerialName("contract_ids") val contractIds: List<String> = emptyList(),
 )
 
 @Serializable

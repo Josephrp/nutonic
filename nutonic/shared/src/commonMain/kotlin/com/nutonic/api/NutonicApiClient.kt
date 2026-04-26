@@ -359,6 +359,53 @@ class NutonicApiClient(
             ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
         }
 
+    suspend fun getProArtifactByUrl(
+        downloadUrl: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> {
+        val path = downloadUrl.trim()
+        if (path.isBlank()) {
+            return ApiResult.NetworkFailure("Artifact URL is blank")
+        }
+        val url =
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                originTrimmed.trimEnd('/') + "/" + path.trimStart('/')
+            }
+        return getAuthenticatedBytes(url, bearerAccessToken)
+    }
+
+    suspend fun getProVlmModelManifest(
+        bearerAccessToken: String,
+    ): ApiResult<ProVlmModelManifest> =
+        getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/vlm/model-manifest") {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+
+    suspend fun getProVlmModelBytes(
+        downloadUrl: String,
+        bearerAccessToken: String,
+        onChunk: (receivedBytes: Long, totalBytes: Long?) -> Unit = { _, _ -> },
+    ): ApiResult<ByteArray> {
+        val path = downloadUrl.trim()
+        if (path.isBlank()) {
+            return ApiResult.NetworkFailure("Model download URL is blank")
+        }
+        val url =
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                originTrimmed.trimEnd('/') + "/" + path.trimStart('/')
+            }
+        onChunk(0, null)
+        return getAuthenticatedBytes(url, bearerAccessToken).also { result ->
+            if (result is ApiResult.Ok) {
+                onChunk(result.value.size.toLong(), result.value.size.toLong())
+            }
+        }
+    }
+
     suspend fun pollProJob(
         jobId: String,
         bearerAccessToken: String,
@@ -392,6 +439,30 @@ class NutonicApiClient(
         }
         return ApiResult.NetworkFailure("Polling timeout after ${maxAttempts * intervalMs / 1000}s")
     }
+
+    private suspend fun getAuthenticatedBytes(
+        url: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> =
+        try {
+            val response: HttpResponse =
+                http.get(url) {
+                    header("Authorization", "Bearer $bearerAccessToken")
+                }
+            when {
+                response.status.isSuccess() -> ApiResult.Ok(response.body())
+                else ->
+                    ApiResult.HttpFailure(
+                        response.status.value,
+                        stubUserMessageForStatus(response.status.value, null),
+                        null,
+                    )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
 
     private fun leaderboardUrl(mapId: String): String =
         originTrimmed.trimEnd('/') + "/api/v1/maps/" + encodePathSegment(mapId) + "/leaderboard"

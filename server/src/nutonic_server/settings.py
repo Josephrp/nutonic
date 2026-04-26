@@ -189,6 +189,48 @@ class Settings(BaseSettings):
         description="Filesystem root for PRO job artifact bytes.",
     )
 
+    pro_vlm_model_bundle_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_BUNDLE_ID", "PRO_VLM_MODEL_BUNDLE_ID"),
+        description="Published on-device PRO VLM model bundle id advertised to clients.",
+    )
+
+    pro_vlm_model_revision: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_REVISION", "PRO_VLM_MODEL_REVISION"),
+        description="Revision/version for the published on-device PRO VLM model.",
+    )
+
+    pro_vlm_model_download_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL", "PRO_VLM_MODEL_DOWNLOAD_URL"),
+        description="First-party or signed CDN URL for the VLM model artifact. Never point clients at Hub tokens.",
+    )
+
+    pro_vlm_model_sha256: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SHA256", "PRO_VLM_MODEL_SHA256"),
+        description="Lowercase hex sha256 for the model artifact; clients verify before use.",
+    )
+
+    pro_vlm_model_size_bytes: int = Field(
+        default=0,
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SIZE_BYTES", "PRO_VLM_MODEL_SIZE_BYTES"),
+        description="Expected model artifact size in bytes.",
+    )
+
+    pro_vlm_model_runtime: str = Field(
+        default="leap",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_RUNTIME", "PRO_VLM_MODEL_RUNTIME"),
+        description="Client runtime hint, e.g. leap, coreml, onnx, or webgpu.",
+    )
+
+    pro_vlm_model_contract_ids: str = Field(
+        default="nutonic.pro.vlm.v1_512",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS", "PRO_VLM_MODEL_CONTRACT_IDS"),
+        description="Comma-separated VLM image contract ids supported by the advertised model bundle.",
+    )
+
     inference_hmac_secret: str = Field(
         default="",
         validation_alias=AliasChoices(
@@ -240,6 +282,9 @@ class Settings(BaseSettings):
 
     def pro_optional_origin_names(self) -> list[str]:
         return _split_csv(self.pro_optional_origins)
+
+    def pro_vlm_model_contract_id_list(self) -> list[str]:
+        return _split_csv(self.pro_vlm_model_contract_ids)
 
     jwt_secret: str = Field(
         default="dev-only-change-in-production-min-32b!!",

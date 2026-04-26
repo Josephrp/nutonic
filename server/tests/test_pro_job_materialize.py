@@ -120,6 +120,10 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert sj["materialization_summary"]["vlm_artifacts"][0]["role"] == "mapbox_rgb"
     assert "inline_base64" not in sj["materialization_summary"]["vlm_artifacts"][0]
     assert sj["artifacts"][0]["artifact_id"] == "mapbox_rgb"
+    assert sj["artifacts"][0]["contract_id"] == "pro.vlm_image.mapbox_rgb.v1"
+    assert sj["artifacts"][0]["role"] == "mapbox_rgb"
+    assert sj["artifacts"][0]["category"] == "vlm_image"
+    assert sj["artifacts"][0]["required_for_profile"] is True
     assert sj["artifacts"][0]["size_bytes"] == 5
 
     artifact = pro_client.get(
@@ -128,6 +132,28 @@ def test_pro_job_calls_materialize_when_health_ok(
     )
     assert artifact.status_code == 200
     assert artifact.content == b"hello"
+
+
+def test_pro_vlm_model_manifest_uses_configured_contract_ids(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_BUNDLE_ID", "nutonic.pro.vlm.test")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_REVISION", "2026-04-26")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL", "https://cdn.example.test/pro-vlm.bin")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_SHA256", "A" * 64)
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_SIZE_BYTES", "42")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_RUNTIME", "leap")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS", "nutonic.pro.vlm.v1_512, nutonic.pro.vlm.v1_512_fc_scl")
+
+    headers = _auth_header(pro_client)
+    r = pro_client.get("/api/v1/pro/vlm/model-manifest", headers=headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["model_bundle_id"] == "nutonic.pro.vlm.test"
+    assert body["sha256"] == "a" * 64
+    assert body["contract_ids"] == ["nutonic.pro.vlm.v1_512", "nutonic.pro.vlm.v1_512_fc_scl"]
 
 
 def test_pro_job_calls_brief_stage_when_lfm_url_configured(
@@ -200,6 +226,8 @@ def test_pro_job_calls_brief_stage_when_lfm_url_configured(
     ]
     assert completed["materialization_summary"]["brief_summary"]["executive_summary"] == "Brief summary"
     assert completed["brief_artifacts"][0]["artifact_id"] == "brief_summary"
+    assert completed["brief_artifacts"][0]["contract_id"] == "pro.brief.summary.v1"
+    assert completed["brief_artifacts"][0]["category"] == "brief"
     assert completed["on_device_payload"]["confidence_summary"] == "medium"
     assert completed["on_device_payload"]["brief_sections"][0]["title"] == "Executive summary"
     assert completed["on_device_payload"]["brief_sections"][0]["body"] == "Brief summary"

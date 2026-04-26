@@ -163,6 +163,21 @@ class ProArtifactRef(BaseModel):
     mime_type: str = Field(max_length=128)
     size_bytes: int | None = Field(default=None, ge=0)
     profile: str | None = Field(default=None, max_length=128)
+    contract_id: str | None = Field(
+        default=None,
+        max_length=160,
+        description="Stable product contract id for this artifact, e.g. pro.oceanscout.vessel_overlay.v1.",
+    )
+    role: str | None = Field(default=None, max_length=128, description="Worker role before artifact-id sanitization.")
+    category: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Rendering category such as vlm_image, overlay, metrics, heatmap, coverage, or brief.",
+    )
+    required_for_profile: bool = Field(
+        default=False,
+        description="True when the artifact is part of the profile's minimum UI contract.",
+    )
     download_url: str | None = None
 
 
@@ -176,6 +191,21 @@ class ProOnDevicePayload(BaseModel):
     brief_sections: list[ProBriefSection] = Field(default_factory=list)
     overlay_refs: list[ProArtifactRef] = Field(default_factory=list)
     confidence_summary: str | None = Field(default=None, max_length=512)
+    vlm_image_set: list[dict[str, Any]] = Field(default_factory=list)
+    vlm_prompt_injection: dict[str, Any] | None = None
+    on_device_model_hint: str | None = Field(default=None, max_length=128)
+    model_bundle_id: str | None = Field(default=None, max_length=128)
+
+
+class ProVlmModelManifest(BaseModel):
+    model_bundle_id: str
+    revision: str
+    download_url: str
+    sha256: str
+    size_bytes: int
+    runtime: str
+    min_app_version: str | None = None
+    contract_ids: list[str] = Field(default_factory=list)
 
 
 class ProJobCreateIn(BaseModel):

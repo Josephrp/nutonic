@@ -34,6 +34,9 @@ import com.nutonic.screens.pro.ProAnalysisLocationPicker
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
+import com.nutonic.vlm.ProOnDeviceVlmCoordinator
+import com.nutonic.vlm.ProVlmResult
+import com.nutonic.vlm.ProVlmStatus
 import kotlinx.coroutines.launch
 
 @Composable
@@ -57,6 +60,8 @@ fun ProCoordinateDashboardDetail(
     var currentJob by remember { mutableStateOf<ProJobStatusOut?>(null) }
     var recentJobs by remember { mutableStateOf<List<ProJobStatusOut>>(emptyList()) }
     var lastOverlayCandidate by remember { mutableStateOf<ProGameplayOverlayCandidate?>(null) }
+    var proAccessToken by remember { mutableStateOf<String?>(null) }
+    var vlmStatus by remember { mutableStateOf<ProVlmStatus>(ProVlmStatus.Idle) }
 
     Column(
         modifier =
@@ -94,6 +99,7 @@ fun ProCoordinateDashboardDetail(
                     statusText = "Requesting session token..."
                     when (val token = client.postAuthToken()) {
                         is ApiResult.Ok -> {
+                            proAccessToken = token.value.accessToken
                             val body =
                                 ProJobCreateIn(
                                     centerLat = centerLat,
@@ -180,6 +186,13 @@ fun ProCoordinateDashboardDetail(
         }
         JobStatusCard(currentJob = currentJob, statusText = statusText)
         ArtifactGallery(mergedArtifacts(currentJob))
+        OnDeviceVlmCard(
+            currentJob = currentJob,
+            nutonicApiClient = nutonicApiClient,
+            accessToken = proAccessToken,
+            vlmStatus = vlmStatus,
+            onStatus = { vlmStatus = it },
+        )
         GameplayOverlayHandoff(
             candidate = lastOverlayCandidate,
             currentMapId = currentMapId,
@@ -191,6 +204,64 @@ fun ProCoordinateDashboardDetail(
         )
         MiniAppHandoff(currentJob = currentJob, onOpenMiniApp = onOpenMiniApp)
         RecentJobs(recentJobs)
+    }
+}
+
+@Composable
+private fun OnDeviceVlmCard(
+    currentJob: ProJobStatusOut?,
+    nutonicApiClient: NutonicApiClient?,
+    accessToken: String?,
+    vlmStatus: ProVlmStatus,
+    onStatus: (ProVlmStatus) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val completedJob = currentJob?.takeIf { it.status == "completed" }
+    NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text("On-device VLM", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text(vlmStatus.copy(), style = MaterialTheme.typography.body2)
+        if (vlmStatus is ProVlmStatus.DownloadingModel) {
+            val total = vlmStatus.totalBytes
+            val progress =
+                if (total != null && total > 0) {
+                    (vlmStatus.receivedBytes.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+        }
+        if (vlmStatus is ProVlmStatus.Ready) {
+            VlmResultSummary(vlmStatus.result)
+        }
+        NutonicGhostButton(
+            text = "Run local VLM on completed job",
+            enabled = completedJob != null && nutonicApiClient != null && accessToken != null,
+            onClick = {
+                val client = nutonicApiClient ?: return@NutonicGhostButton
+                val token = accessToken ?: return@NutonicGhostButton
+                val job = completedJob ?: return@NutonicGhostButton
+                scope.launch {
+                    ProOnDeviceVlmCoordinator(
+                        apiClient = client,
+                        bearerAccessToken = token,
+                    ).run(job = job, onStatus = onStatus)
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
+        Text(
+            "Model binaries are downloaded from the game server/CDN, verified by sha256, and cached outside the repository.",
+            style = MaterialTheme.typography.caption,
+        )
+    }
+}
+
+@Composable
+private fun VlmResultSummary(result: ProVlmResult) {
+    Text("Caption: ${result.caption}", style = MaterialTheme.typography.body2)
+    Text("Boxes: ${result.boxes.size} · model ${result.modelBundleId.orEmpty()} ${result.revision.orEmpty()}", style = MaterialTheme.typography.caption)
+    result.boxes.take(4).forEach { box ->
+        Text("${box.label} · ${box.bbox.joinToString(prefix = "[", postfix = "]")}", style = MaterialTheme.typography.caption)
     }
 }
 
@@ -258,7 +329,9 @@ private fun ArtifactGallery(artifacts: List<ProArtifactRef>) {
             Text("Completed jobs will list map-ready frames and JSON artifacts here.", style = MaterialTheme.typography.caption)
         }
         artifacts.forEach { artifact ->
-            Text("${artifact.kind} · ${artifact.artifactId} · ${artifact.downloadUrl.orEmpty()}")
+            val contract = artifact.contractId ?: "uncontracted"
+            val required = if (artifact.requiredForProfile) " · required" else ""
+            Text("${artifact.category ?: artifact.kind} · $contract · ${artifact.artifactId}$required")
         }
     }
 }
@@ -357,6 +430,24 @@ private fun proErrorCopy(
         "input_validation" -> "The job input was rejected. Check coordinates, profile, and AOI radius."
         "cancelled" -> "The job was cancelled."
         else -> "Unexpected PRO job error: ${detail.orEmpty().ifBlank { errorClass }}"
+    }
+
+private fun ProVlmStatus.copy(): String =
+    when (this) {
+        ProVlmStatus.Idle -> "Idle. Run a completed PRO job before local inference."
+        is ProVlmStatus.DownloadingModel ->
+            "Downloading model ${receivedBytes.bytesLabel()}${totalBytes?.let { " / ${it.bytesLabel()}" }.orEmpty()}"
+        ProVlmStatus.LoadingModel -> "Loading local VLM runtime..."
+        ProVlmStatus.Inferencing -> "Analyzing VLM image set on device..."
+        is ProVlmStatus.Ready -> "Done · ${result.boxes.size} detected box(es)"
+        is ProVlmStatus.Failed -> "Local VLM unavailable: $reason"
+    }
+
+private fun Long.bytesLabel(): String =
+    when {
+        this >= 1024L * 1024L -> "${this / (1024L * 1024L)} MiB"
+        this >= 1024L -> "${this / 1024L} KiB"
+        else -> "$this B"
     }
 
 private suspend fun refreshRecentProJobs(

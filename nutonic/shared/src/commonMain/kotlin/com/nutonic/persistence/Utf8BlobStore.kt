@@ -21,3 +21,6 @@ expect fun createLocalLeaderboardBlobStore(): Utf8BlobStore
 
 /** Guess-record POST outbox (`GuessRecordOutboxRepository`). */
 expect fun createGuessSyncOutboxBlobStore(): Utf8BlobStore
+
+/** PRO on-device VLM model manifest and cache metadata. Model binaries are never stored in git. */
+expect fun createProVlmModelBlobStore(): Utf8BlobStore

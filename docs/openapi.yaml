@@ -585,6 +585,25 @@ paths:
         "404":
           description: Unknown job, artifact, or artifact bytes
 
+  /api/v1/pro/vlm/model-manifest:
+    get:
+      tags: [pro]
+      summary: Get the signed/versioned model manifest for PRO on-device VLM
+      operationId: getProVlmModelManifest
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: First-party model artifact descriptor. Clients verify sha256 before using bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProVlmModelManifest"
+        "403":
+          description: features.pro_jobs is false
+        "503":
+          description: PRO VLM model manifest is not configured
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1068,6 +1087,23 @@ components:
         profile:
           type: string
           nullable: true
+        contract_id:
+          type: string
+          nullable: true
+          description: Stable product contract id, e.g. pro.oceanscout.vessel_overlay.v1
+        role:
+          type: string
+          nullable: true
+          description: Worker role before artifact-id sanitization
+        category:
+          type: string
+          nullable: true
+          enum: [vlm_image, overlay, metrics, heatmap, coverage, brief, binary]
+          description: UI rendering category for grouping and profile completeness checks
+        required_for_profile:
+          type: boolean
+          default: false
+          description: True when this artifact is part of the selected profile's minimum UI contract
         download_url:
           type: string
           nullable: true
@@ -1098,6 +1134,74 @@ components:
         confidence_summary:
           type: string
           nullable: true
+        vlm_image_set:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProVlmImageRef"
+        vlm_prompt_injection:
+          type: object
+          nullable: true
+          additionalProperties: true
+        on_device_model_hint:
+          type: string
+          nullable: true
+        model_bundle_id:
+          type: string
+          nullable: true
+
+    ProVlmImageRef:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+        url:
+          type: string
+          nullable: true
+        inline_ref:
+          type: string
+          nullable: true
+        artifact_id:
+          type: string
+          nullable: true
+        width:
+          type: integer
+          nullable: true
+        height:
+          type: integer
+          nullable: true
+        mime:
+          type: string
+          nullable: true
+
+    ProVlmModelManifest:
+      type: object
+      required: [model_bundle_id, revision, download_url, sha256, size_bytes, runtime]
+      properties:
+        model_bundle_id:
+          type: string
+        revision:
+          type: string
+        download_url:
+          type: string
+          description: First-party or signed CDN URL. Clients must not require Hub credentials.
+        sha256:
+          type: string
+          description: Lowercase hex sha256 for fail-closed client verification.
+        size_bytes:
+          type: integer
+        runtime:
+          type: string
+          description: Runtime hint such as leap, coreml, onnx, or webgpu.
+        min_app_version:
+          type: string
+          nullable: true
+        contract_ids:
+          type: array
+          minItems: 1
+          description: Supported VLM image contracts. Clients fail closed when their required contract id is absent.
+          items:
+            type: string
 
     ProJobStatusOut:
       type: object

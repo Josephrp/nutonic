@@ -1,0 +1,22 @@
+{
+  "location_id": "asm_fix_a",
+  "streetview_hint_pack": [
+    {
+      "text": "Urban curb line with varied setbacks and mixed façade materials.",
+      "viewpoint_id": "decoy-0",
+      "rank": 1
+    },
+    {
+      "text": "Road surface shows patch repairs and lane markings without readable signage.",
+      "viewpoint_id": "decoy-1",
+      "rank": 2
+    }
+  ],
+  "streetview_assist_narrative": "Street-level rhythm alternates built frontage with short planting strips; no coordinates.",
+  "satellite_caption_sidecar": {
+    "pipeline": "fixture",
+    "caption": "Ortho still: mixed roof heights and a major corridor axis (no coordinates).",
+    "model_id": "fixture-sat"
+  },
+  "model_pins": {}
+}

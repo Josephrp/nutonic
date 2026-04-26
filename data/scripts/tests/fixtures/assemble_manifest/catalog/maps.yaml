@@ -1,0 +1,12 @@
+content_version: nutonic.assemble.fixture.v1
+maps:
+  - map_id: asm_fix_a
+    title: Assemble fixture map A
+    engine_version: "0.1.0"
+    local_only: true
+    ranked_pool: true
+  - map_id: asm_fix_b
+    title: Assemble fixture map B
+    engine_version: "0.1.0"
+    local_only: true
+    ranked_pool: false

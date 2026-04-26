@@ -1,0 +1,19 @@
+{
+  "poi_id": "poi_000099_g001",
+  "tile_stem": "poi_000099_g001_t0000",
+  "split": "train",
+  "bbox_wgs84": [-0.1, 51.4, -0.09, 51.41],
+  "latitude": 51.405,
+  "longitude": -0.095,
+  "stac_item_id": "fixture-item",
+  "grid": {"crs": "EPSG:32631", "width": 512, "height": 512, "transform": [1, 0, 0, 0, -1, 0, 0, 0, 1]},
+  "native_tile": 512,
+  "output_size": 224,
+  "tile_origin_native": [0, 0],
+  "caption": "This satellite imagery is dominated by trees (40.0%), built (20.0%), and grass (10.0%).",
+  "class_fractions": {"0": 0.05, "1": 0.4, "2": 0.1, "6": 0.2},
+  "regions": [
+    {"bbox": [10, 10, 100, 120], "label": "trees", "class_id": 1, "area_px": 5000},
+    {"bbox": [130, 140, 200, 210], "label": "built", "class_id": 6, "area_px": 2000}
+  ]
+}

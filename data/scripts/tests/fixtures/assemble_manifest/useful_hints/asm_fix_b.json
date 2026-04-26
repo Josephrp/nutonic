@@ -1,0 +1,13 @@
+{
+  "facts_used": {},
+  "facts_used_ref": "geo_context/asm_fix_b.json",
+  "location_id": "asm_fix_b",
+  "useful_hints": {
+    "tier_1": "Southern Hemisphere tropical belt near continental margins.",
+    "tier_2": "Maritime climate with coral reef proximity framing.",
+    "tier_3": "Equatorial warm pool influence on seasonal rainfall.",
+    "tier_4": "Remote island geography with limited continental shelf.",
+    "tier_5": "Melanesian archipelago regional context.",
+    "tier_6": "Sparse atoll and high-island mix without coordinate literals."
+  }
+}

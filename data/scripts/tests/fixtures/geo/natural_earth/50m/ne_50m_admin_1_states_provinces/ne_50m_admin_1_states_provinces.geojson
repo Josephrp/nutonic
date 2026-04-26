@@ -1,0 +1,25 @@
+{
+  "type": "FeatureCollection",
+  "name": "ne_50m_admin_1_states_provinces",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "NAME_1": "North Fixture",
+        "ISO_3166_2": "ZZ-NF"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [20.0, 10.0],
+            [20.9, 10.0],
+            [20.9, 11.0],
+            [20.0, 11.0],
+            [20.0, 10.0]
+          ]
+        ]
+      }
+    }
+  ]
+}

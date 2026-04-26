@@ -1,0 +1,21 @@
+# Default policy for compile_useful_hint_tiers.py — six coordinate-free SCAN assists.
+# Normative companion: docs/scripts/SPEC-compile-useful-hint-tiers.md
+tier_count: 6
+easy_hints: false
+coordinate_literal_check: true
+enforce_max_tier_contains_admin0: false
+max_length:
+  tier_1: 220
+  tier_2: 260
+  tier_3: 280
+  tier_4: 220
+  tier_5: 180
+  tier_6: 220
+banned_substrings: []
+templates:
+  tier_1: "{continent} · {hemisphere} Hemisphere · belt {latitude_band}. Broad continental framing only — no coordinates."
+  tier_2: "{marine_framing}"
+  tier_3: "{hydro_framing}"
+  tier_4: "{subnational_framing}"
+  tier_5: "Country-scale framing: {admin0_name}."
+  tier_6: "Strongest scripted assist (still coordinate-free): {admin1_clause} {admin0_clause} {hydro_framing_short}"

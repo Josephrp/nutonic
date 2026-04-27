@@ -101,6 +101,7 @@ def _run_batched_upload(
     remote_inventory_progress_every: int,
     num_threads: int,
     upload_heartbeat_interval: float,
+    isolate_lfs_files_mib: float,
     hf_token: str | None,
     dry_run: bool,
 ) -> None:
@@ -132,6 +133,7 @@ def _run_batched_upload(
     if hf_token:
         cmd.extend(["--hf-token", hf_token])
     cmd.extend(["--upload-heartbeat-interval", str(upload_heartbeat_interval)])
+    cmd.extend(["--isolate-lfs-files-mib", str(isolate_lfs_files_mib)])
     subprocess.run(cmd, check=True)
 
 
@@ -275,6 +277,12 @@ def main() -> int:
         default=45.0,
         help="Only for batched upload: seconds between log lines during each create_commit (0 disables).",
     )
+    ap.add_argument(
+        "--isolate-lfs-files-mib",
+        type=float,
+        default=48.0,
+        help="Only for batched upload: files >= this size (MiB) get solo commits (0 disables).",
+    )
     ap.add_argument("--hf-token", default=None, help="Override HF_TOKEN for batched upload.")
     ap.add_argument(
         "--dry-run",
@@ -319,6 +327,7 @@ def main() -> int:
             remote_inventory_progress_every=args.remote_inventory_progress_every,
             num_threads=args.num_threads,
             upload_heartbeat_interval=args.upload_heartbeat_interval,
+            isolate_lfs_files_mib=args.isolate_lfs_files_mib,
             hf_token=args.hf_token,
             dry_run=True,
         )
@@ -338,6 +347,7 @@ def main() -> int:
             remote_inventory_progress_every=args.remote_inventory_progress_every,
             num_threads=args.num_threads,
             upload_heartbeat_interval=args.upload_heartbeat_interval,
+            isolate_lfs_files_mib=args.isolate_lfs_files_mib,
             hf_token=args.hf_token,
             dry_run=False,
         )

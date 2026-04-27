@@ -35,8 +35,10 @@ entire repo (which can look “hung” for a long time on large datasets). Use
 
 **“Hung” on a commit:** ``create_commit`` can sit at ~80% in tqdm while the Hub ingests LFS;
 that is often still working. Use ``--upload-heartbeat-interval 45`` (default) for periodic log
-lines during each commit. For stalls, try smaller ``--max-files-per-commit`` (e.g. 2000) and
-``--num-threads`` in the 8–16 range (40+ can hurt on some networks). Optional: ``pip install hf_transfer``
+lines during each commit. Very large files (e.g. multi-hundred-MiB ``data/*.jsonl``) are **isolated**
+into their own commits by default (see ``--isolate-lfs-files-mib``) so they are not mixed with
+thousands of small PNGs in one LFS batch. For stalls, try smaller ``--max-files-per-commit`` (e.g. 2000)
+and ``--num-threads`` in the 8–16 range (40+ can hurt on some networks). Optional: ``pip install hf_transfer``
 and ``HF_HUB_ENABLE_HF_TRANSFER=1`` for faster transfers.
 """
 
@@ -177,6 +179,41 @@ def _chunked(items: list[tuple[Path, str]], size: int) -> list[list[tuple[Path, 
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _plan_batches_with_isolated_large_files(
+    pairs: list[tuple[Path, str]],
+    *,
+    max_per: int,
+    isolate_mib: float,
+) -> tuple[list[list[tuple[Path, str]]], int]:
+    """
+    Normal files are chunked to ``max_per`` per commit.
+
+    Files at or above ``isolate_mib`` each get their **own** commit after all smaller batches.
+    This avoids one giant JSONL sharing a single ``create_commit`` with thousands of PNGs, which
+    often stalls tqdm near the end of the large file.
+    """
+    if isolate_mib <= 0:
+        batches = _chunked(pairs, max_per)
+        return batches, 0
+    limit = int(float(isolate_mib) * 1024 * 1024)
+    small: list[tuple[Path, str]] = []
+    large: list[tuple[Path, str]] = []
+    for p, rel in sorted(pairs, key=lambda x: x[1]):
+        try:
+            sz = p.stat().st_size
+        except OSError:
+            small.append((p, rel))
+            continue
+        if sz >= limit:
+            large.append((p, rel))
+        else:
+            small.append((p, rel))
+    batches: list[list[tuple[Path, str]]] = list(_chunked(small, max_per))
+    for item in large:
+        batches.append([item])
+    return batches, len(large)
+
+
 def _commit_batch(
     api,
     *,
@@ -300,6 +337,13 @@ def main() -> int:
     p.add_argument("--private", action="store_true", help="Create dataset repo as private if missing")
     p.add_argument("--max-files-per-commit", type=int, default=8000, help="Cap files per commit (< 25k LFS)")
     p.add_argument(
+        "--isolate-lfs-files-mib",
+        type=float,
+        default=48.0,
+        help="Files this large (MiB) or larger are uploaded alone in their own commit after smaller "
+        "batches (0 disables). Avoids huge JSONL + thousands of PNGs in one create_commit. Default 48.",
+    )
+    p.add_argument(
         "--min-seconds-between-commits",
         type=float,
         default=15.0,
@@ -390,13 +434,20 @@ def main() -> int:
 
     max_per = max(1, min(args.max_files_per_commit, 24_000))
 
-    def plan_batches() -> list[list[tuple[Path, str]]]:
-        return _chunked(pairs, max_per)
-
-    batches = plan_batches()
+    batches, n_isolated = _plan_batches_with_isolated_large_files(
+        pairs,
+        max_per=max_per,
+        isolate_mib=float(args.isolate_lfs_files_mib),
+    )
+    iso_note = (
+        f", including {n_isolated} isolated large-file commit(s) (>= {args.isolate_lfs_files_mib:g} MiB each)"
+        if n_isolated
+        else ""
+    )
     print(
         f"Local files to upload: {len(pairs)} in {len(batches)} commit(s) "
-        f"(<={max_per} files/commit, >={args.min_seconds_between_commits}s between commits)",
+        f"(<={max_per} files/commit for multi-file batches{iso_note}, "
+        f">={args.min_seconds_between_commits}s between commits)",
         flush=True,
     )
     if args.dry_run:

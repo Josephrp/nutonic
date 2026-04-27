@@ -22,6 +22,22 @@ def test_top_level_prefixes_from_pairs_sorted_unique() -> None:
     assert u._top_level_prefixes_from_pairs(pairs) == ["data", "images"]
 
 
+def test_plan_batches_isolates_large_files(tmp_path: Path) -> None:
+    sys.path.insert(0, str(_SCRIPTS))
+    import upload_hf_dataset_batched as u  # noqa: PLC0415
+
+    tiny = tmp_path / "tiny.png"
+    tiny.write_bytes(b"x")
+    big = tmp_path / "big.jsonl"
+    big.write_bytes(b"y" * (3 * 1024 * 1024))
+    pairs = [(tiny, "z/tiny.png"), (big, "data/train.jsonl")]
+    batches, n_iso = u._plan_batches_with_isolated_large_files(pairs, max_per=10, isolate_mib=2.0)
+    assert n_iso == 1
+    assert len(batches) == 2
+    assert len(batches[0]) == 1 and batches[0][0][1] == "z/tiny.png"
+    assert len(batches[1]) == 1 and batches[1][0][1] == "data/train.jsonl"
+
+
 def _import_helpers():
     sys.path.insert(0, str(_SCRIPTS))
     from upload_sat_bbox_metadata_sft_to_hub import hub_sharding_recommended  # noqa: E402

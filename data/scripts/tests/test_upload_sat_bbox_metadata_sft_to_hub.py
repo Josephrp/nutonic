@@ -10,6 +10,18 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parents[1]
 
 
+def test_top_level_prefixes_from_pairs_sorted_unique() -> None:
+    sys.path.insert(0, str(_SCRIPTS))
+    import upload_hf_dataset_batched as u  # noqa: PLC0415
+
+    pairs = [
+        (Path("/tmp/a"), "data/train.jsonl"),
+        (Path("/tmp/b"), "images/s00000/x.png"),
+        (Path("/tmp/c"), "data/validation.jsonl"),
+    ]
+    assert u._top_level_prefixes_from_pairs(pairs) == ["data", "images"]
+
+
 def _import_helpers():
     sys.path.insert(0, str(_SCRIPTS))
     from upload_sat_bbox_metadata_sft_to_hub import hub_sharding_recommended  # noqa: E402

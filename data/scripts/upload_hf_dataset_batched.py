@@ -27,6 +27,11 @@ Usage (from repo root, venv active)::
     --skip-existing
 
 Resume: re-run the same command with ``--skip-existing`` so files already on the Hub are skipped.
+
+**Skip-existing performance:** by default the remote inventory is fetched **per top-level prefix**
+(``data/``, ``images/``, …) derived from your local tree, instead of one giant recursive listing of the
+entire repo (which can look “hung” for a long time on large datasets). Use
+``--skip-existing-remote-mode full`` only if you need a full-repo scan.
 """
 
 from __future__ import annotations
@@ -76,6 +81,11 @@ def _iter_local_files(local_root: Path) -> list[tuple[Path, str]]:
     return out
 
 
+def _top_level_prefixes_from_pairs(pairs: list[tuple[Path, str]]) -> list[str]:
+    """Stable sorted list of first path segment for each file (used for scoped Hub tree walks)."""
+    return sorted({rel.split("/", 1)[0] for _, rel in pairs})
+
+
 def _list_remote_files(
     api,
     repo_id: str,
@@ -83,19 +93,62 @@ def _list_remote_files(
     repo_type: str,
     revision: str | None,
     token: str,
+    prefixes: list[str] | None,
+    progress_every: int = 25_000,
 ) -> set[str]:
+    """
+    Build a set of ``path_in_repo`` strings for files already on the Hub.
+
+    When ``prefixes`` is set, call ``list_repo_tree`` once per prefix (much less opaque than a
+    single unbounded full-repo walk on resume). When ``prefixes`` is None, list the entire repo
+    recursively (legacy / escape hatch).
+    """
     from huggingface_hub.hf_api import RepoFile
 
     paths: set[str] = set()
-    for entry in api.list_repo_tree(
-        repo_id,
-        recursive=True,
-        repo_type=repo_type,
-        revision=revision,
-        token=token,
-    ):
-        if isinstance(entry, RepoFile):
-            paths.add(entry.path)
+    total = 0
+
+    def _consume(it: object, label: str) -> None:
+        nonlocal total
+        for entry in it:
+            if isinstance(entry, RepoFile):
+                paths.add(entry.path)
+                total += 1
+                if total % progress_every == 0:
+                    print(f"  remote inventory: {total} paths listed so far ({label})...", flush=True)
+
+    if prefixes is None:
+        print("Listing entire remote repo (recursive). This can take a long time on large datasets.", flush=True)
+        _consume(
+            api.list_repo_tree(
+                repo_id,
+                recursive=True,
+                repo_type=repo_type,
+                revision=revision,
+                token=token,
+            ),
+            "full tree",
+        )
+        print(f"Remote inventory complete: {len(paths)} file paths.", flush=True)
+        return paths
+
+    print(
+        f"Listing remote files under {len(prefixes)} prefix(es) derived from local paths "
+        f"(not the whole repo tree).",
+        flush=True,
+    )
+    for prefix in prefixes:
+        print(f"  prefix {prefix!r}...", flush=True)
+        it = api.list_repo_tree(
+            repo_id,
+            path_in_repo=prefix,
+            recursive=True,
+            repo_type=repo_type,
+            revision=revision,
+            token=token,
+        )
+        _consume(it, prefix)
+    print(f"Remote inventory complete: {len(paths)} file paths.", flush=True)
     return paths
 
 
@@ -176,13 +229,26 @@ def main() -> int:
     p.add_argument(
         "--num-threads",
         type=int,
-        default=8,
-        help="Threads for LFS preupload inside create_commit",
+        default=4,
+        help="Threads for LFS preupload inside create_commit (lower can reduce stalls on some hosts)",
     )
     p.add_argument(
         "--skip-existing",
         action="store_true",
         help="List remote files once and skip paths already present (for resume)",
+    )
+    p.add_argument(
+        "--skip-existing-remote-mode",
+        default="prefixes",
+        choices=("prefixes", "full"),
+        help="With --skip-existing: list remote per top-level prefix from local paths (default), "
+        "or one full recursive repo scan (slow on huge repos).",
+    )
+    p.add_argument(
+        "--remote-inventory-progress-every",
+        type=int,
+        default=25_000,
+        help="Log every N remote paths while building skip-existing inventory (0 disables).",
     )
     p.add_argument("--dry-run", action="store_true", help="Print batch plan only")
     p.add_argument("--hf-token", default=None, help="Override HF_TOKEN / HUGGING_FACE_HUB_TOKEN")
@@ -206,13 +272,19 @@ def main() -> int:
 
     pairs = _iter_local_files(local_root)
     if args.skip_existing:
-        print("Fetching remote file list (recursive)...", flush=True)
+        if args.skip_existing_remote_mode == "prefixes":
+            prefixes = _top_level_prefixes_from_pairs(pairs)
+        else:
+            prefixes = None
+        prog = max(0, int(args.remote_inventory_progress_every))
         remote = _list_remote_files(
             api,
             args.repo_id,
             repo_type=args.repo_type,
             revision=args.revision,
             token=token,
+            prefixes=prefixes,
+            progress_every=prog if prog > 0 else 10**12,
         )
         before = len(pairs)
         pairs = [(p, r) for p, r in pairs if r not in remote]
@@ -252,6 +324,11 @@ def main() -> int:
         while True:
             attempt += 1
             try:
+                print(
+                    f"  create_commit attempt {attempt}: uploading {len(batch)} file(s) "
+                    f"(LFS may take a long time per batch)...",
+                    flush=True,
+                )
                 oid = _commit_batch(
                     api,
                     repo_id=args.repo_id,
@@ -266,6 +343,12 @@ def main() -> int:
                 parent_commit = oid
                 total_commits += 1
                 print(f"Committed {msg} -> {oid[:7]}... (commit #{total_commits})", flush=True)
+                if args.min_seconds_between_commits > 0:
+                    print(
+                        f"  Waiting {args.min_seconds_between_commits}s before next commit "
+                        f"(Hub rate-limit safety; not stuck).",
+                        flush=True,
+                    )
                 _sleep_rate_limit(args.min_seconds_between_commits)
                 return
             except HfHubHTTPError as e:
@@ -274,6 +357,15 @@ def main() -> int:
                 if code == 429:
                     wait = ra if ra is not None else min(120.0, 5.0 * attempt)
                     print(f"429 rate limit; sleeping {wait:.1f}s then retrying...", flush=sys.stderr)
+                    time.sleep(wait)
+                    continue
+                if code in (408, 502, 503, 504) and attempt <= 12:
+                    wait = ra if ra is not None else min(180.0, 5.0 * attempt)
+                    print(
+                        f"HTTP {code} on create_commit; sleeping {wait:.1f}s then retrying "
+                        f"(attempt {attempt}/12)...",
+                        flush=sys.stderr,
+                    )
                     time.sleep(wait)
                     continue
                 if code == 413 and len(batch) > 1:

@@ -13,6 +13,10 @@ Steps
 
 Requires ``HF_TOKEN`` or ``HUGGING_FACE_HUB_TOKEN`` with write access to ``--repo-id``.
 
+With ``--skip-existing``, the batched uploader lists the remote repo **per top-level prefix**
+(``data/``, ``images/``, …) derived from your local tree so resume does not block on one giant
+recursive API walk. Use ``--skip-existing-remote-mode full`` only if you need a full-repo scan.
+
 Example::
 
   export HF_TOKEN=hf_...
@@ -93,6 +97,8 @@ def _run_batched_upload(
     max_files_per_commit: int,
     min_seconds: float,
     skip_existing: bool,
+    skip_existing_remote_mode: str,
+    remote_inventory_progress_every: int,
     num_threads: int,
     hf_token: str | None,
     dry_run: bool,
@@ -118,6 +124,8 @@ def _run_batched_upload(
         cmd.append("--private")
     if skip_existing:
         cmd.append("--skip-existing")
+        cmd.extend(["--skip-existing-remote-mode", skip_existing_remote_mode])
+        cmd.extend(["--remote-inventory-progress-every", str(remote_inventory_progress_every)])
     if dry_run:
         cmd.append("--dry-run")
     if hf_token:
@@ -241,7 +249,24 @@ def main() -> int:
         action="store_true",
         help="Only for batched upload: skip files already on the Hub.",
     )
-    ap.add_argument("--num-threads", type=int, default=8, help="Only for batched upload.")
+    ap.add_argument(
+        "--skip-existing-remote-mode",
+        default="prefixes",
+        choices=("prefixes", "full"),
+        help="Only with --skip-existing: forwarded to upload_hf_dataset_batched.py.",
+    )
+    ap.add_argument(
+        "--remote-inventory-progress-every",
+        type=int,
+        default=25_000,
+        help="Only with --skip-existing: log every N remote paths (0 disables).",
+    )
+    ap.add_argument(
+        "--num-threads",
+        type=int,
+        default=4,
+        help="Only for batched upload (LFS preupload threads; lower can reduce stalls).",
+    )
     ap.add_argument("--hf-token", default=None, help="Override HF_TOKEN for batched upload.")
     ap.add_argument(
         "--dry-run",
@@ -282,6 +307,8 @@ def main() -> int:
             max_files_per_commit=args.max_files_per_commit,
             min_seconds=args.min_seconds_between_commits,
             skip_existing=args.skip_existing,
+            skip_existing_remote_mode=args.skip_existing_remote_mode,
+            remote_inventory_progress_every=args.remote_inventory_progress_every,
             num_threads=args.num_threads,
             hf_token=args.hf_token,
             dry_run=True,
@@ -298,6 +325,8 @@ def main() -> int:
             max_files_per_commit=args.max_files_per_commit,
             min_seconds=args.min_seconds_between_commits,
             skip_existing=args.skip_existing,
+            skip_existing_remote_mode=args.skip_existing_remote_mode,
+            remote_inventory_progress_every=args.remote_inventory_progress_every,
             num_threads=args.num_threads,
             hf_token=args.hf_token,
             dry_run=False,

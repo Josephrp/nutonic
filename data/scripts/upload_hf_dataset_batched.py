@@ -32,6 +32,12 @@ Resume: re-run the same command with ``--skip-existing`` so files already on the
 (``data/``, ``images/``, …) derived from your local tree, instead of one giant recursive listing of the
 entire repo (which can look “hung” for a long time on large datasets). Use
 ``--skip-existing-remote-mode full`` only if you need a full-repo scan.
+
+**“Hung” on a commit:** ``create_commit`` can sit at ~80% in tqdm while the Hub ingests LFS;
+that is often still working. Use ``--upload-heartbeat-interval 45`` (default) for periodic log
+lines during each commit. For stalls, try smaller ``--max-files-per-commit`` (e.g. 2000) and
+``--num-threads`` in the 8–16 range (40+ can hurt on some networks). Optional: ``pip install hf_transfer``
+and ``HF_HUB_ENABLE_HF_TRANSFER=1`` for faster transfers.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -205,6 +212,64 @@ def _commit_batch(
     return info.oid
 
 
+def _commit_batch_with_heartbeat(
+    api: object,
+    *,
+    repo_id: str,
+    repo_type: str,
+    revision: str | None,
+    token: str,
+    batch: list[tuple[Path, str]],
+    commit_message: str,
+    parent_commit: str | None,
+    num_threads: int,
+    heartbeat_interval: float,
+) -> str:
+    """Wrap ``_commit_batch`` so long LFS phases do not look like a silent hang."""
+    if heartbeat_interval <= 0:
+        return _commit_batch(
+            api,
+            repo_id=repo_id,
+            repo_type=repo_type,
+            revision=revision,
+            token=token,
+            batch=batch,
+            commit_message=commit_message,
+            parent_commit=parent_commit,
+            num_threads=num_threads,
+        )
+
+    stop = threading.Event()
+    started = time.monotonic()
+
+    def _heartbeat_loop() -> None:
+        while not stop.wait(heartbeat_interval):
+            elapsed = time.monotonic() - started
+            print(
+                f"  ... still inside create_commit ({elapsed:.0f}s elapsed); "
+                f"LFS/Hub may be busy; tqdm can pause here without the process being stuck.",
+                flush=True,
+            )
+
+    th = threading.Thread(target=_heartbeat_loop, name="hf-upload-heartbeat", daemon=True)
+    th.start()
+    try:
+        return _commit_batch(
+            api,
+            repo_id=repo_id,
+            repo_type=repo_type,
+            revision=revision,
+            token=token,
+            batch=batch,
+            commit_message=commit_message,
+            parent_commit=parent_commit,
+            num_threads=num_threads,
+        )
+    finally:
+        stop.set()
+        th.join(timeout=min(120.0, heartbeat_interval + 30.0))
+
+
 def _sleep_rate_limit(min_seconds: float) -> None:
     if min_seconds > 0:
         time.sleep(min_seconds)
@@ -247,6 +312,13 @@ def main() -> int:
         help="Threads for LFS preupload inside create_commit (lower can reduce stalls on some hosts)",
     )
     p.add_argument(
+        "--upload-heartbeat-interval",
+        type=float,
+        default=45.0,
+        help="Seconds between log lines while each create_commit runs (0 disables). "
+        "Helps when tqdm appears frozen during long LFS batches.",
+    )
+    p.add_argument(
         "--skip-existing",
         action="store_true",
         help="List remote files once and skip paths already present (for resume)",
@@ -283,6 +355,14 @@ def main() -> int:
         raise SystemExit(2) from e
 
     api = HfApi(token=token)
+
+    if args.num_threads > 24:
+        print(
+            f"Note: --num-threads={args.num_threads} is high; Hub LFS sometimes contends or stalls "
+            f"with very large pools. If a batch sits with no new tqdm output, try 8–16 threads and/or "
+            f"a smaller --max-files-per-commit.",
+            file=sys.stderr,
+        )
 
     pairs = _iter_local_files(local_root)
     if args.skip_existing:
@@ -343,7 +423,7 @@ def main() -> int:
                     f"(LFS may take a long time per batch)...",
                     flush=True,
                 )
-                oid = _commit_batch(
+                oid = _commit_batch_with_heartbeat(
                     api,
                     repo_id=args.repo_id,
                     repo_type=args.repo_type,
@@ -353,6 +433,7 @@ def main() -> int:
                     commit_message=msg,
                     parent_commit=parent_commit,
                     num_threads=args.num_threads,
+                    heartbeat_interval=float(args.upload_heartbeat_interval),
                 )
                 parent_commit = oid
                 total_commits += 1

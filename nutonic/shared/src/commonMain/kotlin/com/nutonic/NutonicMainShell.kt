@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.Slider
 import androidx.compose.material.Switch
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -47,7 +49,7 @@ import com.nutonic.screens.CommunityLeaderboardPanel
 import com.nutonic.screens.GameRolePicker
 import com.nutonic.screens.ProCoordinateDashboardDetail
 import com.nutonic.screens.RankedPlaySession
-import com.nutonic.screens.ShellDetailPlaceholder
+import com.nutonic.screens.ShellDetailScreen
 import com.nutonic.screens.WorldMapGameplayDetail
 import com.nutonic.screens.pro.ProBriefComposerScreen
 import com.nutonic.screens.pro.ProFireWatchScreen
@@ -128,6 +130,7 @@ fun NutonicMainShell(
                             mapId = mapContextId,
                             mapTitle = mapContextTitle,
                             playerRole = settingsRepository.settings.playerRole,
+                            clientSettings = settingsRepository.settings,
                             contentCacheRepository = contentCacheRepository,
                             localLeaderboardRepository = localNonRankedLeaderboardRepository,
                             nutonicApiClient = nutonicApiClient,
@@ -141,8 +144,8 @@ fun NutonicMainShell(
                         )
                     ShellDetail.FinalResults ->
                         FinalResultsWithLocalSummary(
-                            detail = detail,
                             mapId = mapContextId,
+                            mapTitle = mapContextTitle,
                             localLeaderboardRepository = localNonRankedLeaderboardRepository,
                             onBack = { clearDetail() },
                             onNavigateToRankForMap = { mapId ->
@@ -154,6 +157,19 @@ fun NutonicMainShell(
                                     ),
                                 )
                             },
+                        )
+                    ShellDetail.SetupProtocol ->
+                        SetupProtocolDetail(
+                            settingsRepository = settingsRepository,
+                            onBack = { clearDetail() },
+                        )
+                    ShellDetail.RankGlobal ->
+                        RankGlobalDetail(
+                            nutonicApiClient = nutonicApiClient,
+                            serverFeatureFlags = serverFeatureFlags,
+                            mapContextId = mapContextId,
+                            onMapContextIdChange = { setMapContext(it, null) },
+                            onBack = { clearDetail() },
                         )
 
                     ShellDetail.ProCoordinateDashboard ->
@@ -198,7 +214,7 @@ fun NutonicMainShell(
                             onBack = { clearDetail() },
                         )
 
-                    else -> ShellDetailPlaceholder(detail = detail, onBack = { clearDetail() })
+                    else -> ShellDetailScreen(detail = detail, onBack = { clearDetail() })
                 }
             } else {
                 when (shell.tab) {
@@ -262,8 +278,8 @@ fun NutonicMainShell(
 
 @Composable
 private fun FinalResultsWithLocalSummary(
-    detail: ShellDetail,
     mapId: String,
+    mapTitle: String?,
     localLeaderboardRepository: LocalNonRankedLeaderboardRepository?,
     onBack: () -> Unit,
     onNavigateToRankForMap: (String) -> Unit,
@@ -280,15 +296,50 @@ private fun FinalResultsWithLocalSummary(
             row?.let { r ->
                 val ai = r.aiDistanceToTruthKm?.let { km -> "$km km" } ?: "—"
                 "Last local round: ${r.humanScorePoints} pts · ${r.humanDistanceKm} km vs truth · AI vs truth $ai"
-            }
+            } ?: "No completed local rounds for this map yet."
     }
-    ShellDetailPlaceholder(
-        detail = detail,
-        onBack = onBack,
-        onNavigateToRankForMap = onNavigateToRankForMap,
-        rankNavigationMapId = mapId,
-        lastRoundSummary = summary,
-    )
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Final results", style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
+        Text(
+            text =
+                buildString {
+                    append("Map ")
+                    append(mapId)
+                    mapTitle?.takeIf { it.isNotBlank() }?.let { title ->
+                        append(" · ")
+                        append(title)
+                    }
+                },
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
+        )
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Round recap", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(
+                summary ?: "No completed local rounds for this map yet.",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onBackground,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        NutonicPrimaryButton(
+            text = "Open rankings for this map",
+            onClick = { onNavigateToRankForMap(mapId) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        NutonicGhostButton(
+            text = "Back",
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }
 
 @Composable
@@ -360,8 +411,8 @@ private fun IntelTabRoot(
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Current session", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             val mapLine =
-                lastPlayedMapTitle?.let { t -> "$t · map_id $lastPlayedMapId" }
-                    ?: "map_id $lastPlayedMapId"
+                lastPlayedMapTitle?.let { t -> "$t ($lastPlayedMapId)" }
+                    ?: "Map $lastPlayedMapId"
             Text("Last focus: $mapLine", style = MaterialTheme.typography.body2)
             Text("Resume play from SCAN; open world map when a round is active there.", style = MaterialTheme.typography.caption)
             NutonicGhostButton(
@@ -450,14 +501,21 @@ private fun SetupTabRoot(
     ) {
         Text(MainTab.Setup.label, style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
         Text(
-            "Profile, accessibility, audio, and comfort data — same keys across platforms.",
+            "Profile, accessibility, audio, and comfort controls.",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Identity & role", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            OutlinedTextField(
+                value = s.displayName,
+                onValueChange = { v -> settingsRepository.update { it.copy(displayName = v.take(32)) } },
+                label = { Text("Display name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+            )
             Text(
-                "game.role — editable anytime without re-onboarding.",
+                "Choose a role for your current play style. You can change it anytime.",
                 style = MaterialTheme.typography.caption,
                 color = nutonicOnSurfaceMuted(),
             )
@@ -469,7 +527,7 @@ private fun SetupTabRoot(
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Accessibility", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("a11y.reduced_motion, a11y.high_contrast", style = MaterialTheme.typography.caption)
+            Text("Tune motion and contrast for comfort.", style = MaterialTheme.typography.caption)
             RowToggle(
                 label = "Reduced motion",
                 checked = s.reducedMotion,
@@ -483,11 +541,18 @@ private fun SetupTabRoot(
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Audio", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-            Text("audio.music_master — matches header music toggle.", style = MaterialTheme.typography.caption)
+            Text("Music follows the header music toggle.", style = MaterialTheme.typography.caption)
             RowToggle(
                 label = "Music",
                 checked = s.musicMasterEnabled,
                 onCheckedChange = { v -> settingsRepository.update { it.copy(musicMasterEnabled = v) } },
+            )
+            Text("Music volume", style = MaterialTheme.typography.caption, modifier = Modifier.padding(top = 6.dp))
+            Slider(
+                value = s.musicVolume,
+                onValueChange = { v -> settingsRepository.update { it.copy(musicVolume = v) } },
+                valueRange = 0f..1f,
+                modifier = Modifier.fillMaxWidth(),
             )
         }
         NutonicPrimaryButton(
@@ -511,6 +576,242 @@ private fun RowToggle(
     ) {
         Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colors.onBackground)
         Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SetupProtocolDetail(
+    settingsRepository: SettingsRepository,
+    onBack: () -> Unit,
+) {
+    val s = settingsRepository.settings
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Setup protocol", style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
+        Text(
+            "Manage privacy, sync behavior, and comfort settings for this device.",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onBackground,
+        )
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Profile", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            OutlinedTextField(
+                value = s.displayName,
+                onValueChange = { v -> settingsRepository.update { it.copy(displayName = v.take(32)) } },
+                label = { Text("Display name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+            )
+            Text("Current role: ${s.playerRole}", style = MaterialTheme.typography.body2)
+            RowToggle(
+                label = "Show rank badge",
+                checked = s.showRankBadge,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(showRankBadge = v) } },
+            )
+            Text(
+                "Role affects presentation style only and can be changed any time.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Gameplay and hints", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            RowToggle(
+                label = "Show non-AI hints",
+                checked = s.showNonAiHints,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(showNonAiHints = v) } },
+            )
+            RowToggle(
+                label = "Show location assist text",
+                checked = s.showAiGroundHints,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(showAiGroundHints = v) } },
+            )
+            RowToggle(
+                label = "Show timer",
+                checked = s.showTimer,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(showTimer = v) } },
+            )
+            RowToggle(
+                label = "Show score preview",
+                checked = s.showScorePreview,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(showScorePreview = v) } },
+            )
+            RowToggle(
+                label = "Confirm before submit",
+                checked = s.confirmBeforeSubmit,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(confirmBeforeSubmit = v) } },
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Models and assist", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            RowToggle(
+                label = "Auto-refetch leaderboard",
+                checked = s.autoRefetchLeaderboard,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(autoRefetchLeaderboard = v) } },
+            )
+            Text("Ranked protection rules still apply.", style = MaterialTheme.typography.caption)
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Map display", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            RowToggle(
+                label = "Show coordinate readout",
+                checked = s.showCoordinateReadout,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(showCoordinateReadout = v) } },
+            )
+            RowToggle(
+                label = "Remember last viewport",
+                checked = s.rememberLastViewport,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(rememberLastViewport = v) } },
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Accessibility", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            RowToggle(
+                label = "Reduced motion",
+                checked = s.reducedMotion,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(reducedMotion = v) } },
+            )
+            RowToggle(
+                label = "High contrast",
+                checked = s.highContrast,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(highContrast = v) } },
+            )
+            RowToggle(
+                label = "Large data rendering",
+                checked = s.largeDataRendering,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(largeDataRendering = v) } },
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Audio", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            RowToggle(
+                label = "Music",
+                checked = s.musicMasterEnabled,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(musicMasterEnabled = v) } },
+            )
+            RowToggle(
+                label = "Mute when backgrounded",
+                checked = s.muteWhenBackgrounded,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(muteWhenBackgrounded = v) } },
+            )
+            Text("Music volume", style = MaterialTheme.typography.caption, modifier = Modifier.padding(top = 6.dp))
+            Slider(
+                value = s.musicVolume,
+                onValueChange = { v -> settingsRepository.update { it.copy(musicVolume = v) } },
+                valueRange = 0f..1f,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("SFX volume", style = MaterialTheme.typography.caption)
+            Slider(
+                value = s.sfxVolume,
+                onValueChange = { v -> settingsRepository.update { it.copy(sfxVolume = v) } },
+                valueRange = 0f..1f,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Narrative and notes", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            RowToggle(
+                label = "Open narrative overlay by default",
+                checked = s.overlayDefaultOpen,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(overlayDefaultOpen = v) } },
+            )
+            RowToggle(
+                label = "Preserve narrative notes",
+                checked = s.preserveNarrativeNotes,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(preserveNarrativeNotes = v) } },
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Local data and sync", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text(
+                "Scores and guesses are saved locally first and sync when the network is available.",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onBackground,
+            )
+            RowToggle(
+                label = "Allow analytics",
+                checked = s.allowAnalytics,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(allowAnalytics = v) } },
+            )
+            RowToggle(
+                label = "Allow optional community sync",
+                checked = s.allowOptionalCommunitySync,
+                onCheckedChange = { v -> settingsRepository.update { it.copy(allowOptionalCommunitySync = v) } },
+            )
+            Text(
+                "If sync is delayed, your progress remains available on this device.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Account and security", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("Biometric unlock and remembered sign-in are not required for this reference build.", style = MaterialTheme.typography.body2)
+        }
+        NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+            Text("Danger zone", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+            Text("Destructive reset actions are hidden in this build to avoid accidental data loss.", style = MaterialTheme.typography.body2)
+        }
+        NutonicGhostButton(
+            text = "Back",
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun RankGlobalDetail(
+    nutonicApiClient: NutonicApiClient?,
+    serverFeatureFlags: FeatureFlags?,
+    mapContextId: String,
+    onMapContextIdChange: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Global rankings", style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
+        Text(
+            "Review global and map-scoped rankings, then jump back to the selected map context.",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onBackground,
+        )
+        if (nutonicApiClient == null) {
+            Text(
+                "Connect to the game server to load global rankings.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+        } else {
+            CommunityLeaderboardPanel(
+                nutonicApiClient = nutonicApiClient,
+                mapId = mapContextId,
+                onMapIdChange = onMapContextIdChange,
+                featureFlags = serverFeatureFlags,
+                sectionTitle = "Global and map rankings",
+                showRankedVerifiedFetch = serverFeatureFlags?.ranked == true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        NutonicGhostButton(
+            text = "Back",
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -549,26 +850,26 @@ private fun ProTabRoot(
     ) {
         Text(MainTab.Pro.label, style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
         Text(
-            "Non-game EO / VLM dashboard: game server orchestrates materialization and TerraMind; clients never call materialization URLs directly.",
+            "Coordinate analysis workspace for advanced map insight and mission briefs.",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Orchestration", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text(
-                "POST PRO jobs to the game server; it delegates fetch, downsample, TiM, and optional generate — then returns a ProVisionBundle-shaped payload to this shell.",
+                "Run analysis jobs from one place, then review outputs and launch mini-app workflows.",
                 style = MaterialTheme.typography.body2,
             )
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("Coordinate strip", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text("WGS84 presets: Vienna, Brussels, Paris", style = MaterialTheme.typography.body2)
-            Text("Full precision, materialize, and export live on the dashboard detail.", style = MaterialTheme.typography.caption)
+            Text("Use presets, refine coordinates, and export results from the dashboard.", style = MaterialTheme.typography.caption)
         }
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("TiM / on-device VLM health", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text("Server probe: $probeStatus", style = MaterialTheme.typography.body2)
-            Text("Current gameplay map: $currentMapId · published PRO overlays: $proOverlayCount", style = MaterialTheme.typography.caption)
+            Text("Current gameplay map: $currentMapId · PRO overlays shared: $proOverlayCount", style = MaterialTheme.typography.caption)
             NutonicGhostButton(
                 text = "Refresh PRO server probe",
                 enabled = nutonicApiClient != null,
@@ -630,7 +931,7 @@ private suspend fun refreshProTabProbeAndJobs(
                     "Disabled by server"
                 }
             is ApiResult.HttpFailure -> config.userMessage
-            is ApiResult.NetworkFailure -> "Network: ${config.debugMessage}"
+            is ApiResult.NetworkFailure -> "Network unavailable"
         },
     )
     onRecentStatus("Requesting session token...")
@@ -642,7 +943,7 @@ private suspend fun refreshProTabProbeAndJobs(
                 return
             }
             is ApiResult.NetworkFailure -> {
-                onRecentStatus("Network: ${auth.debugMessage}")
+                onRecentStatus("Network unavailable. Try again when online.")
                 return
             }
         }
@@ -652,7 +953,7 @@ private suspend fun refreshProTabProbeAndJobs(
             onRecentStatus("Loaded ${jobs.value.size} recent job(s).")
         }
         is ApiResult.HttpFailure -> onRecentStatus(jobs.userMessage)
-        is ApiResult.NetworkFailure -> onRecentStatus("Network: ${jobs.debugMessage}")
+        is ApiResult.NetworkFailure -> onRecentStatus("Network unavailable. Could not load recent jobs.")
     }
 }
 

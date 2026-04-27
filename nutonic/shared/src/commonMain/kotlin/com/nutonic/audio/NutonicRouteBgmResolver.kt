@@ -20,12 +20,8 @@ fun resolveNutonicBgmTrack(route: NutonicRoute): NutonicBgmTrack =
 private fun resolveShellBgm(shell: NutonicRoute.Shell): NutonicBgmTrack =
     when (shell.detail) {
         ShellDetail.WorldMapGameplay -> NutonicBgmTrack.MusicGameplay
-        ShellDetail.SuccessOverlay -> NutonicBgmTrack.MusicSuccess
         ShellDetail.FinalResults -> NutonicBgmTrack.MusicResults
         null -> tabDefault(shell.tab)
-        ShellDetail.MissionSelection,
-        ShellDetail.MapLevelSelection,
-        -> NutonicBgmTrack.MusicScanHub
         ShellDetail.IntelDashboard -> NutonicBgmTrack.MusicIntel
         ShellDetail.RankGlobal -> NutonicBgmTrack.MusicRank
         ShellDetail.SetupProtocol -> NutonicBgmTrack.MusicSetup

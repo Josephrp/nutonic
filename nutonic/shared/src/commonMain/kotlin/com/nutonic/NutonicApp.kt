@@ -29,10 +29,10 @@ import com.nutonic.navigation.decodeNutonicRoute
 import com.nutonic.navigation.encode
 import com.nutonic.persistence.createGuessSyncOutboxBlobStore
 import com.nutonic.persistence.createLocalLeaderboardBlobStore
-import com.nutonic.screens.AuthenticationScreenPlaceholder
+import com.nutonic.screens.AuthenticationScreen
 import com.nutonic.screens.NutonicMusicMasterTopBar
-import com.nutonic.screens.RoleSelectionScreenPlaceholder
-import com.nutonic.screens.SplashScreenPlaceholder
+import com.nutonic.screens.RoleSelectionScreen
+import com.nutonic.screens.SplashScreen
 import com.nutonic.settings.MemorySettingsRepository
 import com.nutonic.style.NutonicMotion
 import com.nutonic.style.NutonicTheme
@@ -110,11 +110,11 @@ fun NutonicApp(
                 ) {
                     when (route) {
                         NutonicRoute.Splash -> {
-                            SplashScreenPlaceholder(onInitialize = { navigate(NutonicRoute.RoleSelection) })
+                            SplashScreen(onInitialize = { navigate(NutonicRoute.RoleSelection) })
                         }
 
                         NutonicRoute.RoleSelection -> {
-                            RoleSelectionScreenPlaceholder(
+                            RoleSelectionScreen(
                                 selectedRole = settings.playerRole,
                                 onSelectRole = { id -> settingsRepo.update { it.copy(playerRole = id) } },
                                 onContinue = { navigate(NutonicRoute.Shell(MainTab.ScanHub)) },
@@ -123,7 +123,7 @@ fun NutonicApp(
                         }
 
                         NutonicRoute.Authentication -> {
-                            AuthenticationScreenPlaceholder(
+                            AuthenticationScreen(
                                 onSkip = { navigate(NutonicRoute.Shell(MainTab.ScanHub)) },
                             )
                         }

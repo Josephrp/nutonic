@@ -8,9 +8,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -58,7 +63,7 @@ fun ChecklistScreenChrome(
 }
 
 @Composable
-fun SplashScreenPlaceholder(
+fun SplashScreen(
     onInitialize: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -73,6 +78,12 @@ fun SplashScreenPlaceholder(
             NutonicPrimaryButton(text = "Initialize", onClick = onInitialize, modifier = Modifier.fillMaxWidth())
             Spacer(modifier = Modifier.height(16.dp))
             Text(
+                text = "System status: Ready",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
                 text = "Client $version",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onBackground,
@@ -82,18 +93,19 @@ fun SplashScreenPlaceholder(
 }
 
 @Composable
-fun RoleSelectionScreenPlaceholder(
+fun RoleSelectionScreen(
     selectedRole: String?,
     onSelectRole: (String) -> Unit,
     onContinue: () -> Unit,
     onOpenOptionalAuth: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val protocolVersion = nutonicClientVersionLabel()
     val roles =
         remember {
             listOf(
                 Triple("HUMAN", "Human", "Baseline SCAN pacing with familiar controls and assists."),
-                Triple("ASTRONAUT", "Astronaut", "Balanced telemetry load — good for mixed recon and ranked warmups."),
+                Triple("ASTRONAUT", "Astronaut", "Balanced telemetry load - good for mixed recon and ranked warmups."),
                 Triple("ALIEN", "Alien", "Aggressive assist cadence for players who want faster hint unlocks."),
             )
         }
@@ -148,6 +160,12 @@ fun RoleSelectionScreenPlaceholder(
                 onClick = onOpenOptionalAuth,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Protocol version: $protocolVersion",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
         },
     )
 }
@@ -164,7 +182,7 @@ fun GameRolePicker(
             val sel = selectedRole == id
             if (sel) {
                 NutonicPrimaryButton(
-                    text = "★ $label",
+                    text = "[Selected] $label",
                     onClick = { onSelectRole(id) },
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -180,24 +198,68 @@ fun GameRolePicker(
 }
 
 @Composable
-fun AuthenticationScreenPlaceholder(
+fun AuthenticationScreen(
     onSkip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var identity by remember { mutableStateOf("") }
+    var credential by remember { mutableStateOf("") }
+    var statusLine by remember { mutableStateOf("Offline-friendly mode: sign-in is optional.") }
     ChecklistScreenChrome(
         title = "Authentication",
-        supportText = "Sign in is optional for casual SCAN play.",
+        supportText = "Sign in to sync identity-backed features, or skip for local-first SCAN play.",
         modifier = modifier,
         onBack = null,
         extra = {
-            Spacer(modifier = Modifier.height(24.dp))
-            NutonicPrimaryButton(text = "Skip for now", onClick = onSkip, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = identity,
+                onValueChange = { identity = it },
+                label = { Text("Identity (email or handle)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = credential,
+                onValueChange = { credential = it },
+                label = { Text("Credential token (optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = statusLine,
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            NutonicPrimaryButton(
+                text = "Continue",
+                onClick = {
+                    statusLine =
+                        if (identity.isBlank()) {
+                            "Continuing without account sign-in."
+                        } else {
+                            "Identity saved for this session."
+                        }
+                    onSkip()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Skip for now")
+            }
         },
     )
 }
 
 @Composable
-fun ShellDetailPlaceholder(
+fun ShellDetailScreen(
     detail: ShellDetail,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -250,10 +312,7 @@ fun ShellDetailPlaceholder(
 
 private fun detailMeta(detail: ShellDetail): Pair<String, String> =
     when (detail) {
-        ShellDetail.MissionSelection -> "Mission selection" to "Select a mission profile and launch from SCAN."
-        ShellDetail.MapLevelSelection -> "Map / level selection" to "Select map context used by gameplay and ranks."
         ShellDetail.WorldMapGameplay -> "World map gameplay" to "Map, still clue, assists, and one primary submit."
-        ShellDetail.SuccessOverlay -> "Success overlay" to "Round-complete summary before full results."
         ShellDetail.FinalResults -> "Final results" to "Mission summary, progression, and rank handoff."
         ShellDetail.IntelDashboard -> "INTEL dashboard" to "Session progress, XP lane, and daily protocol status."
         ShellDetail.RankGlobal -> "RANK · global + map pick" to "Browse map-scoped and global rank slices."

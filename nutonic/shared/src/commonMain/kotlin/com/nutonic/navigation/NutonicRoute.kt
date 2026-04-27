@@ -23,16 +23,10 @@ sealed class NutonicRoute {
 }
 
 /**
- * Checklist-aligned surfaces reached from shell tabs (placeholders OK per IMP-050).
+ * Checklist-aligned detail surfaces reached from shell tabs.
  */
 sealed class ShellDetail {
-    data object MissionSelection : ShellDetail()
-
-    data object MapLevelSelection : ShellDetail()
-
     data object WorldMapGameplay : ShellDetail()
-
-    data object SuccessOverlay : ShellDetail()
 
     data object FinalResults : ShellDetail()
 
@@ -142,10 +136,7 @@ private fun decodeRankFocusFragment(raw: String?): String? {
 
 private fun ShellDetail.token(): String =
     when (this) {
-        ShellDetail.MissionSelection -> "mission"
-        ShellDetail.MapLevelSelection -> "map"
         ShellDetail.WorldMapGameplay -> "gameplay"
-        ShellDetail.SuccessOverlay -> "success"
         ShellDetail.FinalResults -> "results"
         ShellDetail.IntelDashboard -> "intel"
         ShellDetail.RankGlobal -> "rank"
@@ -160,10 +151,11 @@ private fun ShellDetail.token(): String =
 
 private fun decodeDetail(token: String): ShellDetail? =
     when (token) {
-        "mission" -> ShellDetail.MissionSelection
-        "map" -> ShellDetail.MapLevelSelection
+        // Legacy aliases: route back to active SCAN gameplay/detail surfaces.
+        "mission" -> ShellDetail.WorldMapGameplay
+        "map" -> ShellDetail.WorldMapGameplay
         "gameplay" -> ShellDetail.WorldMapGameplay
-        "success" -> ShellDetail.SuccessOverlay
+        "success" -> ShellDetail.FinalResults
         "results" -> ShellDetail.FinalResults
         "intel" -> ShellDetail.IntelDashboard
         "rank" -> ShellDetail.RankGlobal

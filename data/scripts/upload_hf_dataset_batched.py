@@ -102,7 +102,11 @@ def _list_remote_files(
     When ``prefixes`` is set, call ``list_repo_tree`` once per prefix (much less opaque than a
     single unbounded full-repo walk on resume). When ``prefixes`` is None, list the entire repo
     recursively (legacy / escape hatch).
+
+    Missing prefixes (new or empty repo) return **404** from the Hub; those are treated as **no
+    remote files** under that prefix so ``--skip-existing`` can run on first upload.
     """
+    from huggingface_hub.errors import HfHubHTTPError, RemoteEntryNotFoundError
     from huggingface_hub.hf_api import RepoFile
 
     paths: set[str] = set()
@@ -139,15 +143,25 @@ def _list_remote_files(
     )
     for prefix in prefixes:
         print(f"  prefix {prefix!r}...", flush=True)
-        it = api.list_repo_tree(
-            repo_id,
-            path_in_repo=prefix,
-            recursive=True,
-            repo_type=repo_type,
-            revision=revision,
-            token=token,
-        )
-        _consume(it, prefix)
+        try:
+            it = api.list_repo_tree(
+                repo_id,
+                path_in_repo=prefix,
+                recursive=True,
+                repo_type=repo_type,
+                revision=revision,
+                token=token,
+            )
+            _consume(it, prefix)
+        except RemoteEntryNotFoundError:
+            print(f"  prefix {prefix!r}: not on remote yet (empty).", flush=True)
+            continue
+        except HfHubHTTPError as e:
+            code = e.response.status_code if e.response is not None else None
+            if code == 404:
+                print(f"  prefix {prefix!r}: remote 404 (empty).", flush=True)
+                continue
+            raise
     print(f"Remote inventory complete: {len(paths)} file paths.", flush=True)
     return paths
 

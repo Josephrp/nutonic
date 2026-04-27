@@ -886,8 +886,30 @@ fun WorldMapGameplayDetail(
                 Button(
                     modifier = Modifier.weight(1f).testTag("worldMapPeerButton"),
                     onClick = {
-                        peerRevealEnabled = !peerRevealEnabled
-                        gameplayStatus = if (peerRevealEnabled) "Peer reveal uplink opened." else "Peer reveal hidden."
+                        if (rankedForUi == null) {
+                            peerRevealEnabled = !peerRevealEnabled
+                            gameplayStatus = if (peerRevealEnabled) "Peer reveal uplink opened." else "Peer reveal hidden."
+                        } else if (peerRevealEnabled) {
+                            peerRevealEnabled = false
+                            gameplayStatus = "Peer reveal hidden."
+                        } else {
+                            scope.launch {
+                                val ok =
+                                    rankedAssistForfeitSatisfied ||
+                                        postRankedForfeitOr409(
+                                            rankedForUi,
+                                            nutonicApiClient,
+                                            "peer_reveal",
+                                        )
+                                if (ok) {
+                                    rankedAssistForfeitSatisfied = true
+                                    peerRevealEnabled = true
+                                    gameplayStatus = "Ranked: peer-reveal forfeit recorded (server)."
+                                } else {
+                                    gameplayStatus = "Ranked forfeit failed - peer marker stayed hidden."
+                                }
+                            }
+                        }
                     },
                 ) {
                     Text(if (peerRevealEnabled) "Hide peer" else "Show peer")

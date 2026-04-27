@@ -187,30 +187,35 @@ fun NutonicMainShell(
                     ShellDetail.ProFireWatch ->
                         ProFireWatchScreen(
                             job = proSelectedJob,
+                            nutonicApiClient = nutonicApiClient,
                             onBack = { clearDetail() },
                             onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
                         )
                     ShellDetail.ProOceanScout ->
                         ProOceanScoutScreen(
                             job = proSelectedJob,
+                            nutonicApiClient = nutonicApiClient,
                             onBack = { clearDetail() },
                             onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
                         )
                     ShellDetail.ProLandShift ->
                         ProLandShiftScreen(
                             job = proSelectedJob,
+                            nutonicApiClient = nutonicApiClient,
                             onBack = { clearDetail() },
                             onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
                         )
                     ShellDetail.ProFloodPulse ->
                         ProFloodPulseScreen(
                             job = proSelectedJob,
+                            nutonicApiClient = nutonicApiClient,
                             onBack = { clearDetail() },
                             onOpenBriefComposer = { goProMiniApp(ShellDetail.ProBriefComposer, proSelectedJob) },
                         )
                     ShellDetail.ProBriefComposer ->
                         ProBriefComposerScreen(
                             job = proSelectedJob,
+                            nutonicApiClient = nutonicApiClient,
                             onBack = { clearDetail() },
                         )
 

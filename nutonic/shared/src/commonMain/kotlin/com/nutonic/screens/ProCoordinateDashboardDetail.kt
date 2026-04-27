@@ -146,17 +146,17 @@ fun ProCoordinateDashboardDetail(
                                         }
 
                                         is ApiResult.HttpFailure -> statusText = polled.userMessage
-                                        is ApiResult.NetworkFailure -> statusText = "Network: ${polled.debugMessage}"
+                                        is ApiResult.NetworkFailure -> statusText = "Network unavailable while polling job status."
                                     }
                                 }
 
                                 is ApiResult.HttpFailure -> statusText = created.userMessage
-                                is ApiResult.NetworkFailure -> statusText = "Network: ${created.debugMessage}"
+                                is ApiResult.NetworkFailure -> statusText = "Network unavailable while creating PRO job."
                             }
                         }
 
                         is ApiResult.HttpFailure -> statusText = token.userMessage
-                        is ApiResult.NetworkFailure -> statusText = "Network: ${token.debugMessage}"
+                        is ApiResult.NetworkFailure -> statusText = "Network unavailable while requesting session token."
                     }
                 }
             },
@@ -466,11 +466,11 @@ private suspend fun refreshRecentProJobs(
                 }
 
                 is ApiResult.HttpFailure -> onStatus(jobs.userMessage)
-                is ApiResult.NetworkFailure -> onStatus("Network: ${jobs.debugMessage}")
+                is ApiResult.NetworkFailure -> onStatus("Network unavailable while loading recent jobs.")
             }
         }
 
         is ApiResult.HttpFailure -> onStatus(token.userMessage)
-        is ApiResult.NetworkFailure -> onStatus("Network: ${token.debugMessage}")
+        is ApiResult.NetworkFailure -> onStatus("Network unavailable while requesting session token.")
     }
 }

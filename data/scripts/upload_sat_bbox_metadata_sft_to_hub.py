@@ -53,6 +53,10 @@ def hub_sharding_recommended(src: Path, *, max_flat_files: int) -> bool:
     for name in _HUB_SHARD_MEDIA:
         if _flat_file_count(root / name) > max_flat_files:
             return True
+    # Sat-bbox metadata SFT: one JSON per row under metadata/sft_metadata_rows/ (not metadata/ root).
+    sft_rows = root / "metadata" / "sft_metadata_rows"
+    if _flat_file_count(sft_rows) > max_flat_files:
+        return True
     return False
 
 

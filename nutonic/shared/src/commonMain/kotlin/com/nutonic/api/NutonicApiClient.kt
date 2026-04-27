@@ -588,13 +588,13 @@ fun stubUserMessageForStatus(
 ): String =
     when {
         featureDisabled != null ->
-            "This server has ${featureDisabled.feature} turned off. Try another build or ask the host to enable it."
+            "This activity is not enabled on this server yet."
 
-        statusCode == 401 -> "Session missing or expired. Refresh your token and try again."
-        statusCode == 403 -> "The server declined this action for this deployment."
-        statusCode == 404 -> "That endpoint or map was not found."
+        statusCode == 401 -> "Your session expired. Sign in again and retry."
+        statusCode == 403 -> "This action is not available for your current access."
+        statusCode == 404 -> "We could not find that content."
         statusCode == 429 -> "Too many requests. Wait a moment and try again."
-        statusCode in 500..599 -> "Server hiccup. Retry in a few seconds."
         statusCode == 501 -> "That feature is not implemented on this server yet."
-        else -> "Request failed (HTTP $statusCode)."
+        statusCode in 500..599 -> "Server hiccup. Retry in a few seconds."
+        else -> "We could not complete that request right now."
     }

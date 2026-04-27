@@ -49,8 +49,8 @@ class NutonicRouteBgmResolverTest {
             resolveNutonicBgmTrack(NutonicRoute.Shell(MainTab.ScanHub, ShellDetail.FinalResults)),
         )
         assertEquals(
-            NutonicBgmTrack.MusicSuccess,
-            resolveNutonicBgmTrack(NutonicRoute.Shell(MainTab.ScanHub, ShellDetail.SuccessOverlay)),
+            NutonicBgmTrack.MusicRank,
+            resolveNutonicBgmTrack(NutonicRoute.Shell(MainTab.Rank, ShellDetail.RankGlobal)),
         )
     }
 }

@@ -26,6 +26,18 @@ def test_hub_sharding_recommended_false_when_dirs_small(tmp_path: Path) -> None:
     assert not hub_sharding_recommended(root, max_flat_files=8000)
 
 
+def test_hub_sharding_recommended_true_when_sft_metadata_rows_exceeds(tmp_path: Path) -> None:
+    hub_sharding_recommended = _import_helpers()
+    root = tmp_path / "ds"
+    (root / "data").mkdir(parents=True)
+    (root / "images").mkdir()
+    sm = root / "metadata" / "sft_metadata_rows"
+    sm.mkdir(parents=True)
+    for i in range(8001):
+        (sm / f"row_{i}.json").write_text("{}", encoding="utf-8")
+    assert hub_sharding_recommended(root, max_flat_files=8000)
+
+
 def test_hub_sharding_recommended_true_when_analysis_images_flat_exceeds(tmp_path: Path) -> None:
     hub_sharding_recommended = _import_helpers()
     root = tmp_path / "ds"
@@ -86,3 +98,37 @@ def test_shard_script_rewrites_analysis_image_path_in_jsonl(tmp_path: Path) -> N
     imgs = [p["image"] for p in out["messages"][0]["content"] if p.get("type") == "image"]
     assert imgs[0].startswith("images/s00000/")
     assert imgs[1].startswith("analysis_images/s00000/")
+
+
+def test_shard_script_shards_metadata_sft_metadata_rows(tmp_path: Path) -> None:
+    """metadata/sft_metadata_rows/*.json must shard (Hub 10k dir limit)."""
+    src = tmp_path / "src"
+    dst = tmp_path / "dst_hub"
+    (src / "data").mkdir(parents=True)
+    (src / "data" / "train.jsonl").write_text('{"x":1}\n', encoding="utf-8")
+    sm = src / "metadata" / "sft_metadata_rows"
+    sm.mkdir(parents=True)
+    for i in range(5):
+        (sm / f"side_{i}.json").write_text(json.dumps({"i": i, "p": "images/a.png"}), encoding="utf-8")
+
+    shard = _SCRIPTS / "shard_lfm_vl_dataset_for_hub.py"
+    subprocess.run(
+        [
+            sys.executable,
+            str(shard),
+            "--src",
+            str(src),
+            "--dst",
+            str(dst),
+            "--max-files-per-dir",
+            "2",
+            "--link",
+            "none",
+        ],
+        check=True,
+    )
+    shard_dirs = [p.name for p in (dst / "metadata" / "sft_metadata_rows").iterdir() if p.is_dir()]
+    assert "s00000" in shard_dirs
+    assert "s00001" in shard_dirs
+    assert (dst / "metadata" / "sft_metadata_rows" / "s00000" / "side_0.json").is_file()
+    assert (dst / "metadata" / "sft_metadata_rows" / "s00002" / "side_4.json").is_file()

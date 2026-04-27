@@ -119,6 +119,36 @@ def test_tim_context_for_user_prompt_strips_sentinel_echoes() -> None:
     assert "S2_fixture" not in blob
 
 
+def test_streaming_parallel_workers_match_buffered_for_fixture(tmp_path: Path) -> None:
+    repo = Path(__file__).resolve().parents[3]
+    fx = repo / "data" / "scripts" / "tests" / "fixtures" / "sat_bbox_sft_mini"
+    cfg = SatBBoxMetadataSftConfig(
+        dataset_root=fx,
+        split_filter="all",
+        max_rows=5,
+        task_mix=frozenset({"production_analysis"}),
+        require_local_images=True,
+    )
+    buf_dir = tmp_path / "buffered_par"
+    stream_dir = tmp_path / "streamed_par"
+    rows, stats_buf = run_metadata_sft_build(cfg)
+    write_split_jsonl_and_sidecars(rows, buf_dir, source_root=fx)
+    stats_stream = run_metadata_sft_build_streaming(
+        cfg,
+        stream_dir,
+        source_root=fx,
+        render_workers=2,
+        copy_workers=2,
+        flush_batch_size=8,
+    )
+    assert stats_buf.summary() == stats_stream.summary()
+    a = (buf_dir / "data" / "train.jsonl").read_text(encoding="utf-8")
+    b = (stream_dir / "data" / "train.jsonl").read_text(encoding="utf-8")
+    assert sorted(x for x in a.splitlines() if x.strip()) == sorted(
+        x for x in b.splitlines() if x.strip()
+    )
+
+
 def test_streaming_build_matches_buffered_for_fixture(tmp_path: Path) -> None:
     repo = Path(__file__).resolve().parents[3]
     fx = repo / "data" / "scripts" / "tests" / "fixtures" / "sat_bbox_sft_mini"

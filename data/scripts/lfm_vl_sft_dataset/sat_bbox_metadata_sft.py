@@ -13,6 +13,7 @@ import json
 import os
 import re
 import shutil
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1268,6 +1269,12 @@ def safe_sidecar_filename(sample_id: str) -> str:
     return s or "row"
 
 
+def _mp_render_analysis_image(job: tuple[str, dict[str, Any]]) -> None:
+    """Picklable worker for ``ProcessPoolExecutor`` (spawn-safe top-level)."""
+    dest_str, spec = job
+    render_analysis_image(spec, Path(dest_str))
+
+
 def _materialize_source_image(
     src: Path,
     dest: Path,
@@ -1315,6 +1322,78 @@ def _write_emitted_row_to_disk(
         json.dumps(side, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def _flush_streaming_batch(
+    batch: list[tuple[str, dict[str, Any], dict[str, Any]]],
+    *,
+    out_dir: Path,
+    source_root: Path | None,
+    copy_source_images: bool,
+    copied: set[str],
+    prefer_hardlink: bool,
+    meta_out: Path,
+    split_handles: dict[str, Any],
+    data_dir: Path,
+    render_workers: int,
+    copy_workers: int,
+) -> None:
+    """Render + copy for ``batch`` in parallel, then append JSONL and sidecars in order."""
+    if not batch:
+        return
+    render_jobs: list[tuple[str, dict[str, Any]]] = []
+    for _sp, _row, side in batch:
+        ar = side.get("analysis_image_path")
+        asp = side.get("analysis_image_spec")
+        if isinstance(ar, str) and isinstance(asp, dict):
+            dest = (out_dir / ar).resolve()
+            render_jobs.append((str(dest), copy.deepcopy(asp)))
+    if render_jobs:
+        if render_workers > 1:
+            n = min(render_workers, len(render_jobs))
+            with ProcessPoolExecutor(max_workers=n) as ex:
+                list(ex.map(_mp_render_analysis_image, render_jobs, chunksize=max(1, len(render_jobs) // n)))
+        else:
+            for dest_str, spec in render_jobs:
+                render_analysis_image(spec, Path(dest_str))
+
+    to_copy: list[tuple[Path, Path, str]] = []
+    seen_in_batch: set[str] = set()
+    if copy_source_images and source_root is not None:
+        root = Path(source_root)
+        for _sp, row, _side in batch:
+            for rel in iter_row_image_paths(row):
+                if rel.startswith("analysis_images/") or rel in copied or rel in seen_in_batch:
+                    continue
+                src = root / rel
+                if src.is_file():
+                    seen_in_batch.add(rel)
+                    to_copy.append((src, (out_dir / rel).resolve(), rel))
+    if to_copy:
+        if copy_workers > 1:
+            n = min(copy_workers, len(to_copy))
+            with ThreadPoolExecutor(max_workers=n) as tex:
+                futs = [
+                    tex.submit(_materialize_source_image, s, d, prefer_hardlink=prefer_hardlink)
+                    for s, d, _r in to_copy
+                ]
+                for f in futs:
+                    f.result()
+        else:
+            for s, d, _r in to_copy:
+                _materialize_source_image(s, d, prefer_hardlink=prefer_hardlink)
+        for _s, _d, rel in to_copy:
+            copied.add(rel)
+
+    for sp, row, side in batch:
+        if sp not in split_handles:
+            split_handles[sp] = open(data_dir / f"{sp}.jsonl", "w", encoding="utf-8")
+        split_handles[sp].write(json.dumps(row, ensure_ascii=False) + "\n")
+        sid = safe_sidecar_filename(str(side.get("sample_id") or "row"))
+        (meta_out / f"{sid}.json").write_text(
+            json.dumps(side, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
 
 def write_split_jsonl_and_sidecars(
@@ -1408,13 +1487,17 @@ def run_metadata_sft_build_streaming(
     source_root: Path | None = None,
     copy_source_images: bool = True,
     prefer_hardlink: bool = False,
+    render_workers: int = 1,
+    copy_workers: int = 1,
+    flush_batch_size: int = 32,
 ) -> BuildStats:
     """
-    Build and write rows in one pass (**O(1) memory in row count**).
+    Build and write rows in one pass (**O(1) memory in row count** vs buffered ``list``).
 
-    Use this for large corpora so you do not retain every ``messages`` blob in RAM or build
-    giant ``str.join`` JSONL strings. GPUs do not accelerate this path; prefer NVMe, hardlinks
-    when ``source_root`` is on the same filesystem as ``out_dir``, and enough RAM to avoid swap.
+    When ``render_workers`` or ``copy_workers`` is greater than 1, rows are accumulated in
+    batches of ``flush_batch_size`` so analysis PNGs can render in a process pool and source
+    images can copy/link in a thread pool. Use ``render_workers=1`` and ``copy_workers=1`` for
+    the previous strictly sequential behavior (``flush_batch_size`` is then ignored).
     """
     stats = BuildStats()
     out_dir = Path(out_dir)
@@ -1424,21 +1507,36 @@ def run_metadata_sft_build_streaming(
     meta_out.mkdir(parents=True, exist_ok=True)
     split_handles: dict[str, Any] = {}
     copied: set[str] = set()
+    rw = max(1, int(render_workers))
+    cw = max(1, int(copy_workers))
+    batch_cap = 1 if (rw <= 1 and cw <= 1) else max(1, int(flush_batch_size))
+    batch: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+
+    def flush() -> None:
+        nonlocal batch
+        if not batch:
+            return
+        _flush_streaming_batch(
+            batch,
+            out_dir=out_dir,
+            source_root=source_root,
+            copy_source_images=copy_source_images,
+            copied=copied,
+            prefer_hardlink=prefer_hardlink,
+            meta_out=meta_out,
+            split_handles=split_handles,
+            data_dir=data_dir,
+            render_workers=rw,
+            copy_workers=cw,
+        )
+        batch = []
+
     try:
         for sp, row, side in _iter_metadata_sft_rows(cfg, stats):
-            if sp not in split_handles:
-                split_handles[sp] = open(data_dir / f"{sp}.jsonl", "w", encoding="utf-8")
-            split_handles[sp].write(json.dumps(row, ensure_ascii=False) + "\n")
-            _write_emitted_row_to_disk(
-                out_dir=out_dir,
-                row=row,
-                side=side,
-                source_root=source_root,
-                copy_source_images=copy_source_images,
-                copied=copied,
-                prefer_hardlink=prefer_hardlink,
-                meta_out=meta_out,
-            )
+            batch.append((sp, row, side))
+            if len(batch) >= batch_cap:
+                flush()
+        flush()
     finally:
         for fh in split_handles.values():
             fh.close()

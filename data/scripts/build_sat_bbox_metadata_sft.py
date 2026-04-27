@@ -84,6 +84,24 @@ def main() -> int:
         default=False,
         help="When copying images from dataset-root, use hardlinks if same filesystem (instant, saves space).",
     )
+    ap.add_argument(
+        "--render-workers",
+        type=int,
+        default=1,
+        help="Process pool size for procedural analysis PNGs (only with --stream-to-disk; default 1 = sequential).",
+    )
+    ap.add_argument(
+        "--copy-workers",
+        type=int,
+        default=1,
+        help="Thread pool size for copying/linking source images per batch (only with --stream-to-disk; default 1).",
+    )
+    ap.add_argument(
+        "--flush-batch-size",
+        type=int,
+        default=32,
+        help="Rows per batch when using parallel render/copy (ignored when both worker counts are 1).",
+    )
     args = ap.parse_args()
 
     cfg = SatBBoxMetadataSftConfig(
@@ -104,6 +122,9 @@ def main() -> int:
             source_root=src,
             copy_source_images=True,
             prefer_hardlink=bool(args.prefer_hardlink),
+            render_workers=int(args.render_workers),
+            copy_workers=int(args.copy_workers),
+            flush_batch_size=int(args.flush_batch_size),
         )
     else:
         rows, stats = run_metadata_sft_build(cfg)

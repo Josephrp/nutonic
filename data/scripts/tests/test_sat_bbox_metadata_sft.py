@@ -20,8 +20,10 @@ from lfm_vl_sft_dataset.sat_bbox_metadata_sft import (
     procedural_tim_fractions,
     render_analysis_image,
     run_metadata_sft_build,
+    run_metadata_sft_build_streaming,
     tim_context_for_user_prompt,
     validate_normalized_grounding_json,
+    write_split_jsonl_and_sidecars,
 )
 
 
@@ -115,6 +117,30 @@ def test_tim_context_for_user_prompt_strips_sentinel_echoes() -> None:
     assert "scene_provenance" not in (red.get("profile_analytics") or {})
     assert "dominant_sentinel_classes" not in blob
     assert "S2_fixture" not in blob
+
+
+def test_streaming_build_matches_buffered_for_fixture(tmp_path: Path) -> None:
+    repo = Path(__file__).resolve().parents[3]
+    fx = repo / "data" / "scripts" / "tests" / "fixtures" / "sat_bbox_sft_mini"
+    cfg = SatBBoxMetadataSftConfig(
+        dataset_root=fx,
+        split_filter="all",
+        max_rows=5,
+        task_mix=frozenset({"production_analysis"}),
+        require_local_images=True,
+    )
+    buf_dir = tmp_path / "buffered"
+    stream_dir = tmp_path / "streamed"
+    rows, stats_buf = run_metadata_sft_build(cfg)
+    write_split_jsonl_and_sidecars(rows, buf_dir, source_root=fx)
+    stats_stream = run_metadata_sft_build_streaming(cfg, stream_dir, source_root=fx)
+    assert stats_buf.summary() == stats_stream.summary()
+    for name in ("train.jsonl",):
+        a = (buf_dir / "data" / name).read_text(encoding="utf-8")
+        b = (stream_dir / "data" / name).read_text(encoding="utf-8")
+        assert sorted(x for x in a.splitlines() if x.strip()) == sorted(
+            x for x in b.splitlines() if x.strip()
+        )
 
 
 def test_production_analysis_rows_use_profile_specific_summary() -> None:

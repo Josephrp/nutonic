@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import shutil
 from collections import Counter
@@ -1262,19 +1263,108 @@ def build_rows_for_sidecar(
                 }
 
 
-def run_metadata_sft_build(cfg: SatBBoxMetadataSftConfig) -> tuple[list[tuple[str, dict[str, Any], dict[str, Any]]], BuildStats]:
+def safe_sidecar_filename(sample_id: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9._-]+", "_", sample_id.strip())[:200]
+    return s or "row"
+
+
+def _materialize_source_image(
+    src: Path,
+    dest: Path,
+    *,
+    prefer_hardlink: bool,
+) -> None:
+    """Copy or hardlink ``src`` to ``dest`` (hardlink only when same filesystem and requested)."""
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if prefer_hardlink:
+        try:
+            if src.stat().st_dev == dest.parent.stat().st_dev:
+                os.link(src, dest)
+                return
+        except OSError:
+            pass
+    shutil.copy2(src, dest)
+
+
+def _write_emitted_row_to_disk(
+    *,
+    out_dir: Path,
+    row: dict[str, Any],
+    side: dict[str, Any],
+    source_root: Path | None,
+    copy_source_images: bool,
+    copied: set[str],
+    prefer_hardlink: bool,
+    meta_out: Path,
+) -> None:
+    analysis_rel = side.get("analysis_image_path")
+    analysis_spec = side.get("analysis_image_spec")
+    if isinstance(analysis_rel, str) and isinstance(analysis_spec, dict):
+        render_analysis_image(analysis_spec, out_dir / analysis_rel)
+    if copy_source_images and source_root is not None:
+        for rel in iter_row_image_paths(row):
+            if rel.startswith("analysis_images/") or rel in copied:
+                continue
+            src = Path(source_root) / rel
+            dest = out_dir / rel
+            if src.is_file():
+                _materialize_source_image(src, dest, prefer_hardlink=prefer_hardlink)
+                copied.add(rel)
+    sid = safe_sidecar_filename(str(side.get("sample_id") or "row"))
+    (meta_out / f"{sid}.json").write_text(
+        json.dumps(side, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_split_jsonl_and_sidecars(
+    rows: list[tuple[str, dict[str, Any], dict[str, Any]]],
+    out_dir: Path,
+    *,
+    source_root: Path | None = None,
+    copy_source_images: bool = True,
+    prefer_hardlink: bool = False,
+) -> None:
+    out_dir = Path(out_dir)
+    data_dir = out_dir / "data"
+    meta_out = out_dir / "metadata" / "sft_metadata_rows"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    meta_out.mkdir(parents=True, exist_ok=True)
+    buckets: dict[str, list[str]] = {"train": [], "validation": [], "test": []}
+    copied: set[str] = set()
+    for sp, row, side in rows:
+        buckets.setdefault(sp, []).append(json.dumps(row, ensure_ascii=False))
+        _write_emitted_row_to_disk(
+            out_dir=out_dir,
+            row=row,
+            side=side,
+            source_root=source_root,
+            copy_source_images=copy_source_images,
+            copied=copied,
+            prefer_hardlink=prefer_hardlink,
+            meta_out=meta_out,
+        )
+    for split, lines in buckets.items():
+        if not lines:
+            continue
+        p = data_dir / f"{split}.jsonl"
+        p.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+
+
+def _iter_metadata_sft_rows(
+    cfg: SatBBoxMetadataSftConfig,
+    stats: BuildStats,
+) -> Iterator[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """Yield ``(split, row, sidecar)`` while mutating ``stats`` (same semantics as buffered build)."""
     root = cfg.dataset_root.resolve()
-    # Always index every split JSONL so stems resolve even when ``--split`` filters output rows.
     jsonl_files = iter_dataset_jsonl_files(root, split="all")
     sat_by_stem, mb_by_stem = index_jsonl_image_paths(jsonl_files)
     meta_paths = discover_metadata_paths(root)
     leaked = collect_split_leakage_bases(meta_paths)
-    stats = BuildStats()
-    out_rows: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
 
     for mp in meta_paths:
         if cfg.max_rows and stats.emitted >= cfg.max_rows:
-            break
+            return
         try:
             meta = json.loads(mp.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -1300,60 +1390,62 @@ def run_metadata_sft_build(cfg: SatBBoxMetadataSftConfig) -> tuple[list[tuple[st
         )
         while True:
             if cfg.max_rows and stats.emitted >= cfg.max_rows:
-                break
+                return
             try:
                 sp, row, side = next(row_iter)
             except StopIteration:
                 break
-            out_rows.append((sp, row, side))
+            yield sp, row, side
             stats.emitted += 1
         if cfg.max_rows and stats.emitted >= cfg.max_rows:
-            break
-    return out_rows, stats
+            return
 
 
-def safe_sidecar_filename(sample_id: str) -> str:
-    s = re.sub(r"[^a-zA-Z0-9._-]+", "_", sample_id.strip())[:200]
-    return s or "row"
-
-
-def write_split_jsonl_and_sidecars(
-    rows: list[tuple[str, dict[str, Any], dict[str, Any]]],
+def run_metadata_sft_build_streaming(
+    cfg: SatBBoxMetadataSftConfig,
     out_dir: Path,
     *,
     source_root: Path | None = None,
     copy_source_images: bool = True,
-) -> None:
+    prefer_hardlink: bool = False,
+) -> BuildStats:
+    """
+    Build and write rows in one pass (**O(1) memory in row count**).
+
+    Use this for large corpora so you do not retain every ``messages`` blob in RAM or build
+    giant ``str.join`` JSONL strings. GPUs do not accelerate this path; prefer NVMe, hardlinks
+    when ``source_root`` is on the same filesystem as ``out_dir``, and enough RAM to avoid swap.
+    """
+    stats = BuildStats()
     out_dir = Path(out_dir)
     data_dir = out_dir / "data"
     meta_out = out_dir / "metadata" / "sft_metadata_rows"
     data_dir.mkdir(parents=True, exist_ok=True)
     meta_out.mkdir(parents=True, exist_ok=True)
-    buckets: dict[str, list[str]] = {"train": [], "validation": [], "test": []}
+    split_handles: dict[str, Any] = {}
     copied: set[str] = set()
-    for sp, row, side in rows:
-        buckets.setdefault(sp, []).append(json.dumps(row, ensure_ascii=False))
-        analysis_rel = side.get("analysis_image_path")
-        analysis_spec = side.get("analysis_image_spec")
-        if isinstance(analysis_rel, str) and isinstance(analysis_spec, dict):
-            render_analysis_image(analysis_spec, out_dir / analysis_rel)
-        if copy_source_images and source_root is not None:
-            for rel in iter_row_image_paths(row):
-                if rel.startswith("analysis_images/") or rel in copied:
-                    continue
-                src = Path(source_root) / rel
-                dest = out_dir / rel
-                if src.is_file():
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, dest)
-                    copied.add(rel)
-        sid = safe_sidecar_filename(str(side.get("sample_id") or "row"))
-        (meta_out / f"{sid}.json").write_text(
-            json.dumps(side, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
-        )
-    for split, lines in buckets.items():
-        if not lines:
-            continue
-        p = data_dir / f"{split}.jsonl"
-        p.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+    try:
+        for sp, row, side in _iter_metadata_sft_rows(cfg, stats):
+            if sp not in split_handles:
+                split_handles[sp] = open(data_dir / f"{sp}.jsonl", "w", encoding="utf-8")
+            split_handles[sp].write(json.dumps(row, ensure_ascii=False) + "\n")
+            _write_emitted_row_to_disk(
+                out_dir=out_dir,
+                row=row,
+                side=side,
+                source_root=source_root,
+                copy_source_images=copy_source_images,
+                copied=copied,
+                prefer_hardlink=prefer_hardlink,
+                meta_out=meta_out,
+            )
+    finally:
+        for fh in split_handles.values():
+            fh.close()
+    return stats
+
+
+def run_metadata_sft_build(cfg: SatBBoxMetadataSftConfig) -> tuple[list[tuple[str, dict[str, Any], dict[str, Any]]], BuildStats]:
+    stats = BuildStats()
+    out_rows = list(_iter_metadata_sft_rows(cfg, stats))
+    return out_rows, stats

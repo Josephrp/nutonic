@@ -17,6 +17,7 @@ from lfm_vl_sft_dataset.sat_bbox_metadata_sft import (  # noqa: E402
     PRODUCTION_ANALYSIS_PROFILES,
     SatBBoxMetadataSftConfig,
     run_metadata_sft_build,
+    run_metadata_sft_build_streaming,
     write_split_jsonl_and_sidecars,
 )
 
@@ -71,6 +72,18 @@ def main() -> int:
         help="Drop rows when referenced image paths are missing under dataset-root (default: on).",
     )
     ap.add_argument("--max-prompt-chars", type=int, default=16_000)
+    ap.add_argument(
+        "--stream-to-disk",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Write rows incrementally (O(1) RAM vs row count). Strongly recommended for full-corpus runs.",
+    )
+    ap.add_argument(
+        "--prefer-hardlink",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="When copying images from dataset-root, use hardlinks if same filesystem (instant, saves space).",
+    )
     args = ap.parse_args()
 
     cfg = SatBBoxMetadataSftConfig(
@@ -83,8 +96,23 @@ def main() -> int:
         require_local_images=bool(args.require_local_images),
         max_prompt_chars=int(args.max_prompt_chars),
     )
-    rows, stats = run_metadata_sft_build(cfg)
-    write_split_jsonl_and_sidecars(rows, args.out_dir, source_root=args.dataset_root.resolve())
+    src = args.dataset_root.resolve()
+    if args.stream_to_disk:
+        stats = run_metadata_sft_build_streaming(
+            cfg,
+            args.out_dir,
+            source_root=src,
+            copy_source_images=True,
+            prefer_hardlink=bool(args.prefer_hardlink),
+        )
+    else:
+        rows, stats = run_metadata_sft_build(cfg)
+        write_split_jsonl_and_sidecars(
+            rows,
+            args.out_dir,
+            source_root=src,
+            prefer_hardlink=bool(args.prefer_hardlink),
+        )
     summary = stats.summary()
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     return 0

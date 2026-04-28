@@ -157,6 +157,64 @@ def _request_json(
     return _fail(name, f"{method} {url} -> {response.status_code}: {detail}", response.status_code), payload
 
 
+def _extract_gradio_event_id(payload: dict[str, Any] | list[Any] | str | None) -> str:
+    if isinstance(payload, dict):
+        for k in ("event_id", "id", "hash", "session_hash"):
+            v = payload.get(k)
+            if isinstance(v, str) and v:
+                return v
+        data = payload.get("data")
+        if isinstance(data, dict):
+            for k in ("event_id", "id"):
+                v = data.get(k)
+                if isinstance(v, str) and v:
+                    return v
+    if isinstance(payload, str):
+        s = payload.strip()
+        if s and s[0] != "{":
+            return s
+    return ""
+
+
+def _request_gradio_named_endpoint(
+    client: httpx.Client,
+    *,
+    base_url: str,
+    api_name: str,
+    name: str,
+    req_payload: dict[str, Any],
+) -> CheckResult:
+    base = base_url.rstrip("/")
+    submit_url = f"{base}/gradio_api/call/v2/{api_name}"
+    submit_result, submit_payload = _request_json(
+        client,
+        "POST",
+        submit_url,
+        name=f"{name}.submit",
+        json_body={"req": req_payload},
+    )
+    if submit_result.status != "ok":
+        return _fail(name, f"Gradio fallback submit failed: {submit_result.detail}", submit_result.http_status)
+
+    event_id = _extract_gradio_event_id(submit_payload)
+    if not event_id:
+        return _fail(name, "Gradio fallback missing event id in submit response.")
+
+    result_url = f"{base}/gradio_api/call/{api_name}/{event_id}"
+    try:
+        response = client.get(result_url)
+    except httpx.HTTPError as exc:
+        return _fail(name, f"Gradio fallback poll failed: {type(exc).__name__}: {exc}")
+    if response.status_code != 200:
+        body = response.text[:300]
+        return _fail(name, f"Gradio fallback poll failed: GET {result_url} -> {response.status_code}: {body}")
+    body = response.text
+    lowered = body.lower()
+    if "event: error" in lowered or "traceback" in lowered:
+        return _fail(name, f"Gradio fallback inference error from {result_url}: {body[:300]}")
+    return _ok(name, f"POST {base}/gradio_api/call/v2/{api_name} (fallback)", http_status=200)
+
+
 def _print_results(results: list[CheckResult], *, as_json: bool) -> None:
     if as_json:
         print(
@@ -383,7 +441,25 @@ def main(argv: list[str] | None = None) -> int:
                     "prompt_template_version": "satellite-v1",
                 },
             )
-            results.append(r)
+            if r.status == "ok":
+                results.append(r)
+            elif r.http_status in (404, 405):
+                results.append(
+                    _request_gradio_named_endpoint(
+                        client,
+                        base_url=urls["lfm_vl_satellite"],
+                        api_name="infer",
+                        name="satellite.infer",
+                        req_payload={
+                            "task": "caption",
+                            "image_base64": _tiny_png_base64(),
+                            "ranked_clue_safe": True,
+                            "prompt_template_version": "satellite-v1",
+                        },
+                    )
+                )
+            else:
+                results.append(r)
 
         # TerraMind TiM
         if "tim" in services:

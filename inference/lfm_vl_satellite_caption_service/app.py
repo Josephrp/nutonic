@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import gradio as gr
+import uvicorn
+from fastapi import FastAPI
 
 from lfm_vl_satellite_caption_service.config import get_settings
 from lfm_vl_satellite_caption_service.dispatch import effective_backend, infer
@@ -26,10 +29,10 @@ except Exception:
 
 demo = build_gradio_blocks()
 
-# Hugging Face Gradio SDK Spaces serve the Gradio app's underlying FastAPI instance.
-# Expose stable internal routes (`/health`, `/v1/infer`) on that ASGI app so other
-# services (and CI smoke) can call it without going through Gradio's event protocol.
-app = demo.app  # FastAPI under the hood
+# Hugging Face Gradio SDK Spaces run `python app.py` and expect an app listening on PORT (7860).
+# Gradio's SSR (Node) layer can intercept unknown routes (causing 405/HTML for REST calls),
+# so we run an explicit FastAPI parent app and mount Gradio onto it.
+app = FastAPI()
 
 @app.get("/health")
 def health() -> dict[str, Any]:
@@ -48,5 +51,11 @@ def health() -> dict[str, Any]:
 def infer_route(req: SatelliteInferRequest) -> SatelliteInferResponse:
     return infer(req)
 
+
+# Mount UI at "/" so the Space homepage remains the Gradio app.
+# Custom FastAPI routes above should take precedence over Gradio's catch-all.
+app = gr.mount_gradio_app(app, demo, path="/", ssr_mode=False)
+
 if __name__ == "__main__":
-    demo.launch()
+    port = int(os.environ.get("PORT", "7860"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

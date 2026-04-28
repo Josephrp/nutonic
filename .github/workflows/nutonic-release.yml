@@ -358,6 +358,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     needs: [build-linux-deb, build-windows-msi, build-macos-dmg]
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     permissions:
       contents: write
     steps:
@@ -392,6 +395,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.upload_ios_to_testflight == 'true'
     needs: [build-ios-release-ipa]
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     permissions:
       contents: read
     steps:

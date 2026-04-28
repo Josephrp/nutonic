@@ -14,17 +14,18 @@ from lfm_vl_satellite_caption_service.models import SatelliteInferRequest, Satel
 
 
 # Hugging Face ZeroGPU Spaces require at least one `@spaces.GPU` function to be
-# defined at import time. Our actual transformer generation is wrapped lazily
-# in the inference module, which can be too late for the startup detector.
+# defined at import time in the Space entry file (`app.py`). Keep this at module
+# scope with a real `spaces` import so the platform detector can register it.
 try:
-    import spaces
+    import spaces  # type: ignore
 
     @spaces.GPU  # type: ignore[misc]
-    def _hf_zerogpu_probe(_: int = 0) -> int:
+    def hf_zerogpu_probe(_: int = 0) -> int:
         return 0
 
-except Exception:
-    _hf_zerogpu_probe = None  # type: ignore[assignment]
+except ImportError:
+    # Local/dev environments without the optional `spaces` package.
+    hf_zerogpu_probe = None  # type: ignore[assignment]
 
 
 demo = build_gradio_blocks()

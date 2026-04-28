@@ -97,110 +97,136 @@ class ProOnDeviceVlmCoordinator(
     private val modelCache: ProVlmModelCache = ProVlmModelCache(),
     private val engine: ProOnDeviceVlmEngine = createProOnDeviceVlmEngine(),
 ) {
+    @Suppress("NestedBlockDepth")
     suspend fun run(
         job: ProJobStatusOut,
         userAsk: String = "",
         onStatus: (ProVlmStatus) -> Unit,
     ): ProVlmStatus {
+        var failure: String? = null
+        var ready: ProVlmStatus.Ready? = null
         if (job.status != "completed") {
-            return ProVlmStatus.Failed("PRO job must be completed before local VLM runs.").also(onStatus)
+            failure = "PRO job must be completed before local VLM runs."
         }
         val payload = job.onDevicePayload
         val imageRefs = payload?.vlmImageSet.orEmpty().ifEmpty { fallbackImageRefs(job) }
-        if (imageRefs.isEmpty()) {
-            return ProVlmStatus.Failed("No VLM image set was attached to this PRO job.").also(onStatus)
+        if (failure == null && imageRefs.isEmpty()) {
+            failure = "No VLM image set was attached to this PRO job."
         }
 
-        val model =
+        var model: ProVlmCacheRecord? = null
+        if (failure == null) {
             when (val prepared = prepareModel(payload?.modelBundleId, onStatus)) {
-                is ApiResult.Ok -> prepared.value
-                is ApiResult.HttpFailure -> return ProVlmStatus.Failed(prepared.userMessage).also(onStatus)
-                is ApiResult.NetworkFailure -> return ProVlmStatus.Failed("Model download failed: ${prepared.debugMessage}").also(onStatus)
+                is ApiResult.Ok -> model = prepared.value
+                is ApiResult.HttpFailure -> failure = prepared.userMessage
+                is ApiResult.NetworkFailure -> failure = "Model download failed: ${prepared.debugMessage}"
             }
+        }
 
         val images = mutableListOf<ProVlmPreparedImage>()
-        for (ref in imageRefs) {
-            when (val bytes = fetchImageBytes(job, ref)) {
-                is ApiResult.Ok ->
-                    images +=
-                        ProVlmPreparedImage(
-                            role = ref.role.ifBlank { "image" },
-                            bytes = bytes.value,
-                            mimeType = ref.mime ?: "application/octet-stream",
-                            width = ref.width,
-                            height = ref.height,
-                        )
-                is ApiResult.HttpFailure -> return ProVlmStatus.Failed(bytes.userMessage).also(onStatus)
-                is ApiResult.NetworkFailure -> return ProVlmStatus.Failed("Image download failed: ${bytes.debugMessage}").also(onStatus)
+        if (failure == null) {
+            for (ref in imageRefs) {
+                if (failure == null) {
+                    when (val bytes = fetchImageBytes(job, ref)) {
+                        is ApiResult.Ok ->
+                            images +=
+                                ProVlmPreparedImage(
+                                    role = ref.role.ifBlank { "image" },
+                                    bytes = bytes.value,
+                                    mimeType = ref.mime ?: "application/octet-stream",
+                                    width = ref.width,
+                                    height = ref.height,
+                                )
+                        is ApiResult.HttpFailure -> {
+                            failure = bytes.userMessage
+                        }
+                        is ApiResult.NetworkFailure -> {
+                            failure = "Image download failed: ${bytes.debugMessage}"
+                        }
+                    }
+                }
             }
         }
 
-        val input =
-            ProVlmPreparedInput(
-                prompt = buildPrompt(payload?.vlmPromptInjection, userAsk),
-                images = images,
-                model = model,
-            )
-
-        onStatus(ProVlmStatus.LoadingModel)
-        onStatus(ProVlmStatus.Inferencing)
-        val raw =
+        if (failure == null) {
+            val input =
+                ProVlmPreparedInput(
+                    prompt = buildPrompt(payload?.vlmPromptInjection, userAsk),
+                    images = images,
+                    model = checkNotNull(model),
+                )
+            onStatus(ProVlmStatus.LoadingModel)
+            onStatus(ProVlmStatus.Inferencing)
             when (val result = engine.run(input)) {
-                is ProOnDeviceVlmRunResult.Ok -> result.text
-                is ProOnDeviceVlmRunResult.Unsupported ->
-                    return ProVlmStatus.Failed(result.reason).also(onStatus)
-                is ProOnDeviceVlmRunResult.Failed ->
-                    return ProVlmStatus.Failed(result.reason).also(onStatus)
+                is ProOnDeviceVlmRunResult.Ok -> ready = ProVlmStatus.Ready(parseVlmOutput(result.text, checkNotNull(model)))
+                is ProOnDeviceVlmRunResult.Unsupported -> failure = result.reason
+                is ProOnDeviceVlmRunResult.Failed -> failure = result.reason
             }
-        return ProVlmStatus.Ready(parseVlmOutput(raw, model)).also(onStatus)
+        }
+
+        val out = ready ?: ProVlmStatus.Failed(failure ?: "Unexpected VLM failure")
+        return out.also(onStatus)
     }
 
+    @Suppress("NestedBlockDepth")
     private suspend fun prepareModel(
         preferredModelBundleId: String?,
         onStatus: (ProVlmStatus) -> Unit,
     ): ApiResult<ProVlmCacheRecord> {
         val cached = modelCache.load()
-        if (cached != null && (preferredModelBundleId == null || cached.modelBundleId == preferredModelBundleId)) {
-            return ApiResult.Ok(cached)
-        }
-        val manifest =
-            when (val result = apiClient.getProVlmModelManifest(bearerAccessToken)) {
-                is ApiResult.Ok -> result.value
-                is ApiResult.HttpFailure -> return result
-                is ApiResult.NetworkFailure -> return result
+        val cachedMatches =
+            cached != null &&
+                (preferredModelBundleId == null || cached.modelBundleId == preferredModelBundleId)
+        val result: ApiResult<ProVlmCacheRecord> =
+            if (cachedMatches) {
+                ApiResult.Ok(checkNotNull(cached))
+            } else {
+                val manifestResult = apiClient.getProVlmModelManifest(bearerAccessToken)
+                val manifest = (manifestResult as? ApiResult.Ok)?.value
+                if (manifest == null) {
+                    when (manifestResult) {
+                        is ApiResult.HttpFailure -> manifestResult
+                        is ApiResult.NetworkFailure -> manifestResult
+                        is ApiResult.Ok -> ApiResult.NetworkFailure("Unable to parse model manifest")
+                    }
+                } else if (preferredModelBundleId != null && manifest.modelBundleId != preferredModelBundleId) {
+                    ApiResult.NetworkFailure(
+                        "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
+                    )
+                } else {
+                    val bytesResult =
+                        apiClient.getProVlmModelBytes(
+                            manifest.downloadUrl,
+                            bearerAccessToken,
+                        ) { received, total -> onStatus(ProVlmStatus.DownloadingModel(received, total)) }
+                    val bytes = (bytesResult as? ApiResult.Ok)?.value
+                    if (bytes == null) {
+                        when (bytesResult) {
+                            is ApiResult.HttpFailure -> bytesResult
+                            is ApiResult.NetworkFailure -> bytesResult
+                            is ApiResult.Ok -> ApiResult.NetworkFailure("Model bytes were empty")
+                        }
+                    } else {
+                        val verification = verifyModelBytes(manifest, bytes)
+                        if (verification == null) {
+                            val record =
+                                ProVlmCacheRecord(
+                                    modelBundleId = manifest.modelBundleId,
+                                    revision = manifest.revision,
+                                    sha256 = manifest.sha256.lowercase(),
+                                    sizeBytes = manifest.sizeBytes,
+                                    runtime = manifest.runtime,
+                                )
+                            modelCache.save(record)
+                            engine.prepareModel(bytes, record)
+                            ApiResult.Ok(record)
+                        } else {
+                            ApiResult.NetworkFailure(verification)
+                        }
+                    }
+                }
             }
-        if (preferredModelBundleId != null && manifest.modelBundleId != preferredModelBundleId) {
-            return ApiResult.NetworkFailure(
-                "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
-            )
-        }
-        val bytes =
-            when (
-                val result =
-                    apiClient.getProVlmModelBytes(
-                        manifest.downloadUrl,
-                        bearerAccessToken,
-                    ) { received, total -> onStatus(ProVlmStatus.DownloadingModel(received, total)) }
-            ) {
-                is ApiResult.Ok -> result.value
-                is ApiResult.HttpFailure -> return result
-                is ApiResult.NetworkFailure -> return result
-            }
-        val verification = verifyModelBytes(manifest, bytes)
-        if (verification != null) {
-            return ApiResult.NetworkFailure(verification)
-        }
-        val record =
-            ProVlmCacheRecord(
-                modelBundleId = manifest.modelBundleId,
-                revision = manifest.revision,
-                sha256 = manifest.sha256.lowercase(),
-                sizeBytes = manifest.sizeBytes,
-                runtime = manifest.runtime,
-            )
-        modelCache.save(record)
-        engine.prepareModel(bytes, record)
-        return ApiResult.Ok(record)
+        return result
     }
 
     private suspend fun fetchImageBytes(
@@ -306,24 +332,17 @@ fun verifyModelBytes(
     manifest: ProVlmModelManifest,
     bytes: ByteArray,
 ): String? {
-    if (manifest.sizeBytes >= 0 && bytes.size.toLong() != manifest.sizeBytes) {
-        return "Downloaded model size mismatch for ${manifest.modelBundleId}"
-    }
     val expected = manifest.sha256.trim().lowercase()
-    if (expected.isBlank()) {
-        return "Model manifest is missing sha256"
-    }
     val actual = sha256Hex(bytes)
-    if (actual != expected) {
-        return "Downloaded model sha256 mismatch for ${manifest.modelBundleId}"
+    return when {
+        manifest.sizeBytes >= 0 && bytes.size.toLong() != manifest.sizeBytes ->
+            "Downloaded model size mismatch for ${manifest.modelBundleId}"
+        expected.isBlank() -> "Model manifest is missing sha256"
+        actual != expected -> "Downloaded model sha256 mismatch for ${manifest.modelBundleId}"
+        manifest.contractIds.isEmpty() -> "Model manifest is missing supported contract ids"
+        DEFAULT_CONTRACT_ID !in manifest.contractIds -> "Model manifest does not support $DEFAULT_CONTRACT_ID"
+        else -> null
     }
-    if (manifest.contractIds.isEmpty()) {
-        return "Model manifest is missing supported contract ids"
-    }
-    if (DEFAULT_CONTRACT_ID !in manifest.contractIds) {
-        return "Model manifest does not support $DEFAULT_CONTRACT_ID"
-    }
-    return null
 }
 
 expect fun sha256Hex(bytes: ByteArray): String
@@ -390,4 +409,3 @@ private fun boxesFromJson(obj: JsonObject): List<ProVlmBoundingBox> {
         }
     }
 }
-

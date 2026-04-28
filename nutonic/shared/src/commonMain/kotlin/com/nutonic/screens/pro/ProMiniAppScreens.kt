@@ -508,30 +508,41 @@ private suspend fun loadArtifactInsights(
     artifacts: List<ProArtifactRef>,
     nutonicApiClient: NutonicApiClient?,
 ): ArtifactInspectorState {
-    if (job == null) {
-        return ArtifactInspectorState(loading = false, statusLine = "No selected PRO job.")
-    }
-    if (job.status != "completed") {
-        return ArtifactInspectorState(loading = false, statusLine = "Job status is ${job.status}. Previews load after completion.")
-    }
-    val client = nutonicApiClient
-        ?: return ArtifactInspectorState(loading = false, statusLine = "API client unavailable. Cannot load artifact previews.")
-    if (artifacts.isEmpty()) {
-        return ArtifactInspectorState(loading = false, statusLine = "No artifacts attached to this run.")
+    val statusOnly: String? =
+        when {
+            job == null -> "No selected PRO job."
+            job.status != "completed" -> "Job status is ${job.status}. Previews load after completion."
+            nutonicApiClient == null -> "API client unavailable. Cannot load artifact previews."
+            artifacts.isEmpty() -> "No artifacts attached to this run."
+            else -> null
+        }
+    if (statusOnly != null) {
+        return ArtifactInspectorState(loading = false, statusLine = statusOnly)
     }
 
-    val token =
-        when (val t = client.postAuthToken()) {
-            is ApiResult.Ok -> t.value.accessToken
-            is ApiResult.HttpFailure -> return ArtifactInspectorState(loading = false, statusLine = t.userMessage)
-            is ApiResult.NetworkFailure -> return ArtifactInspectorState(loading = false, statusLine = "Network unavailable while requesting session token.")
+    val client = checkNotNull(nutonicApiClient)
+    val completedJob = checkNotNull(job)
+    val tokenResult = client.postAuthToken()
+    val token: String? =
+        when (tokenResult) {
+            is ApiResult.Ok -> tokenResult.value.accessToken
+            is ApiResult.HttpFailure -> null
+            is ApiResult.NetworkFailure -> null
         }
+    if (token == null) {
+        val tokenStatus =
+            when (tokenResult) {
+                is ApiResult.HttpFailure -> tokenResult.userMessage
+                is ApiResult.NetworkFailure -> "Network unavailable while requesting session token."
+                is ApiResult.Ok -> ""
+            }
+        return ArtifactInspectorState(loading = false, statusLine = tokenStatus)
+    }
 
     val insights = mutableMapOf<String, ArtifactInsight>()
     var loadedCount = 0
-
     for (artifact in artifacts.take(24)) {
-        val bytesResult = fetchArtifactBytes(client, job, artifact, token)
+        val bytesResult = fetchArtifactBytes(client, completedJob, artifact, token)
         val insight =
             when (bytesResult) {
                 is ApiResult.Ok -> {

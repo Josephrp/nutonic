@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -141,11 +142,29 @@ def _build_gradio_requirements(*, src: Path, extras: Any) -> list[str]:
     deduped: list[str] = []
     seen: set[str] = set()
     for item in out:
+        name = _requirement_name(item)
+        # HF Gradio builder already installs pinned runtime deps in a separate layer:
+        # gradio[oauth,mcp]==6.13.0, spaces==0.48.2, uvicorn, websockets.
+        # Keeping local pins/ranges for these can trigger resolver conflicts (e.g. gradio<6 vs ==6.13.0).
+        if name in {"gradio", "spaces", "uvicorn", "websockets"}:
+            continue
         if item in seen:
             continue
         seen.add(item)
         deduped.append(item)
     return deduped
+
+
+def _requirement_name(spec: str) -> str:
+    s = spec.strip()
+    if not s:
+        return ""
+    if ";" in s:
+        s = s.split(";", 1)[0].strip()
+    m = re.match(r"^([A-Za-z0-9_.-]+)", s)
+    if not m:
+        return ""
+    return m.group(1).lower().replace("_", "-")
 
 
 def _space_sdk(profile: dict[str, Any]) -> str:

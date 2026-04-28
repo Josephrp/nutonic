@@ -21,16 +21,18 @@ demo = build_gradio_blocks()
 
 # Keep the stable internal HTTP contract (`/health`, `/v1/infer`) even on Gradio SDK
 # (ZeroGPU) deployments by mounting the Gradio UI onto the FastAPI app.
+from lfm_vl_satellite_caption_service.main import app as app
+
 try:
     import gradio as gr
 
-    from lfm_vl_satellite_caption_service.main import app as app
-
-    gr.mount_gradio_app(app, demo, path="/")
+    # IMPORTANT: do NOT mount at "/" or it will shadow FastAPI routes like `/v1/infer`.
+    # Mount the UI under a subpath so the service contract remains reachable.
+    gr.mount_gradio_app(app, demo, path="/ui")
 except Exception:
-    # Fallback for local minimal environments where FastAPI/Gradio mounting is unavailable.
-    # The Space runtime always has Gradio available.
-    app = demo  # type: ignore[assignment]
+    # If Gradio mounting fails for any reason, keep serving the FastAPI app so
+    # callers (and CI smoke) still have `/health` and `/v1/infer`.
+    pass
 
 if __name__ == "__main__":
     demo.launch()

@@ -265,6 +265,42 @@ class Settings(BaseSettings):
         ),
     )
 
+    hf_persistence_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_ENABLED", "HF_PERSISTENCE_ENABLED"),
+        description="When true, mirror SQLite server DB files to a Hugging Face Dataset repo.",
+    )
+
+    hf_persistence_required: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_REQUIRED", "HF_PERSISTENCE_REQUIRED"),
+        description=(
+            "When true with HF persistence enabled, fail fast if the dataset repo/token is missing "
+            "or sync operations fail."
+        ),
+    )
+
+    hf_persistence_repo_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_REPO_ID", "HF_PERSISTENCE_REPO_ID"),
+        description="Dataset repo id (owner/name) used for SQLite persistence mirroring.",
+    )
+
+    hf_persistence_dataset_subdir: str = Field(
+        default="server-persistence",
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_SUBDIR", "HF_PERSISTENCE_SUBDIR"),
+        description="Subdirectory inside the Dataset repo where DB files are stored.",
+    )
+
+    hf_persistence_startup_pull_mode: str = Field(
+        default="if_missing",
+        validation_alias=AliasChoices(
+            "NUTONIC_HF_PERSISTENCE_STARTUP_PULL_MODE",
+            "HF_PERSISTENCE_STARTUP_PULL_MODE",
+        ),
+        description="Startup pull policy for local SQLite files: if_missing (default) or always.",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_origins(cls, v: object) -> str:

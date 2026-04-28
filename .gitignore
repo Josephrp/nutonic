@@ -24,6 +24,9 @@ radioshaq-*.json
 # PM2 and local verification (Gradle, future server test runners)
 logs/
 
+# Raw Music Folder
+music/
+
 # Root npm tooling (pm2, scripts)
 node_modules/
 

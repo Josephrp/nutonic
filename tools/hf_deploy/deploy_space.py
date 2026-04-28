@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,7 @@ SERVICE_SPECS: dict[str, dict[str, Path]] = {
     "lfm_vl_hint": {
         "source_dir": REPO_ROOT / "inference" / "lfm_vl_hint_service",
         "readme_template": REPO_ROOT / "tools" / "hf_deploy" / "templates" / "readme_lfm_vl_hint.md",
-        "gradio_requirements": ".[serve,model]",
+        "gradio_extras": ["serve", "model"],
     },
     "streetview_pano": {
         "source_dir": REPO_ROOT / "inference" / "streetview_pano_service",
@@ -40,12 +41,12 @@ SERVICE_SPECS: dict[str, dict[str, Path]] = {
     "lfm_vl_satellite": {
         "source_dir": REPO_ROOT / "inference" / "lfm_vl_satellite_caption_service",
         "readme_template": REPO_ROOT / "tools" / "hf_deploy" / "templates" / "readme_lfm_vl_satellite.md",
-        "gradio_requirements": ".[serve,model]",
+        "gradio_extras": ["serve", "model"],
     },
     "terramind_tim": {
         "source_dir": REPO_ROOT / "inference" / "terramind_tim_local",
         "readme_template": REPO_ROOT / "tools" / "hf_deploy" / "templates" / "readme_terramind_tim.md",
-        "gradio_requirements": ".[space]",
+        "gradio_extras": ["space"],
     },
     "game_server": {
         "source_dir": REPO_ROOT / "server",
@@ -90,9 +91,9 @@ def _stage_service(service: str) -> Path:
         if not app_file.is_file():
             raise FileNotFoundError(f"Missing app.py for Gradio SDK Space in {src}")
         shutil.copy2(app_file, stage / "app.py")
-        requirements = spec.get("gradio_requirements")
-        if isinstance(requirements, str) and requirements.strip():
-            (stage / "requirements.txt").write_text(f"{requirements.strip()}\n", encoding="utf-8")
+        requirements = _build_gradio_requirements(src=src, extras=spec.get("gradio_extras"))
+        if requirements:
+            (stage / "requirements.txt").write_text("".join(f"{line}\n" for line in requirements), encoding="utf-8")
     else:
         raise ValueError(f"Unsupported space_sdk {space_sdk!r} for service {service}")
 
@@ -101,9 +102,50 @@ def _stage_service(service: str) -> Path:
     if pkg_readme.is_file():
         shutil.copy2(pkg_readme, stage / "README.package.md")
 
-    shutil.copytree(src / "src", stage / "src", dirs_exist_ok=True)
+    if space_sdk == "gradio":
+        # HF Gradio builder installs requirements before repository files are copied into runtime,
+        # so local path requirements like ".[serve,model]" fail. We copy import packages to repo root
+        # and generate explicit requirements from pyproject metadata instead.
+        shutil.copytree(src / "src", stage, dirs_exist_ok=True)
+    else:
+        shutil.copytree(src / "src", stage / "src", dirs_exist_ok=True)
     shutil.copy2(tmpl, stage / "README.md")
     return stage
+
+
+def _build_gradio_requirements(*, src: Path, extras: Any) -> list[str]:
+    pyproject = src / "pyproject.toml"
+    if not pyproject.is_file():
+        raise FileNotFoundError(f"Missing pyproject.toml in {src}")
+
+    raw = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    project = raw.get("project") if isinstance(raw, dict) else {}
+    if not isinstance(project, dict):
+        project = {}
+    deps = project.get("dependencies")
+    out: list[str] = []
+    if isinstance(deps, list):
+        out.extend(str(d).strip() for d in deps if str(d).strip())
+
+    opt = project.get("optional-dependencies")
+    opt_map = opt if isinstance(opt, dict) else {}
+    if isinstance(extras, list):
+        for name in extras:
+            key = str(name).strip()
+            if not key:
+                continue
+            extra_deps = opt_map.get(key)
+            if isinstance(extra_deps, list):
+                out.extend(str(d).strip() for d in extra_deps if str(d).strip())
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in out:
+        if item in seen:
+            continue
+        seen.add(item)
+        deduped.append(item)
+    return deduped
 
 
 def _space_sdk(profile: dict[str, Any]) -> str:

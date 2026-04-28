@@ -7,9 +7,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from nutonic_server.jwt_tokens import decode_bearer_token
+from nutonic_server.hf_persistence import HfSqliteSync
 from nutonic_server.pro_jobs_runner import ProJobRunner
 from nutonic_server.pro_jobs_store import ProJobStore, create_pro_job_store
 from nutonic_server.settings import Settings, load_settings
+from nutonic_server.leaderboard_store import sqlite_file_path_from_url
 
 _bearer = HTTPBearer(auto_error=False)
 _pro_job_stores: dict[str, ProJobStore] = {}
@@ -31,7 +33,14 @@ def get_pro_job_store_for_settings(settings: Settings) -> ProJobStore:
         raise HTTPException(status_code=500, detail="Unsupported PRO job backend")
     url = settings.pro_job_database_url.strip()
     if url not in _pro_job_stores:
-        _pro_job_stores[url] = create_pro_job_store(url)
+        sync_hook = None
+        db_path = sqlite_file_path_from_url(url)
+        if db_path is not None:
+            hf = HfSqliteSync.from_settings(settings)
+            if hf is not None:
+                hf.bootstrap_sqlite_file(local_path=db_path, logical_name="pro_jobs")
+                sync_hook = hf.make_write_sync_hook(local_path=db_path, logical_name="pro_jobs")
+        _pro_job_stores[url] = create_pro_job_store(url, on_write=sync_hook)
     return _pro_job_stores[url]
 
 

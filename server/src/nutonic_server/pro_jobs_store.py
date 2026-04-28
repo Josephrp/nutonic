@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Lock
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from sqlalchemy import Boolean, Column, Integer, MetaData, String, Table, create_engine, delete, event, insert, select, text, update
 from sqlalchemy.engine import Engine, make_url
@@ -107,9 +107,10 @@ class ProJobStore(Protocol):
 
 
 class SqliteProJobStore:
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, on_write: Callable[[], None] | None = None) -> None:
         self._engine = engine
         self._lock = Lock()
+        self._on_write = on_write
 
     def initialize_schema(self) -> None:
         metadata.create_all(self._engine)
@@ -139,6 +140,7 @@ class SqliteProJobStore:
                 for name, ddl in required_columns.items():
                     if name not in existing:
                         conn.execute(text(f"ALTER TABLE pro_jobs ADD COLUMN {name} {ddl}"))
+                        self._sync_after_write()
 
     def create_job(self, *, session_id: str, analysis_profile: str, request_params: dict[str, Any]) -> ProJobRecord:
         now = _utc_now()
@@ -163,6 +165,7 @@ class SqliteProJobStore:
                         progress_pct=record.progress_pct,
                     )
                 )
+        self._sync_after_write()
         return record
 
     def get_job(self, job_id: str, *, session_id: str | None = None) -> ProJobRecord | None:
@@ -227,6 +230,7 @@ class SqliteProJobStore:
                 )
                 if not res.rowcount:
                     return None
+        self._sync_after_write()
         return self.get_job(job_id)
 
     def update_progress(self, job_id: str, *, progress_pct: int) -> None:
@@ -237,6 +241,7 @@ class SqliteProJobStore:
                     .where(pro_jobs.c.job_id == job_id)
                     .values(progress_pct=max(0, min(int(progress_pct), 100)))
                 )
+        self._sync_after_write()
 
     def complete(
         self,
@@ -266,6 +271,7 @@ class SqliteProJobStore:
                 )
                 if not res.rowcount:
                     return None
+        self._sync_after_write()
         return self.get_job(job_id)
 
     def fail(self, job_id: str, *, error_class: str, error_detail: str | None = None) -> ProJobRecord | None:
@@ -283,6 +289,7 @@ class SqliteProJobStore:
                 )
                 if not res.rowcount:
                     return None
+        self._sync_after_write()
         return self.get_job(job_id)
 
     def request_cancel(self, job_id: str, *, session_id: str) -> str:
@@ -303,6 +310,7 @@ class SqliteProJobStore:
                         .where(pro_jobs.c.job_id == job_id)
                         .values(status="cancelled", finished_at=_utc_now(), progress_pct=0, error_class="cancelled")
                     )
+                    self._sync_after_write()
                     return "cancelled"
                 if current == "running":
                     conn.execute(
@@ -310,6 +318,7 @@ class SqliteProJobStore:
                         .where(pro_jobs.c.job_id == job_id)
                         .values(cancel_requested=True)
                     )
+                    self._sync_after_write()
                     return "cancelling"
                 return current
 
@@ -330,11 +339,18 @@ class SqliteProJobStore:
                         pro_jobs.c.finished_at < cutoff_s,
                     )
                 )
+        if rows:
+            self._sync_after_write()
         if artifact_root:
             root = Path(artifact_root)
             for (job_id,) in rows:
                 _delete_job_artifacts(root / str(job_id))
         return len(rows)
+
+    def _sync_after_write(self) -> None:
+        if self._on_write is None:
+            return
+        self._on_write()
 
 
 def create_pro_job_engine(url: str) -> Engine:
@@ -360,9 +376,9 @@ def create_pro_job_engine(url: str) -> Engine:
     return engine
 
 
-def create_pro_job_store(url: str) -> SqliteProJobStore:
+def create_pro_job_store(url: str, *, on_write: Callable[[], None] | None = None) -> SqliteProJobStore:
     _ensure_parent_dir_for_sqlite_file(url)
-    store = SqliteProJobStore(create_pro_job_engine(url))
+    store = SqliteProJobStore(create_pro_job_engine(url), on_write=on_write)
     store.initialize_schema()
     return store
 

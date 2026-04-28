@@ -215,6 +215,28 @@ def _request_gradio_named_endpoint(
     return _ok(name, f"POST {base}/gradio_api/call/v2/{api_name} (fallback)", http_status=200)
 
 
+def _request_satellite_health(client: httpx.Client, *, base_url: str) -> CheckResult:
+    health_url = f"{base_url.rstrip('/')}/health"
+    r, _ = _request_json(client, "GET", health_url, name="satellite.health")
+    if r.status == "ok":
+        return r
+    if r.http_status not in (404, 405):
+        return r
+
+    # Gradio-only startup mode may not expose `/health`; accept Gradio API info as liveness.
+    info_url = f"{base_url.rstrip('/')}/gradio_api/info"
+    info_result, payload = _request_json(client, "GET", info_url, name="satellite.health.gradio_info")
+    if info_result.status != "ok":
+        return _fail(
+            "satellite.health",
+            f"Neither /health nor /gradio_api/info is available: {info_result.detail}",
+            info_result.http_status,
+        )
+    if isinstance(payload, dict) and "named_endpoints" in payload:
+        return _ok("satellite.health", f"GET {info_url} (fallback)", http_status=info_result.http_status)
+    return _fail("satellite.health", f"{info_url} returned unexpected payload shape.")
+
+
 def _print_results(results: list[CheckResult], *, as_json: bool) -> None:
     if as_json:
         print(
@@ -422,13 +444,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # Satellite caption
         if "satellite" in services:
-            r, _ = _request_json(
-                client,
-                "GET",
-                f"{urls['lfm_vl_satellite']}/health",
-                name="satellite.health",
-            )
-            results.append(r)
+            results.append(_request_satellite_health(client, base_url=urls["lfm_vl_satellite"]))
             r, _ = _request_json(
                 client,
                 "POST",

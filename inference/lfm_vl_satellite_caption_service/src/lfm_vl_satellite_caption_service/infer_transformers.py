@@ -43,6 +43,19 @@ def ensure_satellite_model_loaded() -> tuple[Any, Any]:
     except ImportError as e:
         raise RuntimeError('Install optional deps: pip install -e ".[model]"') from e
 
+    # ZeroGPU note:
+    # - The platform emulates CUDA and requires GPU work to happen inside `@spaces.GPU`.
+    # - Any eager CUDA probe / `.to("cuda")` / `device_map="auto"` can trigger low-level
+    #   CUDA init during model load and crash the Space before `@spaces.GPU` interception.
+    # So we keep weights on CPU here; only `model.generate()` is wrapped with `apply_zero_gpu`.
+    zero_gpu_enabled = False
+    try:
+        import spaces  # type: ignore
+
+        zero_gpu_enabled = True
+    except ImportError:
+        zero_gpu_enabled = False
+
     s = get_settings()
     mid = s.model_id
     resolved_dtype: Any = None
@@ -54,45 +67,50 @@ def ensure_satellite_model_loaded() -> tuple[Any, Any]:
     base_kw: dict[str, Any] = {"trust_remote_code": True}
     if resolved_dtype is not None:
         base_kw["dtype"] = resolved_dtype
-    try:
-        _model = AutoModelForImageTextToText.from_pretrained(mid, device_map="auto", **base_kw)
-    except TypeError:
-        if resolved_dtype is None:
-            raise
-        base_kw.pop("dtype", None)
-        base_kw["torch_dtype"] = resolved_dtype
-        _model = AutoModelForImageTextToText.from_pretrained(mid, device_map="auto", **base_kw)
-    except ValueError as e:
-        if "accelerate" not in str(e).lower():
-            raise
-        kw2: dict[str, Any] = {"trust_remote_code": True}
-        if resolved_dtype is not None:
-            kw2["dtype"] = resolved_dtype
+    # Always load on CPU for ZeroGPU; for non-ZeroGPU environments we can still
+    # try `device_map="auto"` if accelerate is available.
+    if zero_gpu_enabled:
         try:
-            _model = AutoModelForImageTextToText.from_pretrained(mid, **kw2)
+            _model = AutoModelForImageTextToText.from_pretrained(mid, **base_kw)
         except TypeError:
             if resolved_dtype is None:
                 raise
-            kw2.pop("dtype", None)
-            kw2["torch_dtype"] = resolved_dtype
-            _model = AutoModelForImageTextToText.from_pretrained(mid, **kw2)
-        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        _model = _model.to(dev)
+            base_kw.pop("dtype", None)
+            base_kw["torch_dtype"] = resolved_dtype
+            _model = AutoModelForImageTextToText.from_pretrained(mid, **base_kw)
+    else:
+        try:
+            _model = AutoModelForImageTextToText.from_pretrained(mid, device_map="auto", **base_kw)
+        except TypeError:
+            if resolved_dtype is None:
+                raise
+            base_kw.pop("dtype", None)
+            base_kw["torch_dtype"] = resolved_dtype
+            _model = AutoModelForImageTextToText.from_pretrained(mid, device_map="auto", **base_kw)
+        except ValueError as e:
+            # If accelerate isn't installed, fall back to CPU.
+            if "accelerate" not in str(e).lower():
+                raise
+            kw2: dict[str, Any] = {"trust_remote_code": True}
+            if resolved_dtype is not None:
+                kw2["dtype"] = resolved_dtype
+            try:
+                _model = AutoModelForImageTextToText.from_pretrained(mid, **kw2)
+            except TypeError:
+                if resolved_dtype is None:
+                    raise
+                kw2.pop("dtype", None)
+                kw2["torch_dtype"] = resolved_dtype
+                _model = AutoModelForImageTextToText.from_pretrained(mid, **kw2)
 
-    if _force_model_cuda():
-        try:
-            dm = getattr(_model, "hf_device_map", None) or {}
-            if not dm:
-                _model = _model.to("cuda")
-        except Exception:
-            pass
-    elif torch.cuda.is_available():
-        try:
-            dm = getattr(_model, "hf_device_map", None) or {}
-            if not dm and str(next(_model.parameters()).device) == "cpu":
-                _model = _model.to("cuda")
-        except Exception:
-            pass
+        # Optional local CUDA move (never on ZeroGPU).
+        if _force_model_cuda() and torch.cuda.is_available():
+            try:
+                dm = getattr(_model, "hf_device_map", None) or {}
+                if not dm:
+                    _model = _model.to("cuda")
+            except Exception:
+                pass
 
     return _model, _processor
 

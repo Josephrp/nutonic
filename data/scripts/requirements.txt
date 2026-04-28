@@ -5,7 +5,7 @@ python-dotenv>=1.0.0
 numpy>=1.24.0
 # Geo pipeline + tests (SPEC-geo-nutonic, fetch_geo_baselines / build_poi_geo_context later)
 pyproj>=3.6.0,<4
-geopandas>=0.14.0,<1
+geopandas>=1.1.2
 shapely>=2.0.0,<3
 pyyaml>=6.0.0,<7
 pydantic>=2.0.0,<3

@@ -125,10 +125,37 @@ jobs:
         run: |
           echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
           echo "MAPS_API_KEY=CI_STUB" >> local.properties
-      - name: Install WiX Toolset (Compose Desktop MSI)
-        run: choco install wixtoolset -y --no-progress
+      - name: Prepare WiX 3.x (pin WIX_PATH for jpackage)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset WIX_PATH || true
+          ./gradlew.bat --no-configuration-cache :downloadWix :unzipWix
+          ROOT="$(pwd)"
+          WIX_ROOT="$ROOT/build/wix311"
+          if [[ -f "$WIX_ROOT/candle.exe" ]]; then
+            echo "WIX_PATH=$WIX_ROOT" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          CANDLE="$(find "$WIX_ROOT" -name candle.exe -type f -print -quit 2>/dev/null || true)"
+          if [[ -n "$CANDLE" ]]; then
+            echo "WIX_PATH=$(dirname "$CANDLE")" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "WiX candle.exe not found under $WIX_ROOT" >&2
+          find "$WIX_ROOT" -maxdepth 4 -type f 2>/dev/null | head -40 >&2 || true
+          exit 1
+
       - name: Package release MSI
-        run: ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
+        shell: bash
+        env:
+          TEMP: D:/jpktmp
+          TMP: D:/jpktmp
+          TMPDIR: D:/jpktmp
+        run: |
+          set -euo pipefail
+          mkdir -p "D:/jpktmp" 2>/dev/null || true
+          ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows-msi

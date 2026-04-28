@@ -1,6 +1,10 @@
 # TerraMind TiM local Space (Tonic / GPU or ZeroGPU).
+#
+# GPU / ZeroGPU Spaces must stay under the **Tonic** Hub org; `deploy_space.py` enforces `hf_space_owner_org`.
+hf_space_owner_org: Tonic
 
 space_hardware: zero-a10g
+space_sdk: gradio
 sleep_time_seconds: -1
 
 variables:

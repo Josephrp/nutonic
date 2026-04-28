@@ -141,3 +141,52 @@ def stack_s2_rgb_on_grid(
         f"No usable Sentinel RGB under {item_dir} (expected red/green/blue.tif or visual/thumbnail). "
         "Re-run download_geoguessr_poi_imagery.py without --skip-existing or use --sentinel-mode full."
     )
+
+
+def stack_s2_bands_on_grid(
+    item_dir: Path,
+    *,
+    band_names: list[str],
+    dst_crs: str,
+    dst_transform: tuple[float, float, float, float, float, float],
+    width: int,
+    height: int,
+) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
+    """
+    Warp requested Sentinel-2 single-band assets to the reference grid.
+
+    Returns:
+      - dict band_name -> float32 (height, width)
+      - metadata with resolved assets
+    """
+    import rasterio
+    from rasterio.enums import Resampling
+    from rasterio.transform import Affine
+    from rasterio.warp import reproject
+
+    dst_t = Affine(*dst_transform)
+    out: dict[str, np.ndarray] = {}
+    meta: dict[str, Any] = {"assets": {}}
+    missing: list[str] = []
+    for band in band_names:
+        p = _find_tif(item_dir, band)
+        if p is None:
+            missing.append(band)
+            continue
+        arr = np.empty((height, width), dtype=np.float32)
+        with rasterio.open(p) as src:
+            reproject(
+                source=rasterio.band(src, 1),
+                destination=arr,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=dst_t,
+                dst_crs=dst_crs,
+                resampling=Resampling.bilinear,
+                dst_nodata=np.nan,
+            )
+        out[band] = arr
+        meta["assets"][band] = str(p)
+    if missing:
+        raise RuntimeError(f"Missing Sentinel bands under {item_dir}: {', '.join(missing)}")
+    return out, meta

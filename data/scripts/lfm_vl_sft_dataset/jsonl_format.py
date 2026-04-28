@@ -46,6 +46,44 @@ def make_vlm_message(image_filename: str, user_text: str, assistant_text: str) -
     }
 
 
+def make_multi_image_vlm_message(
+    image_paths: list[str],
+    user_text: str,
+    assistant_text: str,
+    *,
+    system_text: str | None = None,
+    regions: list[dict[str, Any]] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a VLM row whose user turn contains one or more images."""
+    if not image_paths:
+        raise ValueError("make_multi_image_vlm_message requires at least one image path")
+    user_content: list[dict[str, Any]] = [{"type": "image", "image": p} for p in image_paths]
+    user_content.append({"type": "text", "text": user_text})
+
+    messages: list[dict[str, Any]] = []
+    if system_text:
+        messages.append(
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": system_text}],
+            }
+        )
+    messages.append({"role": "user", "content": user_content})
+    messages.append(
+        {
+            "role": "assistant",
+            "content": [{"type": "text", "text": assistant_text}],
+        }
+    )
+    row: dict[str, Any] = {"messages": messages}
+    if regions:
+        row["regions"] = regions
+    if metadata:
+        row["metadata"] = metadata
+    return row
+
+
 def caption_row(image_rel_path: str, caption: str) -> dict[str, Any]:
     return make_vlm_message(image_rel_path, CAPTIONING_PROMPT, caption)
 

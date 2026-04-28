@@ -54,7 +54,7 @@ internal suspend fun refreshScanHubCatalog(
         return
     }
 
-    onMapsStatus("Fetching maps…")
+    onMapsStatus("Fetching maps...")
     when (val r = client.getMaps()) {
         is ApiResult.Ok -> {
             onMaps(r.value)
@@ -78,11 +78,11 @@ internal suspend fun refreshScanHubCatalog(
 
         is ApiResult.NetworkFailure -> {
             onMaps(emptyList())
-            onMapsStatus("Network: ${r.debugMessage}")
+            onMapsStatus("Network unavailable. Could not refresh maps.")
             val fb = contentCacheRepository?.cachedMapsOrNull()
             if (!fb.isNullOrEmpty()) {
                 onMaps(fb)
-                onMapsStatus("Network: ${r.debugMessage} Showing catalog from last manifest cache.")
+                onMapsStatus("Network unavailable. Showing catalog from last manifest cache.")
             }
         }
     }

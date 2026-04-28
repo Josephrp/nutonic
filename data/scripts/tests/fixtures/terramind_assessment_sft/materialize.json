@@ -1,0 +1,34 @@
+{
+  "materialization_id": "fixture-mat-001",
+  "cache_key": "fixture-cache-001",
+  "vlm_artifacts": [
+    {
+      "role": "sentinel_fc",
+      "sha256": "fixture",
+      "mime": "image/png",
+      "width": 1,
+      "height": 1,
+      "inline_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lQVS+QAAAABJRU5ErkJggg=="
+    },
+    {
+      "role": "cloud_mask_thumb",
+      "sha256": "fixture2",
+      "mime": "image/png",
+      "width": 1,
+      "height": 1,
+      "inline_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lQVS+QAAAABJRU5ErkJggg=="
+    }
+  ],
+  "tim_payload": {
+    "branch": "RGB_mapbox",
+    "modalities_keys": ["RGB"],
+    "npz_base64": null
+  },
+  "run_manifest": {
+    "bbox_wgs84": {"west": -118.3, "south": 34.0, "east": -118.2, "north": 34.1},
+    "scene_provenance": {"fixture": true},
+    "vlm_canvas": {"canonical_surface_id": "sentinel_fc"}
+  },
+  "errors": [],
+  "warnings": []
+}

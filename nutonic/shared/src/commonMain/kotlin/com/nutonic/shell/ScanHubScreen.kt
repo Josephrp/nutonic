@@ -126,7 +126,7 @@ fun ScanHubScreen(
             )
             missionOptions.forEach { mission ->
                 val selected = mission.missionId == selectedMissionId
-                val title = if (selected) "✓ ${mission.title}" else mission.title
+                val title = if (selected) "[Selected] ${mission.title}" else mission.title
                 if (selected) {
                     NutonicPrimaryButton(
                         text = title,
@@ -167,7 +167,7 @@ fun ScanHubScreen(
                     )
                 }
                 Text(
-                    "Map / level selection",
+                    "Map selection",
                     style = MaterialTheme.typography.subtitle1,
                     color = MaterialTheme.colors.primary,
                 )
@@ -235,7 +235,7 @@ fun ScanHubScreen(
                                             buildString {
                                                 append("Map ")
                                                 append(m.mapId)
-                                                m.engineVersion?.let { ev -> append(" · engine ").append(ev) }
+                                                m.engineVersion?.let { ev -> append(" - engine ").append(ev) }
                                             },
                                         style = MaterialTheme.typography.caption,
                                         color = MaterialTheme.colors.onBackground,
@@ -243,7 +243,7 @@ fun ScanHubScreen(
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "›",
+                                    text = ">",
                                     style = MaterialTheme.typography.h6,
                                     color = MaterialTheme.colors.primary,
                                 )
@@ -297,7 +297,7 @@ fun ScanHubScreen(
 
                                                 is ApiResult.NetworkFailure ->
                                                     mapsStatus =
-                                                        "Ranked start failed: ${st.debugMessage}"
+                                                        "Ranked start failed due to network. Try again when online."
                                             }
                                         }
 
@@ -305,7 +305,7 @@ fun ScanHubScreen(
                                             mapsStatus = "Auth failed: ${tok.userMessage}"
 
                                         is ApiResult.NetworkFailure ->
-                                            mapsStatus = "Auth failed: ${tok.debugMessage}"
+                                            mapsStatus = "Sign-in failed due to network. Try again when online."
                                     }
                                 }
                             },
@@ -324,7 +324,7 @@ fun ScanHubScreen(
                 mapId = mapContextId,
                 onMapIdChange = null,
                 featureFlags = serverFeatureFlags,
-                sectionTitle = "SCAN hub · community leaderboard preview",
+                sectionTitle = "SCAN hub - community leaderboard preview",
                 showRankedVerifiedFetch = serverFeatureFlags?.ranked == true,
                 modifier = Modifier.padding(top = 16.dp),
             )

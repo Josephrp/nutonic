@@ -136,12 +136,7 @@ private fun CommunityLeaderboardPanelIntro(
     )
     if (featureFlags != null && (!getEnabled || !postEnabled)) {
         Text(
-            text =
-                buildString {
-                    append("Server flags: ")
-                    append("GET=${featureFlags.communityLbGet}, ")
-                    append("POST=${featureFlags.communityLbPost}.")
-                },
+            text = "Some community score features are disabled on this server.",
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onBackground,
         )
@@ -180,7 +175,7 @@ private fun CommunityLeaderboardGetButton(
     Button(
         onClick = {
             scope.launch {
-                onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching community leaderboard…"))
+                onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching community leaderboard..."))
                 when (val r = nutonicApiClient.getLeaderboard(mapId)) {
                     is ApiResult.Ok ->
                         onResult(GetLeaderboardUiResult(r.value, Clock.System.now(), null))
@@ -189,7 +184,7 @@ private fun CommunityLeaderboardGetButton(
                         onResult(GetLeaderboardUiResult(emptyList(), null, r.userMessage))
 
                     is ApiResult.NetworkFailure ->
-                        onResult(GetLeaderboardUiResult(emptyList(), null, "Network: ${r.debugMessage}"))
+                        onResult(GetLeaderboardUiResult(emptyList(), null, "Network unavailable. Try again when online."))
                 }
             }
         },
@@ -214,7 +209,7 @@ private fun CommunityLeaderboardRankedTierFetchButton(
     Button(
         onClick = {
             scope.launch {
-                onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching server-verified ranked leaderboard…"))
+                onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching server-verified ranked leaderboard..."))
                 when (val r = nutonicApiClient.getLeaderboard(mapId, tier = "ranked")) {
                     is ApiResult.Ok ->
                         onResult(GetLeaderboardUiResult(r.value, Clock.System.now(), null))
@@ -223,7 +218,7 @@ private fun CommunityLeaderboardRankedTierFetchButton(
                         onResult(GetLeaderboardUiResult(emptyList(), null, r.userMessage))
 
                     is ApiResult.NetworkFailure ->
-                        onResult(GetLeaderboardUiResult(emptyList(), null, "Network: ${r.debugMessage}"))
+                        onResult(GetLeaderboardUiResult(emptyList(), null, "Network unavailable. Try again when online."))
                 }
             }
         },
@@ -248,7 +243,7 @@ private fun CommunityLeaderboardPostButton(
     Button(
         onClick = {
             scope.launch {
-                onResult("POST leaderboard row…")
+                onResult("Sending demo score...")
                 when (val t = nutonicApiClient.postAuthToken()) {
                     is ApiResult.Ok -> {
                         val key = "kmp-${Clock.System.now()}"
@@ -272,12 +267,12 @@ private fun CommunityLeaderboardPostButton(
                                 onResult("Posted row for $mapId (${p.value.displayHandle})")
 
                             is ApiResult.HttpFailure -> onResult(p.userMessage)
-                            is ApiResult.NetworkFailure -> onResult("Network: ${p.debugMessage}")
+                            is ApiResult.NetworkFailure -> onResult("Network unavailable. Could not send demo score.")
                         }
                     }
 
                     is ApiResult.HttpFailure -> onResult(t.userMessage)
-                    is ApiResult.NetworkFailure -> onResult("Network: ${t.debugMessage}")
+                    is ApiResult.NetworkFailure -> onResult("Network unavailable. Sign-in token request failed.")
                 }
             }
         },

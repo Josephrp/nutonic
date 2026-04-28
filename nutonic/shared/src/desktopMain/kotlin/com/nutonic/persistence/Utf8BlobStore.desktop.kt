@@ -44,3 +44,6 @@ actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
 
 actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
     PathUtf8BlobStore(desktopNutonicPath("guess-record-outbox.json"))
+
+actual fun createProVlmModelBlobStore(): Utf8BlobStore =
+    PathUtf8BlobStore(desktopNutonicPath("pro-vlm-model-cache.json"))

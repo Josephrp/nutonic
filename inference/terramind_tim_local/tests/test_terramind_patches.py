@@ -15,6 +15,7 @@ from nutonic_terramind_tim_local.terramind_patches import (
     _parse_lat_lon_from_coord_text,
     apply_terramind_coord_decode_hotfix,
     apply_terramind_tim_runtime_hotfixes,
+    terramind_patch_diagnostics,
 )
 
 
@@ -68,6 +69,17 @@ def test_parse_double_lon_prefix_mislabel() -> None:
 
 def test_parse_double_lon_rejected_if_first_not_latitude_range() -> None:
     assert _parse_lat_lon_from_coord_text("lon=120 lon=30") is None
+
+
+def test_patch_diagnostics_shape() -> None:
+    diag = terramind_patch_diagnostics()
+
+    assert diag["diagnostics_version"] == "nutonic.terramind_patches.v1"
+    assert isinstance(diag["coord_decode_hotfix"], bool)
+    assert isinstance(diag["merge_sequences_long_hotfix"], bool)
+    assert isinstance(diag["token_embedding_indices_hotfix"], bool)
+    assert isinstance(diag["torch_version"], str)
+    assert "terratorch_version" in diag
 
 
 def test_parse_double_lat_missing_lon() -> None:

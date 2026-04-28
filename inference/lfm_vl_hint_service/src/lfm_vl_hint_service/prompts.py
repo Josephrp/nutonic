@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 from lfm_vl_hint_service.models import SuggestionsFromFramesRequest
+
+PRO_BRIEF_PROMPT_VERSION = "pro-brief-v1"
 
 def streetview_user_prompt(
     *,
@@ -48,4 +52,44 @@ def narrative_user_payload(captions: list[tuple[str, str]]) -> str:
         f"Captions:\n{lines}\n\n"
         "Write one cohesive paragraph that synthesizes these descriptions into a clear, information-rich geographic summary, "
         "highlighting the strongest clues for identifying the likely region."
+    )
+
+
+def pro_brief_system_prompt(profile: str) -> str:
+    return (
+        "You write conservative NU:TONIC PRO mini-app briefs from machine-readable artifacts. "
+        f"Profile: {profile}. Use only the provided TiM summary, artifact refs, and job metadata. "
+        "Do not invent observations, scene IDs, coordinates, incident causes, vessel identity, illegal activity, damage totals, or legal certainty. "
+        "Use confidence-aware language such as 'candidate', 'signal', 'screening indicator', and 'requires corroboration'. "
+        "If evidence is insufficient, say so plainly and recommend review of the source artifacts."
+    )
+
+
+def pro_brief_user_payload(
+    *,
+    profile: str,
+    profile_label: str,
+    tim_summary: Mapping[str, Any] | None,
+    artifact_refs: list[dict[str, Any]],
+    jobs: list[dict[str, Any]],
+    limitations: list[str],
+) -> str:
+    artifact_lines = "\n".join(
+        f"- {artifact.get('artifact_id', 'artifact')}: kind={artifact.get('kind')}, profile={artifact.get('profile')}"
+        for artifact in artifact_refs[:12]
+    )
+    job_lines = "\n".join(
+        f"- {job.get('job_id', 'job')}: profile={job.get('profile')}, center=({job.get('center_lat')}, {job.get('center_lon')})"
+        for job in jobs[:8]
+    )
+    tim_keys = ", ".join(sorted(tim_summary.keys())[:12]) if isinstance(tim_summary, Mapping) else "none"
+    limitation_lines = "\n".join(f"- {item}" for item in limitations)
+    return (
+        f"Write a short {profile_label} brief for profile token {profile!r}.\n\n"
+        f"TiM summary keys: {tim_keys}\n\n"
+        f"Artifact refs:\n{artifact_lines or '- none'}\n\n"
+        f"Jobs:\n{job_lines or '- no job metadata'}\n\n"
+        f"Required limitations:\n{limitation_lines or '- none'}\n\n"
+        "Return 2-4 concise paragraphs. Include a first paragraph that states the evidence level and the main signal. "
+        "Include a final sentence naming at least one next review action. Avoid unsupported certainty."
     )

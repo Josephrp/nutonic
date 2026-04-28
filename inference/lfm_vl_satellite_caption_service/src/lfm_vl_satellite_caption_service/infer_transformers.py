@@ -116,7 +116,11 @@ def infer_transformers(req: SatelliteInferRequest) -> SatelliteInferResponse:
     device = model.device
     raw = base64.b64decode(req.image_base64, validate=False)
     pil = Image.open(BytesIO(raw)).convert("RGB")
-    user = satellite_transformers_user_prompt(ranked_clue_safe=req.ranked_clue_safe)
+    user = satellite_transformers_user_prompt(
+        ranked_clue_safe=req.ranked_clue_safe,
+        analysis_profile=req.analysis_profile,
+        contract_id=req.contract_id,
+    )
     conversation = [{"role": "user", "content": [{"type": "image", "image": pil}, {"type": "text", "text": user}]}]
     inputs = processor.apply_chat_template(
         conversation,
@@ -142,4 +146,9 @@ def infer_transformers(req: SatelliteInferRequest) -> SatelliteInferResponse:
     out = _model_generate_gpu(gen_kw)
     new_tok = out[:, in_len:]
     text = processor.batch_decode(new_tok, skip_special_tokens=True)[0].strip()
-    return SatelliteInferResponse(caption=text, model_id=s.model_id)
+    return SatelliteInferResponse(
+        caption=text,
+        model_id=s.model_id,
+        analysis_profile=req.analysis_profile,
+        contract_id=req.contract_id,
+    )

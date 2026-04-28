@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import importlib.metadata
 import re
 import warnings
 from typing import Any
@@ -16,6 +17,7 @@ _COORD_LON_RE = re.compile(r"lon\s*=\s*([-+]?\d*(?:\.\d+)?(?:[eE][-+]?\d+)?)")
 _PATCHED = False
 _MERGE_SEQ_LONG_PATCHED = False
 _TOKEN_EMB_INDICES_PATCHED = False
+PATCH_DIAGNOSTICS_VERSION = "nutonic.terramind_patches.v1"
 
 
 def _parse_lat_lon_from_coord_text(text: str) -> tuple[float, float] | None:
@@ -201,3 +203,21 @@ def apply_terramind_tim_runtime_hotfixes() -> None:
     apply_terramind_coord_decode_hotfix()
     apply_terramind_tim_merge_sequences_long_hotfix()
     apply_terramind_token_embedding_indices_hotfix()
+
+
+def terramind_patch_diagnostics() -> dict[str, Any]:
+    return {
+        "diagnostics_version": PATCH_DIAGNOSTICS_VERSION,
+        "coord_decode_hotfix": _PATCHED,
+        "merge_sequences_long_hotfix": _MERGE_SEQ_LONG_PATCHED,
+        "token_embedding_indices_hotfix": _TOKEN_EMB_INDICES_PATCHED,
+        "torch_version": torch.__version__,
+        "terratorch_version": _package_version("terratorch"),
+    }
+
+
+def _package_version(package: str) -> str | None:
+    try:
+        return importlib.metadata.version(package)
+    except importlib.metadata.PackageNotFoundError:
+        return None

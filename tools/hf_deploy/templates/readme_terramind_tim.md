@@ -3,23 +3,35 @@ title: NU:TONIC TerraMind TiM local
 emoji: 🌎
 colorFrom: green
 colorTo: blue
-sdk: docker
-app_port: 7860
+sdk: gradio
+app_file: app.py
 pinned: false
 ---
 
-# NU:TONIC — TerraMind TiM (Docker Space)
+# NU:TONIC — TerraMind TiM (Gradio ZeroGPU Space)
 
 Published from `inference/terramind_tim_local` in the NU:TONIC monorepo.
 
+## CI deployment
+
+This Space is deployed by `.github/workflows/huggingface-deploy.yml` using:
+
+```bash
+python tools/hf_deploy/deploy_space.py --service terramind_tim --repo-id Tonic/nutonic-terramind-tim
+```
+
+The workflow first runs `python -m pytest inference/terramind_tim_local/tests -q`, then mirrors the staged Gradio SDK Space tree and syncs runtime settings from `tools/hf_deploy/profiles/terramind_tim.yaml`.
+
 ## Hardware
 
-Use **ZeroGPU** or a **GPU** hardware profile so TerraTorch forwards have CUDA. CPU-only is suitable only for tiny smoke configs.
+This service is deployed as **sdk: gradio** because Hugging Face ZeroGPU only supports Gradio SDK Spaces. Use **ZeroGPU** so TerraTorch forwards have CUDA. CPU-only is suitable only for tiny smoke configs outside the ZeroGPU deployment.
 
 ## Endpoints
 
-- `GET /health`
-- `POST /v1/tim/export` — JSON body: `{ "config": { ... } }` or `{ "config_yaml": "<yaml>" }` matching the CLI YAML schema (see package `config.example.yaml`). Full GeoGuessr / STAC pipelines are better run via the **`nutonic-tim-local`** CLI with on-disk assets.
+- Gradio API `api_name="health"` — patch and service diagnostics.
+- Gradio API `api_name="tim_infer"` — JSON body: `{ "config": { ... } }` or `{ "config_yaml": "<yaml>" }` matching the CLI YAML schema.
+
+The package still exposes FastAPI routes when run locally or as a Docker Space, but the production ZeroGPU deployment uses the Gradio SDK app.
 
 ## Environment variables
 

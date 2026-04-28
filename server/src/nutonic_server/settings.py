@@ -124,9 +124,111 @@ class Settings(BaseSettings):
         ),
         description=(
             "Optional origin for the PRO materialization worker (`inference/pro_materialization_service`). "
-            "When set alongside or instead of `inference_worker_base_url`, PRO job create probes "
-            "GET `{origin}/health` for each configured origin (all must succeed for `inference_upstream_ok`)."
+            "PRO jobs probe configured origins before execution; origins listed in `pro_required_origins` "
+            "must succeed, while `pro_optional_origins` may be degraded without failing the job."
         ),
+    )
+
+    lfm_vl_hint_service_url: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "NUTONIC_LFM_VL_HINT_SERVICE_URL",
+            "LFM_VL_HINT_SERVICE_URL",
+        ),
+        description=(
+            "Optional origin for the LFM-VL hint/brief service. When set, PRO jobs can call "
+            "`POST {origin}/v1/pro/brief/fuse` after materialization."
+        ),
+    )
+
+    pro_job_backend: str = Field(
+        default="sqlite",
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_BACKEND", "PRO_JOB_BACKEND"),
+        description="PRO job persistence backend. Only `sqlite` is implemented today.",
+    )
+
+    pro_job_database_url: str = Field(
+        default="sqlite:///data/nutonic_pro_jobs.db",
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_DATABASE_URL", "PRO_JOB_DATABASE_URL"),
+        description="SQLAlchemy URL for persisted PRO job status and artifact metadata.",
+    )
+
+    pro_required_origins: str = Field(
+        default="pro_materialization",
+        validation_alias=AliasChoices("NUTONIC_PRO_REQUIRED_ORIGINS", "PRO_REQUIRED_ORIGINS"),
+        description="Comma-separated PRO origin names that must pass health probes before a job runs.",
+    )
+
+    pro_optional_origins: str = Field(
+        default="inference_worker",
+        validation_alias=AliasChoices("NUTONIC_PRO_OPTIONAL_ORIGINS", "PRO_OPTIONAL_ORIGINS"),
+        description="Comma-separated PRO origin names that may be degraded without failing the job.",
+    )
+
+    pro_job_ttl_seconds: int = Field(
+        default=86_400,
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_TTL_SECONDS", "PRO_JOB_TTL_SECONDS"),
+        description="Retention window for terminal PRO jobs and their artifacts.",
+    )
+
+    pro_max_concurrent_jobs: int = Field(
+        default=2,
+        validation_alias=AliasChoices("NUTONIC_PRO_MAX_CONCURRENT_JOBS", "PRO_MAX_CONCURRENT_JOBS"),
+        description="Maximum number of concurrently running in-process PRO jobs.",
+    )
+
+    pro_job_poll_interval_seconds: float = Field(
+        default=2.0,
+        validation_alias=AliasChoices("NUTONIC_PRO_JOB_POLL_INTERVAL_SECONDS", "PRO_JOB_POLL_INTERVAL_SECONDS"),
+        description="Default server-side PRO runner poll interval for future queue sweepers.",
+    )
+
+    pro_artifact_root: str = Field(
+        default="data/pro_artifacts",
+        validation_alias=AliasChoices("NUTONIC_PRO_ARTIFACT_ROOT", "PRO_ARTIFACT_ROOT"),
+        description="Filesystem root for PRO job artifact bytes.",
+    )
+
+    pro_vlm_model_bundle_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_BUNDLE_ID", "PRO_VLM_MODEL_BUNDLE_ID"),
+        description="Published on-device PRO VLM model bundle id advertised to clients.",
+    )
+
+    pro_vlm_model_revision: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_REVISION", "PRO_VLM_MODEL_REVISION"),
+        description="Revision/version for the published on-device PRO VLM model.",
+    )
+
+    pro_vlm_model_download_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL", "PRO_VLM_MODEL_DOWNLOAD_URL"),
+        description="First-party or signed CDN URL for the VLM model artifact. Never point clients at Hub tokens.",
+    )
+
+    pro_vlm_model_sha256: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SHA256", "PRO_VLM_MODEL_SHA256"),
+        description="Lowercase hex sha256 for the model artifact; clients verify before use.",
+    )
+
+    pro_vlm_model_size_bytes: int = Field(
+        default=0,
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SIZE_BYTES", "PRO_VLM_MODEL_SIZE_BYTES"),
+        description="Expected model artifact size in bytes.",
+    )
+
+    pro_vlm_model_runtime: str = Field(
+        default="leap",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_RUNTIME", "PRO_VLM_MODEL_RUNTIME"),
+        description="Client runtime hint, e.g. leap, coreml, onnx, or webgpu.",
+    )
+
+    pro_vlm_model_contract_ids: str = Field(
+        default="nutonic.pro.vlm.v1_512",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS", "PRO_VLM_MODEL_CONTRACT_IDS"),
+        description="Comma-separated VLM image contract ids supported by the advertised model bundle.",
     )
 
     inference_hmac_secret: str = Field(
@@ -163,6 +265,42 @@ class Settings(BaseSettings):
         ),
     )
 
+    hf_persistence_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_ENABLED", "HF_PERSISTENCE_ENABLED"),
+        description="When true, mirror SQLite server DB files to a Hugging Face Dataset repo.",
+    )
+
+    hf_persistence_required: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_REQUIRED", "HF_PERSISTENCE_REQUIRED"),
+        description=(
+            "When true with HF persistence enabled, fail fast if the dataset repo/token is missing "
+            "or sync operations fail."
+        ),
+    )
+
+    hf_persistence_repo_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_REPO_ID", "HF_PERSISTENCE_REPO_ID"),
+        description="Dataset repo id (owner/name) used for SQLite persistence mirroring.",
+    )
+
+    hf_persistence_dataset_subdir: str = Field(
+        default="server-persistence",
+        validation_alias=AliasChoices("NUTONIC_HF_PERSISTENCE_SUBDIR", "HF_PERSISTENCE_SUBDIR"),
+        description="Subdirectory inside the Dataset repo where DB files are stored.",
+    )
+
+    hf_persistence_startup_pull_mode: str = Field(
+        default="if_missing",
+        validation_alias=AliasChoices(
+            "NUTONIC_HF_PERSISTENCE_STARTUP_PULL_MODE",
+            "HF_PERSISTENCE_STARTUP_PULL_MODE",
+        ),
+        description="Startup pull policy for local SQLite files: if_missing (default) or always.",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_origins(cls, v: object) -> str:
@@ -174,6 +312,15 @@ class Settings(BaseSettings):
         if not self.cors_origins:
             return []
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def pro_required_origin_names(self) -> list[str]:
+        return _split_csv(self.pro_required_origins)
+
+    def pro_optional_origin_names(self) -> list[str]:
+        return _split_csv(self.pro_optional_origins)
+
+    def pro_vlm_model_contract_id_list(self) -> list[str]:
+        return _split_csv(self.pro_vlm_model_contract_ids)
 
     jwt_secret: str = Field(
         default="dev-only-change-in-production-min-32b!!",
@@ -189,3 +336,7 @@ class Settings(BaseSettings):
 
 def load_settings() -> Settings:
     return Settings()
+
+
+def _split_csv(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]

@@ -33,6 +33,12 @@ Optional: copy **`.env.example`** to **`server/.env`** so local runs pick up **`
 | `FEATURE_GUESSES_RECORD` / `NUTONIC_FEATURE_GUESSES_RECORD` | No | Default **`false`**. When **`true`**, enables **`POST /api/v1/maps/{map_id}/guesses/record`** and sets `features.guesses_record` on **`GET /api/v1/config`**. Use **`true`** in local dev when exercising telemetry (`rules/05`, `docs/GAME-ENGINE.md` §12.3). |
 | `NUTONIC_GUESS_TELEMETRY_DATABASE_URL` | No | Default `sqlite:///data/nutonic_guess_telemetry.db`. SQLite file for optional guess rows (created under `data/` like the leaderboard DB). |
 | `NUTONIC_RANKED_DATABASE_URL` | No | Default `sqlite:///data/nutonic_ranked.db`. SQLite for ranked round rows (**IMP-090**). |
+| `NUTONIC_HF_PERSISTENCE_ENABLED` / `HF_PERSISTENCE_ENABLED` | No | Default **`false`**. When **`true`**, SQLite stores bootstrap from and sync writes to a Hugging Face Dataset repo. |
+| `NUTONIC_HF_PERSISTENCE_REQUIRED` / `HF_PERSISTENCE_REQUIRED` | No | Default **`false`**. When **`true`** with HF persistence enabled, startup fails if repo id/token is missing and runtime fails on sync errors (fail-fast mode). |
+| `NUTONIC_HF_PERSISTENCE_REPO_ID` / `HF_PERSISTENCE_REPO_ID` | No | Dataset repo id (`owner/name`) used for persisted SQLite files. |
+| `NUTONIC_HF_PERSISTENCE_SUBDIR` / `HF_PERSISTENCE_SUBDIR` | No | Default `server-persistence`. Subdirectory inside the dataset repo for DB files. |
+| `NUTONIC_HF_PERSISTENCE_STARTUP_PULL_MODE` / `HF_PERSISTENCE_STARTUP_PULL_MODE` | No | Default `if_missing`. `if_missing` only pulls when local DB is absent; `always` always pulls from dataset at startup (remote wins). |
+| `HF_API_WRITE` / `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` | No | Hub token used by HF persistence sync client for dataset read/write calls. Prefer a dedicated write token in production. |
 | `NUTONIC_RANKED_STALE_OPEN_ROUND_MAX_AGE_SECONDS` | No | Default **604800** (7d). Abandoned **`open`** ranked rounds older than this are deleted on each **`POST /api/v1/ranked/rounds/start`** (housekeeping). |
 | `NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH` | No | Default **`false`**: **`GET /api/v1/cache/manifest`** omits `locations` and `ai_guesses` (public spoiler hygiene). Set **`true`** for local dev / tests that need full fixture slices. |
 | `NUTONIC_MANIFEST_FULL_PATH` / `MANIFEST_FULL_PATH` | No | When set to an existing **`manifest.full.json`** (same schema as **`assemble_manifest.py`** output), replaces the builtin demo **`PUBLISHED_MAPS` / `MANIFEST_LOCATIONS` / `MANIFEST_AI_GUESSES`** at process start so **`GET /api/v1/maps`**, **`GET /api/v1/cache/manifest`**, and **`POST /api/v1/ranked/rounds/start`** use the full GeoGuessr-derived catalog. Optional **`satellite_caption_sidecar`** on each location is preserved and echoed on **`RankedClueOut`** when present. |
@@ -50,6 +56,24 @@ Future variables (placeholders — **not read by `server/` yet**): `DATABASE_URL
 ## OpenAPI
 
 Normative contract: **`../docs/openapi.yaml`** at repo root (hand-maintained; FastAPI may diverge until a generator step is added). **`servers[0].url`** must be the deployment **origin only** (no `/api/v1` suffix); operation paths include the full **`/api/v1/...`** prefix so URL joiners resolve correctly. **`pytest`** includes a check that documented paths/methods match the FastAPI app.
+
+## CI deployment
+
+The game server is deployed by **`.github/workflows/huggingface-deploy.yml`**, not by the general **`nutonic-ci.yml`** workflow.
+
+| Item | Current behavior |
+|------|------------------|
+| Trigger | Push to `main` touching `server/**`, `tools/hf_deploy/**`, `tools/live_inference_smoke.py`, `tools/requirements.txt`, or the deploy workflow; or manual **workflow_dispatch** target `game_server` / `all`. |
+| Test gate | `pip install -e "./server[dev]"` followed by `pytest server/tests -q`. |
+| Deploy command | `python tools/hf_deploy/deploy_space.py --service game_server --repo-id NuTonic/nutonic-game-server --token-env HF_TOKEN`. |
+| Upload shape | Docker Space mirror containing `server/Dockerfile`, `server/pyproject.toml`, `server/src/`, optional `server/README.md` as `README.package.md`, and `tools/hf_deploy/templates/readme_game_server.md` as the Space README. |
+| Runtime profile | `tools/hf_deploy/profiles/game_server.yaml`: `cpu-basic`, `FEATURE_RANKED=false`, `FEATURE_COMMUNITY_LB_POST=false`, `FEATURE_PRO_JOBS=false`, `NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH=false`. |
+| Hub auth | `HF_TOKEN_NUTONIC`, then `HF_TOKEN`, then `HF_API_WRITE`. |
+| Runtime secrets | `NUTONIC_JWT_SECRET` is pushed to the Space as `JWT_SECRET`; `NUTONIC_LEADERBOARD_DATABASE_URL` and `NUTONIC_RANKED_DATABASE_URL` are pushed under the same names when set. |
+| HF dataset persistence wiring | `NUTONIC_HF_PERSISTENCE_ENABLED`, `NUTONIC_HF_PERSISTENCE_REQUIRED`, `NUTONIC_HF_PERSISTENCE_REPO_ID`, `NUTONIC_HF_PERSISTENCE_SUBDIR`, and `NUTONIC_HF_PERSISTENCE_STARTUP_PULL_MODE` are forwarded as runtime variables; `NUTONIC_HF_PERSISTENCE_TOKEN` is pushed as `HF_API_WRITE` secret for dataset writes. |
+| Post-deploy smoke | `python tools/live_inference_smoke.py --preset game-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-game.json`. |
+
+The deployed Space defaults are intentionally conservative: ranked, community writes, PRO jobs, and manifest truth are off until the Space profile or Space settings opt in. Enabling live PRO on the game server also requires worker URLs and the same `NUTONIC_INFERENCE_HMAC_SECRET` used by any HMAC-protected worker.
 
 ## Docker
 

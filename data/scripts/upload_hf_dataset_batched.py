@@ -27,6 +27,19 @@ Usage (from repo root, venv active)::
     --skip-existing
 
 Resume: re-run the same command with ``--skip-existing`` so files already on the Hub are skipped.
+
+**Skip-existing performance:** by default the remote inventory is fetched **per top-level prefix**
+(``data/``, ``images/``, …) derived from your local tree, instead of one giant recursive listing of the
+entire repo (which can look “hung” for a long time on large datasets). Use
+``--skip-existing-remote-mode full`` only if you need a full-repo scan.
+
+**“Hung” on a commit:** ``create_commit`` can sit at ~80% in tqdm while the Hub ingests LFS;
+that is often still working. Use ``--upload-heartbeat-interval 45`` (default) for periodic log
+lines during each commit. Very large files (e.g. multi-hundred-MiB ``data/*.jsonl``) are **isolated**
+into their own commits by default (see ``--isolate-lfs-files-mib``) so they are not mixed with
+thousands of small PNGs in one LFS batch. For stalls, try smaller ``--max-files-per-commit`` (e.g. 2000)
+and ``--num-threads`` in the 8–16 range (40+ can hurt on some networks). Optional: ``pip install hf_transfer``
+and ``HF_HUB_ENABLE_HF_TRANSFER=1`` for faster transfers.
 """
 
 from __future__ import annotations
@@ -34,6 +47,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -76,6 +90,11 @@ def _iter_local_files(local_root: Path) -> list[tuple[Path, str]]:
     return out
 
 
+def _top_level_prefixes_from_pairs(pairs: list[tuple[Path, str]]) -> list[str]:
+    """Stable sorted list of first path segment for each file (used for scoped Hub tree walks)."""
+    return sorted({rel.split("/", 1)[0] for _, rel in pairs})
+
+
 def _list_remote_files(
     api,
     repo_id: str,
@@ -83,24 +102,116 @@ def _list_remote_files(
     repo_type: str,
     revision: str | None,
     token: str,
+    prefixes: list[str] | None,
+    progress_every: int = 25_000,
 ) -> set[str]:
+    """
+    Build a set of ``path_in_repo`` strings for files already on the Hub.
+
+    When ``prefixes`` is set, call ``list_repo_tree`` once per prefix (much less opaque than a
+    single unbounded full-repo walk on resume). When ``prefixes`` is None, list the entire repo
+    recursively (legacy / escape hatch).
+
+    Missing prefixes (new or empty repo) return **404** from the Hub; those are treated as **no
+    remote files** under that prefix so ``--skip-existing`` can run on first upload.
+    """
+    from huggingface_hub.errors import HfHubHTTPError, RemoteEntryNotFoundError
     from huggingface_hub.hf_api import RepoFile
 
     paths: set[str] = set()
-    for entry in api.list_repo_tree(
-        repo_id,
-        recursive=True,
-        repo_type=repo_type,
-        revision=revision,
-        token=token,
-    ):
-        if isinstance(entry, RepoFile):
-            paths.add(entry.path)
+    total = 0
+
+    def _consume(it: object, label: str) -> None:
+        nonlocal total
+        for entry in it:
+            if isinstance(entry, RepoFile):
+                paths.add(entry.path)
+                total += 1
+                if total % progress_every == 0:
+                    print(f"  remote inventory: {total} paths listed so far ({label})...", flush=True)
+
+    if prefixes is None:
+        print("Listing entire remote repo (recursive). This can take a long time on large datasets.", flush=True)
+        _consume(
+            api.list_repo_tree(
+                repo_id,
+                recursive=True,
+                repo_type=repo_type,
+                revision=revision,
+                token=token,
+            ),
+            "full tree",
+        )
+        print(f"Remote inventory complete: {len(paths)} file paths.", flush=True)
+        return paths
+
+    print(
+        f"Listing remote files under {len(prefixes)} prefix(es) derived from local paths "
+        f"(not the whole repo tree).",
+        flush=True,
+    )
+    for prefix in prefixes:
+        print(f"  prefix {prefix!r}...", flush=True)
+        try:
+            it = api.list_repo_tree(
+                repo_id,
+                path_in_repo=prefix,
+                recursive=True,
+                repo_type=repo_type,
+                revision=revision,
+                token=token,
+            )
+            _consume(it, prefix)
+        except RemoteEntryNotFoundError:
+            print(f"  prefix {prefix!r}: not on remote yet (empty).", flush=True)
+            continue
+        except HfHubHTTPError as e:
+            code = e.response.status_code if e.response is not None else None
+            if code == 404:
+                print(f"  prefix {prefix!r}: remote 404 (empty).", flush=True)
+                continue
+            raise
+    print(f"Remote inventory complete: {len(paths)} file paths.", flush=True)
     return paths
 
 
 def _chunked(items: list[tuple[Path, str]], size: int) -> list[list[tuple[Path, str]]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def _plan_batches_with_isolated_large_files(
+    pairs: list[tuple[Path, str]],
+    *,
+    max_per: int,
+    isolate_mib: float,
+) -> tuple[list[list[tuple[Path, str]]], int]:
+    """
+    Normal files are chunked to ``max_per`` per commit.
+
+    Files at or above ``isolate_mib`` each get their **own** commit after all smaller batches.
+    This avoids one giant JSONL sharing a single ``create_commit`` with thousands of PNGs, which
+    often stalls tqdm near the end of the large file.
+    """
+    if isolate_mib <= 0:
+        batches = _chunked(pairs, max_per)
+        return batches, 0
+    limit = int(float(isolate_mib) * 1024 * 1024)
+    small: list[tuple[Path, str]] = []
+    large: list[tuple[Path, str]] = []
+    for p, rel in sorted(pairs, key=lambda x: x[1]):
+        try:
+            sz = p.stat().st_size
+        except OSError:
+            small.append((p, rel))
+            continue
+        if sz >= limit:
+            large.append((p, rel))
+        else:
+            small.append((p, rel))
+    batches: list[list[tuple[Path, str]]] = list(_chunked(small, max_per))
+    for item in large:
+        batches.append([item])
+    return batches, len(large)
 
 
 def _commit_batch(
@@ -138,6 +249,64 @@ def _commit_batch(
     return info.oid
 
 
+def _commit_batch_with_heartbeat(
+    api: object,
+    *,
+    repo_id: str,
+    repo_type: str,
+    revision: str | None,
+    token: str,
+    batch: list[tuple[Path, str]],
+    commit_message: str,
+    parent_commit: str | None,
+    num_threads: int,
+    heartbeat_interval: float,
+) -> str:
+    """Wrap ``_commit_batch`` so long LFS phases do not look like a silent hang."""
+    if heartbeat_interval <= 0:
+        return _commit_batch(
+            api,
+            repo_id=repo_id,
+            repo_type=repo_type,
+            revision=revision,
+            token=token,
+            batch=batch,
+            commit_message=commit_message,
+            parent_commit=parent_commit,
+            num_threads=num_threads,
+        )
+
+    stop = threading.Event()
+    started = time.monotonic()
+
+    def _heartbeat_loop() -> None:
+        while not stop.wait(heartbeat_interval):
+            elapsed = time.monotonic() - started
+            print(
+                f"  ... still inside create_commit ({elapsed:.0f}s elapsed); "
+                f"LFS/Hub may be busy; tqdm can pause here without the process being stuck.",
+                flush=True,
+            )
+
+    th = threading.Thread(target=_heartbeat_loop, name="hf-upload-heartbeat", daemon=True)
+    th.start()
+    try:
+        return _commit_batch(
+            api,
+            repo_id=repo_id,
+            repo_type=repo_type,
+            revision=revision,
+            token=token,
+            batch=batch,
+            commit_message=commit_message,
+            parent_commit=parent_commit,
+            num_threads=num_threads,
+        )
+    finally:
+        stop.set()
+        th.join(timeout=min(120.0, heartbeat_interval + 30.0))
+
+
 def _sleep_rate_limit(min_seconds: float) -> None:
     if min_seconds > 0:
         time.sleep(min_seconds)
@@ -168,6 +337,13 @@ def main() -> int:
     p.add_argument("--private", action="store_true", help="Create dataset repo as private if missing")
     p.add_argument("--max-files-per-commit", type=int, default=8000, help="Cap files per commit (< 25k LFS)")
     p.add_argument(
+        "--isolate-lfs-files-mib",
+        type=float,
+        default=48.0,
+        help="Files this large (MiB) or larger are uploaded alone in their own commit after smaller "
+        "batches (0 disables). Avoids huge JSONL + thousands of PNGs in one create_commit. Default 48.",
+    )
+    p.add_argument(
         "--min-seconds-between-commits",
         type=float,
         default=15.0,
@@ -176,13 +352,33 @@ def main() -> int:
     p.add_argument(
         "--num-threads",
         type=int,
-        default=8,
-        help="Threads for LFS preupload inside create_commit",
+        default=4,
+        help="Threads for LFS preupload inside create_commit (lower can reduce stalls on some hosts)",
+    )
+    p.add_argument(
+        "--upload-heartbeat-interval",
+        type=float,
+        default=45.0,
+        help="Seconds between log lines while each create_commit runs (0 disables). "
+        "Helps when tqdm appears frozen during long LFS batches.",
     )
     p.add_argument(
         "--skip-existing",
         action="store_true",
         help="List remote files once and skip paths already present (for resume)",
+    )
+    p.add_argument(
+        "--skip-existing-remote-mode",
+        default="prefixes",
+        choices=("prefixes", "full"),
+        help="With --skip-existing: list remote per top-level prefix from local paths (default), "
+        "or one full recursive repo scan (slow on huge repos).",
+    )
+    p.add_argument(
+        "--remote-inventory-progress-every",
+        type=int,
+        default=25_000,
+        help="Log every N remote paths while building skip-existing inventory (0 disables).",
     )
     p.add_argument("--dry-run", action="store_true", help="Print batch plan only")
     p.add_argument("--hf-token", default=None, help="Override HF_TOKEN / HUGGING_FACE_HUB_TOKEN")
@@ -204,15 +400,29 @@ def main() -> int:
 
     api = HfApi(token=token)
 
+    if args.num_threads > 24:
+        print(
+            f"Note: --num-threads={args.num_threads} is high; Hub LFS sometimes contends or stalls "
+            f"with very large pools. If a batch sits with no new tqdm output, try 8–16 threads and/or "
+            f"a smaller --max-files-per-commit.",
+            file=sys.stderr,
+        )
+
     pairs = _iter_local_files(local_root)
     if args.skip_existing:
-        print("Fetching remote file list (recursive)...", flush=True)
+        if args.skip_existing_remote_mode == "prefixes":
+            prefixes = _top_level_prefixes_from_pairs(pairs)
+        else:
+            prefixes = None
+        prog = max(0, int(args.remote_inventory_progress_every))
         remote = _list_remote_files(
             api,
             args.repo_id,
             repo_type=args.repo_type,
             revision=args.revision,
             token=token,
+            prefixes=prefixes,
+            progress_every=prog if prog > 0 else 10**12,
         )
         before = len(pairs)
         pairs = [(p, r) for p, r in pairs if r not in remote]
@@ -224,13 +434,20 @@ def main() -> int:
 
     max_per = max(1, min(args.max_files_per_commit, 24_000))
 
-    def plan_batches() -> list[list[tuple[Path, str]]]:
-        return _chunked(pairs, max_per)
-
-    batches = plan_batches()
+    batches, n_isolated = _plan_batches_with_isolated_large_files(
+        pairs,
+        max_per=max_per,
+        isolate_mib=float(args.isolate_lfs_files_mib),
+    )
+    iso_note = (
+        f", including {n_isolated} isolated large-file commit(s) (>= {args.isolate_lfs_files_mib:g} MiB each)"
+        if n_isolated
+        else ""
+    )
     print(
         f"Local files to upload: {len(pairs)} in {len(batches)} commit(s) "
-        f"(<={max_per} files/commit, >={args.min_seconds_between_commits}s between commits)",
+        f"(<={max_per} files/commit for multi-file batches{iso_note}, "
+        f">={args.min_seconds_between_commits}s between commits)",
         flush=True,
     )
     if args.dry_run:
@@ -252,7 +469,12 @@ def main() -> int:
         while True:
             attempt += 1
             try:
-                oid = _commit_batch(
+                print(
+                    f"  create_commit attempt {attempt}: uploading {len(batch)} file(s) "
+                    f"(LFS may take a long time per batch)...",
+                    flush=True,
+                )
+                oid = _commit_batch_with_heartbeat(
                     api,
                     repo_id=args.repo_id,
                     repo_type=args.repo_type,
@@ -262,10 +484,17 @@ def main() -> int:
                     commit_message=msg,
                     parent_commit=parent_commit,
                     num_threads=args.num_threads,
+                    heartbeat_interval=float(args.upload_heartbeat_interval),
                 )
                 parent_commit = oid
                 total_commits += 1
                 print(f"Committed {msg} -> {oid[:7]}... (commit #{total_commits})", flush=True)
+                if args.min_seconds_between_commits > 0:
+                    print(
+                        f"  Waiting {args.min_seconds_between_commits}s before next commit "
+                        f"(Hub rate-limit safety; not stuck).",
+                        flush=True,
+                    )
                 _sleep_rate_limit(args.min_seconds_between_commits)
                 return
             except HfHubHTTPError as e:
@@ -274,6 +503,15 @@ def main() -> int:
                 if code == 429:
                     wait = ra if ra is not None else min(120.0, 5.0 * attempt)
                     print(f"429 rate limit; sleeping {wait:.1f}s then retrying...", flush=sys.stderr)
+                    time.sleep(wait)
+                    continue
+                if code in (408, 502, 503, 504) and attempt <= 12:
+                    wait = ra if ra is not None else min(180.0, 5.0 * attempt)
+                    print(
+                        f"HTTP {code} on create_commit; sleeping {wait:.1f}s then retrying "
+                        f"(attempt {attempt}/12)...",
+                        flush=sys.stderr,
+                    )
                     time.sleep(wait)
                     continue
                 if code == 413 and len(batch) > 1:

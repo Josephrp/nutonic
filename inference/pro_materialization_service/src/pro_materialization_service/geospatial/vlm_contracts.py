@@ -56,6 +56,13 @@ VLM_CONTRACTS: dict[str, VlmContract] = {
 
     ),
 
+    "nutonic.pro.vlm.v1_512_s2_only": VlmContract(
+        contract_id="nutonic.pro.vlm.v1_512_s2_only",
+        width=512,
+        height=512,
+        roles=("sentinel_fc", "cloud_mask_thumb"),
+    ),
+
 }
 
 

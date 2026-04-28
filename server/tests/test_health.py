@@ -63,6 +63,8 @@ def test_openapi_yaml_parseable() -> None:
         "/api/v1/ranked/rounds/{round_id}/submit",
         "/api/v1/pro/jobs",
         "/api/v1/pro/jobs/{job_id}",
+        "/api/v1/pro/jobs/{job_id}/cancel",
+        "/api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}",
     ):
         assert key in paths, f"missing path {key}"
 

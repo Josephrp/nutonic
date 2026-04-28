@@ -5,18 +5,21 @@ Shard high-file-count media directories for Hugging Face Hub **dataset** uploads
 Problem
 -------
 The Hub enforces a **hard limit of 10_000 entries per directory** in the underlying git tree.
-LFM-VL SFT builds place almost all PNGs directly under ``images/`` (and similarly under
-``mapbox_stills/``, optionally ``overlays/``), and one JSON sidecar per tile under
-``metadata/``. Full runs exceed the Hub limit (10k **files per directory**); commits fail with
-HTTP **400** for ``/images/``, ``/mapbox_stills/``, and/or ``/metadata/``.
+LFM-VL and sat-bbox metadata SFT builds place almost all PNGs directly under ``images/`` (and
+similarly under ``mapbox_stills/``, ``analysis_images/``, optionally ``overlays/``), and flat JSON
+under ``metadata/``. Full runs exceed the Hub limit (10k **files per directory**); commits fail with
+HTTP **400** for those directories when unsharded.
 
 This script copies the dataset to a new root and:
 
 * When a folder has **more than** ``--max-files-per-dir`` direct children files, moves them into
   ``<dir>/s00000/``, ``<dir>/s00001/``, … (default **8000** children per shard, under 10k).
-  Applies to ``images/*.png``, ``mapbox_stills/*.png``, ``overlays/*.png``, and ``metadata/*.json``.
+  Applies to ``images/*.png``, ``mapbox_stills/*.png``, ``overlays/*.png``, ``analysis_images/*.png``,
+  flat ``metadata/*.json``, and flat ``metadata/sft_metadata_rows/*.json`` (sat-bbox metadata SFT
+  per-row sidecars).
 * Re-writes **relative path strings** inside ``data/*.jsonl`` and every ``metadata/**/*.json``
   so they match the new layout (e.g. ``images/poi_....png`` → ``images/s00003/poi_....png``,
+  ``analysis_images/...png`` → ``analysis_images/s00003/...png``,
   ``metadata/poi_....json`` → ``metadata/s00012/poi_....json`` when sharded).
 
 Shard assignment is **deterministic** (sorted filenames, contiguous blocks) so re-runs are
@@ -51,13 +54,21 @@ _SHARD_DIR_RE = re.compile(r"^s\d{5}$")
 _IMAGE_SUFFIX = frozenset({".png", ".jpg", ".jpeg", ".webp"})
 _JSON_SUFFIX = frozenset({".json"})
 
-# (directory name under dataset root, allowed file suffixes for flat children to shard/copy)
+# (relative path under dataset root, POSIX; allowed file suffixes for *direct* children to shard)
+# ``metadata/sft_metadata_rows`` must come before ``metadata`` so per-row sidecars are sharded
+# before the parent directory is copied (parent skips this subdir when doing a non-flat pass).
 _SHARD_TARGETS: tuple[tuple[str, frozenset[str]], ...] = (
     ("images", _IMAGE_SUFFIX),
     ("mapbox_stills", _IMAGE_SUFFIX),
     ("overlays", _IMAGE_SUFFIX),
+    ("analysis_images", _IMAGE_SUFFIX),
+    ("metadata/sft_metadata_rows", _JSON_SUFFIX),
     ("metadata", _JSON_SUFFIX),
 )
+
+
+def _media_path(root: Path, media_posix: str) -> Path:
+    return root.joinpath(*media_posix.split("/")) if media_posix else root
 
 
 def _list_flat_files(media_root: Path, suffixes: frozenset[str]) -> list[Path]:
@@ -114,10 +125,10 @@ def _materialize_shard_trees(
     """
     remap: dict[str, str] = {}
     for media, suffixes in _SHARD_TARGETS:
-        mdir = src_root / media
+        mdir = _media_path(src_root, media)
         if not mdir.is_dir():
             continue
-        dst_media = dst_root / media
+        dst_media = _media_path(dst_root, media)
         dst_media.mkdir(parents=True, exist_ok=True)
 
         files = _list_flat_files(mdir, suffixes)
@@ -129,7 +140,19 @@ def _materialize_shard_trees(
             )
 
         if not files:
-            shutil.copytree(mdir, dst_media, dirs_exist_ok=True)
+            if media == "metadata":
+                # Do not copy ``sft_metadata_rows`` here: it is handled by the
+                # ``metadata/sft_metadata_rows`` target (possibly tens of thousands of JSON files).
+                for child in sorted(mdir.iterdir()):
+                    if child.name == "sft_metadata_rows" and child.is_dir():
+                        continue
+                    dest = dst_media / child.name
+                    if child.is_file():
+                        _copy_or_link(child, dest, link=link)
+                    elif child.is_dir():
+                        shutil.copytree(child, dest, dirs_exist_ok=True)
+            else:
+                shutil.copytree(mdir, dst_media, dirs_exist_ok=True)
             continue
 
         if len(files) <= max_per:
@@ -142,7 +165,7 @@ def _materialize_shard_trees(
             old_posix = f"{media}/{src_file.name}"
             new_posix = f"{media}/{new_under_media}"
             remap[old_posix] = new_posix
-            dest = dst_root / new_posix
+            dest = _media_path(dst_root, new_posix)
             _copy_or_link(src_file, dest, link=link)
 
     return remap
@@ -267,15 +290,16 @@ def main() -> int:
 
     dst_root.mkdir(parents=True, exist_ok=True)
 
-    # 1) Copy everything except dirs we rebuild (images, mapbox_stills, overlays, metadata)
-    skip = {name for name, _sfx in _SHARD_TARGETS}
+    # 1) Copy everything except top-level dirs we rebuild (images, mapbox_stills, …, metadata).
+    skip = {media.split("/")[0] for media, _sfx in _SHARD_TARGETS}
     for media, _sfx in _SHARD_TARGETS:
-        if (src_root / media).is_dir():
-            (dst_root / media).mkdir(parents=True, exist_ok=True)
+        top = media.split("/")[0]
+        if (src_root / top).is_dir():
+            (dst_root / top).mkdir(parents=True, exist_ok=True)
 
     _copy_aux_tree(src_root, dst_root, skip_names=skip)
 
-    # 2) Materialize sharded (or flat) images / mapbox_stills / overlays / metadata
+    # 2) Materialize sharded (or flat) images / mapbox_stills / overlays / analysis_images / metadata
     remap = _materialize_shard_trees(src_root, dst_root, max_per=max_per, link=args.link)
 
     # 3) Rewrite JSONL under data/
@@ -293,11 +317,9 @@ def main() -> int:
             if not js.is_file():
                 continue
             rel = js.relative_to(meta_src)
-            if len(rel.parts) == 1:
-                key = f"metadata/{rel.name}"
-                dest_path = dst_root / Path(remap.get(key, key))
-            else:
-                dest_path = dst_root / "metadata" / rel
+            key = f"metadata/{rel.as_posix()}"
+            dest_key = remap.get(key, key)
+            dest_path = _media_path(dst_root, dest_key)
             _rewrite_json_file(js, dest_path, remap)
 
     # 5) Append layout note to README if present
@@ -307,7 +329,8 @@ def main() -> int:
             "\n\n---\n\n## Hub layout (sharded)\n\n"
             "This snapshot was processed with "
             "`python data/scripts/shard_lfm_vl_dataset_for_hub.py` so that "
-            f"``images/``, ``mapbox_stills/``, ``overlays/``, and ``metadata/`` use at most **{max_per}** "
+            f"``images/``, ``mapbox_stills/``, ``overlays/``, ``analysis_images/``, ``metadata/``, "
+            f"and ``metadata/sft_metadata_rows/`` use at most **{max_per}** "
             "files per leaf directory (Hub git limit: 10k files per directory). "
             "JSONL paths may include ``sNNNNN/`` shard segments where needed.\n"
         )

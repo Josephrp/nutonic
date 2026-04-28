@@ -51,6 +51,7 @@ import com.nutonic.audio.NutonicBgmTrack
 import com.nutonic.cache.AiGuessStore
 import com.nutonic.cache.CachedDocumentWithMergeOutcome
 import com.nutonic.cache.ContentCacheRepository
+import com.nutonic.cache.ProOverlayGuessRepository
 import com.nutonic.cache.ShippedManifestMergeOutcome
 import com.nutonic.cache.locationForMap
 import com.nutonic.cache.ensurePlayableLocationFromShipped
@@ -71,6 +72,7 @@ import com.nutonic.filter.PlatformContext
 import com.nutonic.filter.getPlatformContext
 import com.nutonic.map.ViewportBounds
 import com.nutonic.resources.Res
+import com.nutonic.settings.ClientSettings
 import com.nutonic.style.NutonicColors
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicPrimaryButton
@@ -139,14 +141,20 @@ fun WorldMapGameplayDetail(
     mapId: String,
     mapTitle: String? = null,
     playerRole: String? = null,
+    clientSettings: ClientSettings? = null,
     contentCacheRepository: ContentCacheRepository? = null,
     localLeaderboardRepository: LocalNonRankedLeaderboardRepository? = null,
     nutonicApiClient: NutonicApiClient? = null,
     guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
+    proOverlayGuessRepository: ProOverlayGuessRepository? = null,
     /** When set, local truth/score HUD is suppressed until server [postRankedRoundSubmit] resolves (W6). */
     rankedSession: RankedPlaySession? = null,
     onBack: () -> Unit,
 ) {
+    val showTimer = clientSettings?.showTimer != false
+    val showScorePreview = clientSettings?.showScorePreview != false
+    val showCoordinateReadout = clientSettings?.showCoordinateReadout != false
+
     val scope = rememberCoroutineScope()
     var manifestSnapshot by remember { mutableStateOf<CacheManifestDocument?>(null) }
     var manifestVersionNotice by remember { mutableStateOf<String?>(null) }
@@ -340,13 +348,17 @@ fun WorldMapGameplayDetail(
         referenceStillFailed = referenceStill == null
     }
 
-    val aiGuessStore = remember(manifestSnapshot) { manifestSnapshot?.let(::AiGuessStore) }
+    val aiGuessStore =
+        remember(manifestSnapshot, proOverlayGuessRepository) {
+            manifestSnapshot?.let { AiGuessStore(it, proOverlayGuessRepository) }
+        }
     val effectiveMapId = rankedForUi?.clue?.mapId ?: mapId
-    val aiForRound: LatLon? =
+    val aiForRoundResolution =
         when {
             stillLocation?.aiMarkerPhaseEnabled == false -> null
-            else -> aiGuessStore?.coordinates(effectiveMapId, locationId)
+            else -> aiGuessStore?.resolution(effectiveMapId, locationId)
         }
+    val aiForRound: LatLon? = aiForRoundResolution?.coordinates
 
     var rankedServerOutcome by remember { mutableStateOf<RankedSubmitOut?>(null) }
     var rankedServerError by remember { mutableStateOf<String?>(null) }
@@ -385,7 +397,7 @@ fun WorldMapGameplayDetail(
                     return@LaunchedEffect
                 }
                 is ApiResult.NetworkFailure -> {
-                    rankedServerError = t.debugMessage
+                    rankedServerError = "Network unavailable while requesting ranked token."
                     return@LaunchedEffect
                 }
             }
@@ -405,7 +417,7 @@ fun WorldMapGameplayDetail(
         ) {
             is ApiResult.Ok -> rankedServerOutcome = sub.value
             is ApiResult.HttpFailure -> rankedServerError = sub.userMessage
-            is ApiResult.NetworkFailure -> rankedServerError = sub.debugMessage
+            is ApiResult.NetworkFailure -> rankedServerError = "Network unavailable while submitting ranked result."
         }
     }
 
@@ -678,6 +690,8 @@ fun WorldMapGameplayDetail(
                     scorePoints = scorePoints,
                     distanceKm = distanceKm,
                     aiDistanceToTruthKm = if (lockedGuess != null) aiVsTruthKm else null,
+                    showTimer = showTimer,
+                    showScorePreview = showScorePreview,
                     modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
                 )
 
@@ -821,14 +835,15 @@ fun WorldMapGameplayDetail(
                             hideSuccessOverlay = false
                             gameplayStatus =
                                 if (aiForRound != null) {
-                                    "Guess submitted. AI marker placed from manifest cache."
+                                    "Guess submitted. AI marker placed for comparison."
                                 } else {
-                                    "Guess submitted. AI marker unavailable for this slice — compare on map if shown."
+                                    "Guess submitted. AI marker unavailable for this round."
                                 }
                         }
                     },
                     currentGuess = lockedGuess ?: provisionalGuess,
                     locked = lockedGuess != null,
+                    showCoordinateReadout = showCoordinateReadout,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp),
                 )
             }
@@ -838,7 +853,6 @@ fun WorldMapGameplayDetail(
                 style = MaterialTheme.typography.body2,
                 color = MaterialTheme.colors.onBackground,
             )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -872,8 +886,30 @@ fun WorldMapGameplayDetail(
                 Button(
                     modifier = Modifier.weight(1f).testTag("worldMapPeerButton"),
                     onClick = {
-                        peerRevealEnabled = !peerRevealEnabled
-                        gameplayStatus = if (peerRevealEnabled) "Peer reveal uplink opened." else "Peer reveal hidden."
+                        if (rankedForUi == null) {
+                            peerRevealEnabled = !peerRevealEnabled
+                            gameplayStatus = if (peerRevealEnabled) "Peer reveal uplink opened." else "Peer reveal hidden."
+                        } else if (peerRevealEnabled) {
+                            peerRevealEnabled = false
+                            gameplayStatus = "Peer reveal hidden."
+                        } else {
+                            scope.launch {
+                                val ok =
+                                    rankedAssistForfeitSatisfied ||
+                                        postRankedForfeitOr409(
+                                            rankedForUi,
+                                            nutonicApiClient,
+                                            "peer_reveal",
+                                        )
+                                if (ok) {
+                                    rankedAssistForfeitSatisfied = true
+                                    peerRevealEnabled = true
+                                    gameplayStatus = "Ranked: peer-reveal forfeit recorded (server)."
+                                } else {
+                                    gameplayStatus = "Ranked forfeit failed - peer marker stayed hidden."
+                                }
+                            }
+                        }
                     },
                 ) {
                     Text(if (peerRevealEnabled) "Hide peer" else "Show peer")
@@ -922,6 +958,8 @@ private fun GameplayHudCard(
     scorePoints: Int?,
     distanceKm: Double?,
     aiDistanceToTruthKm: Double?,
+    showTimer: Boolean,
+    showScorePreview: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -932,12 +970,14 @@ private fun GameplayHudCard(
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text("Status", style = MaterialTheme.typography.caption, color = MaterialTheme.colors.primary)
-            Text(
-                "Elapsed (for fun, not scored): ${elapsedSeconds}s",
-                style = MaterialTheme.typography.body2,
-            )
-            Text("Sector time (not scored): ${remainingSeconds}s", style = MaterialTheme.typography.body2)
-            if (scorePoints != null && distanceKm != null) {
+            if (showTimer) {
+                Text(
+                    "Sector time (not scored): elapsed ${elapsedSeconds}s",
+                    style = MaterialTheme.typography.body2,
+                )
+                Text("Sector time (not scored): ${remainingSeconds}s", style = MaterialTheme.typography.body2)
+            }
+            if (showScorePreview && scorePoints != null && distanceKm != null) {
                 Text("Distance: ${distanceKm.format(2)} km", style = MaterialTheme.typography.caption)
                 Text("Score: $scorePoints", style = MaterialTheme.typography.caption)
                 if (aiDistanceToTruthKm != null) {
@@ -946,6 +986,8 @@ private fun GameplayHudCard(
                         style = MaterialTheme.typography.caption,
                     )
                 }
+            } else if (!showScorePreview) {
+                Text("Score preview hidden in settings.", style = MaterialTheme.typography.caption)
             } else {
                 Text(
                     "Submit one guess to resolve distance and score (ranked: server verifies).",
@@ -1134,6 +1176,7 @@ private fun GuessModal(
     onSubmit: () -> Unit,
     currentGuess: LatLon?,
     locked: Boolean,
+    showCoordinateReadout: Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (!expanded) {
@@ -1181,16 +1224,20 @@ private fun GuessModal(
                 }
             }
 
-            val coords = currentGuess
-            Text(
-                text =
-                    if (coords != null) {
-                        "Current guess: ${coords.latitude.format()} / ${coords.longitude.format()}"
-                    } else {
-                        "Current guess: none"
-                    },
-                style = MaterialTheme.typography.caption,
-            )
+            if (showCoordinateReadout) {
+                val coords = currentGuess
+                Text(
+                    text =
+                        if (coords != null) {
+                            "Current guess: ${coords.latitude.format()} / ${coords.longitude.format()}"
+                        } else {
+                            "Current guess: none"
+                        },
+                    style = MaterialTheme.typography.caption,
+                )
+            } else {
+                Text("Current guess is set on-map (coordinate readout hidden).", style = MaterialTheme.typography.caption)
+            }
             Text(
                 text = "Single primary submit per round.",
                 style = MaterialTheme.typography.caption,

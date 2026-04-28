@@ -118,6 +118,7 @@ That repository is a **geospatial ML pipeline** for **TerraMesh** (satellite / m
 
 - **Primary geographic reference (SCAN):** each round ships a **downsampled Mapbox still** aligned to the target; the player matches it on the **world map** with their guess marker.
 - **Optional assists (SCAN, all pre-cached in bundle / manifest):** (1) **Street View description pack**—AI-generated **text** from **LFM-VL** (or equivalent) over **cached** multi-pano frames at **decoy / sampling** viewpoints for that target (see **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`**); (2) **Useful hints**—**up to six** monotonic specificity bands (continent → marine/hydro framing → subnational → country-scale synthesis, **script-generated** by default), **schema-capped**, and **coordinate-free in every band including the strongest**—never raw latitude/longitude literals in hint text unless product ships an explicit teach mode. **Ranked:** opening these forfeits verified placement (**`docs/RANKED-MODE.md`**). **Non-ranked:** no score consequence.
+- **Optional PRO-to-gameplay handoff:** PRO mini-app outputs can be displayed in SCAN only through an explicit user-selected overlay path. They do not rewrite manifest `ai_guesses`, `AiGuessStore` defaults, ranked truth, or local scoring inputs. UI must label marker provenance (`manifest` vs `PRO run`) whenever a PRO-derived marker is shown.
 - **TerraMesh** or other EO modalities may appear in **future `round_type`s**; if added, treat as a **separate** pipeline while sharing **haversine scoring**.
 
 ---

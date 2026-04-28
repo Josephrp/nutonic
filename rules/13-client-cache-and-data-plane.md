@@ -4,7 +4,7 @@
 
 - **Kotlin / Compose clients** (and any TS web shell) **do not** bundle `hf`, `huggingface_hub`, or Hub **write** tokens.
 - **Dataset artifacts**, **precomputed AI guesses**, **TiM job outputs** (schema-defined), and **location-pool shards** are produced **server-side or by HF Jobs**, stored on the Hub (or built in CI), then **consumed by the reference server** (if used), which exposes **versioned HTTP APIs** or **static bundle URLs** to clients.
-- Clients **may** download **opaque blobs** (JSON, protobuf, small Parquet) **from the NU:TONIC reference server** (or CDN fronting it)—never directly from `huggingface.co` in production unless product explicitly documents an exception (e.g. read-only public asset URLs with no secrets).
+- Clients **may** download **opaque blobs** (JSON, protobuf, small Parquet, and PRO model artifacts) **from the NU:TONIC reference server** (or signed CDN fronting it)—never directly from `huggingface.co` in production unless product explicitly documents an exception (e.g. read-only public asset URLs with no secrets). Large PRO model artifacts must be described by an OpenAPI manifest with size/hash/revision and cached in the app sandbox, not committed to the app repo.
 
 ## Rule: local-first persistence on clients
 

@@ -2,4 +2,6 @@ package com.nutonic
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
-actual val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+// Kotlin/Native: Dispatchers.IO is internal; use Default (matches jsMain actual).
+actual val ioDispatcher: CoroutineDispatcher = Dispatchers.Default

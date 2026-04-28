@@ -2,21 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, AsyncIterator
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
 from nutonic_server.bundles import resolve_bundle_bytes
-from nutonic_server.inference_client import InferenceClient, InferenceClientConfig
 import nutonic_server.catalog as game_catalog
 from nutonic_server.deps import (
+    get_pro_job_runner,
+    get_pro_job_store,
     get_settings,
     require_guess_record_claims,
     require_post_leaderboard_claims,
@@ -24,11 +26,15 @@ from nutonic_server.deps import (
     require_ranked_read_public,
     require_ranked_session,
     require_session_jwt,
+    shutdown_pro_job_runners,
+    start_pro_job_runner_for_settings,
 )
 from nutonic_server.guess_telemetry_store import GuessTelemetryIn, create_guess_telemetry_store
 from nutonic_server.haversine import haversine_km, score_from_distance_km
 from nutonic_server.jwt_tokens import decode_round_ticket, issue_round_ticket, issue_session_token
 from nutonic_server.leaderboard_store import LeaderboardRow, create_leaderboard_store
+from nutonic_server.pro_jobs_runner import ProJobRunner
+from nutonic_server.pro_jobs_store import ProJobRecord, ProJobStore
 from nutonic_server.ranked_store import create_ranked_store
 from nutonic_server.schemas import (
     CacheManifestOut,
@@ -37,9 +43,14 @@ from nutonic_server.schemas import (
     LeaderboardPostIn,
     LeaderboardRowOut,
     MapSummaryOut,
+    ProArtifactRef,
+    ProBriefSection,
+    ProJobCancelOut,
     ProJobCreateIn,
     ProJobCreateOut,
     ProJobStatusOut,
+    ProVlmModelManifest,
+    ProOnDevicePayload,
     RankedClueOut,
     RankedForfeitIn,
     RankedForfeitOut,
@@ -56,47 +67,23 @@ game_catalog.configure_catalog_from_manifest_path(settings.manifest_full_path)
 _leaderboard_store = create_leaderboard_store(settings)
 _ranked_store = create_ranked_store(settings.ranked_database_url)
 _guess_telemetry_store = create_guess_telemetry_store(settings.guess_telemetry_database_url)
-_pro_job_status: dict[str, str] = {}  # job_id -> "queued" | "completed"
-_pro_job_materialization: dict[str, dict] = {}  # job_id -> summarized worker JSON (IMP-114)
 
 
-def _summarize_materialize_worker_response(data: dict) -> dict:
-    """Strip huge base64 from stored job payloads."""
-    rm = data.get("run_manifest") or {}
-    slim_rm = {
-        k: rm[k]
-        for k in (
-            "mapbox_center_mode",
-            "mapbox_attribution",
-            "bbox_wgs84",
-            "vlm_canvas",
-            "s2_asset_mapping_version",
-        )
-        if k in rm
-    }
-    arts: list[dict] = []
-    for a in data.get("vlm_artifacts") or []:
-        if isinstance(a, dict):
-            arts.append({k: a[k] for k in ("role", "sha256", "mime", "width", "height") if k in a})
-    out: dict = {
-        "materialization_id": data.get("materialization_id"),
-        "cache_key": data.get("cache_key"),
-        "run_manifest": slim_rm,
-        "vlm_artifacts": arts,
-    }
-    tp = data.get("tim_payload")
-    if isinstance(tp, dict):
-        out["tim_payload"] = {
-            "branch": tp.get("branch"),
-            "modalities_keys": tp.get("modalities_keys"),
-            "has_npz": bool(tp.get("npz_base64")),
-        }
-    return out
+@asynccontextmanager
+async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    s = load_settings()
+    if s.feature_pro_jobs:
+        start_pro_job_runner_for_settings(s)
+    try:
+        yield
+    finally:
+        shutdown_pro_job_runners(grace_seconds=30.0)
 
 app = FastAPI(
     title="NU:TONIC Game Server",
     version="0.1.0",
     description="Thin orchestrator API (`/api/v1/*`). OpenAPI source: repo `docs/openapi.yaml`.",
+    lifespan=_lifespan,
 )
 
 
@@ -424,115 +411,240 @@ def ranked_round_submit(
 @app.post("/api/v1/pro/jobs", tags=["pro"], response_model=ProJobCreateOut)
 def pro_create_job(
     body: ProJobCreateIn,
-    s: Annotated[Settings, Depends(get_settings)],
     _: Annotated[None, Depends(require_pro_jobs_feature)],
     claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
+    runner: Annotated[ProJobRunner, Depends(get_pro_job_runner)],
 ) -> ProJobCreateOut:
-    """PRO control plane: health probes (IMP-092) + optional ``POST …/internal/v1/materialize`` (IMP-114)."""
-    jid = uuid.uuid4().hex
-    _pro_job_status[jid] = "queued"
-    _ = claims
-    origins = [
-        o
-        for o in (
-            s.inference_worker_base_url.strip(),
-            s.pro_materialization_service_url.strip(),
-        )
-        if o
-    ]
-    pro_url = s.pro_materialization_service_url.strip()
-    inference_ok: bool | None = None
-    materialization_ok: bool | None = None
-    materialization_id: str | None = None
-    cache_key: str | None = None
-    materialization_error: str | None = None
-    if pro_url:
-        materialization_ok = False
-    if origins:
-        try:
-            hmac_secret = s.inference_hmac_secret.strip() or None
-            ic_cfg = InferenceClientConfig(hmac_secret=hmac_secret)
-            with InferenceClient(config=ic_cfg) as ic:
-                inference_ok = all(ic.probe_health_origin(o) for o in origins)
-                if pro_url and inference_ok:
-                    base = pro_url.rstrip("/")
-                    try:
-                        mreq = {
-                            "latitude": body.center_lat,
-                            "longitude": body.center_lon,
-                            "bbox_half_km": body.bbox_half_km,
-                            "mapbox_zoom": body.mapbox_zoom,
-                            "enable_tim": body.enable_tim,
-                            "tim_branch": body.tim_branch,
-                            "vlm_contract_id": body.vlm_contract_id,
-                            "sentinel_fetch_mode": body.sentinel_fetch_mode,
-                        }
-                        if body.datetime_interval:
-                            mreq["datetime_interval"] = body.datetime_interval
-                        mat = ic.post_json(
-                            f"{base}/internal/v1/materialize",
-                            json_body=mreq,
-                            read_timeout_s=120.0,
-                        )
-                        materialization_ok = True
-                        materialization_id = str(mat.get("materialization_id") or "") or None
-                        cache_key = str(mat.get("cache_key") or "") or None
-                        _pro_job_materialization[jid] = _summarize_materialize_worker_response(mat)
-                    except Exception as e:
-                        materialization_ok = False
-                        materialization_error = str(e)[:500]
-                        _pro_job_materialization[jid] = {"error": materialization_error}
-                elif pro_url and inference_ok is False:
-                    materialization_ok = False
-                    materialization_error = "inference_health_probe_failed"
-                    _pro_job_materialization[jid] = {"error": materialization_error}
-        except Exception:
-            inference_ok = False
-            if pro_url:
-                materialization_ok = False
-                materialization_error = "inference_client_error"
-                _pro_job_materialization[jid] = {"error": materialization_error}
-    return ProJobCreateOut(
-        job_id=jid,
-        status="queued",
-        inference_upstream_ok=inference_ok,
-        materialization_ok=materialization_ok,
-        materialization_id=materialization_id,
-        cache_key=cache_key,
-        materialization_error=materialization_error,
+    """PRO control plane: persist and enqueue; worker I/O happens outside the request path."""
+    session_id = _session_id_or_401(claims)
+    record = store.create_job(
+        session_id=session_id,
+        analysis_profile=body.analysis_profile,
+        request_params=body.model_dump(mode="json"),
     )
+    runner.submit(record.job_id)
+    return ProJobCreateOut(job_id=record.job_id, status="queued")
+
+
+@app.get("/api/v1/pro/jobs", tags=["pro"], response_model=list[ProJobStatusOut])
+def pro_list_jobs(
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    status_filter: Annotated[str | None, Query(alias="status")] = None,
+) -> list[ProJobStatusOut]:
+    session_id = _session_id_or_401(claims)
+    statuses = _parse_status_filter(status_filter)
+    return [_pro_status_out(row) for row in store.list_jobs(session_id=session_id, limit=limit, statuses=statuses)]
 
 
 @app.get("/api/v1/pro/jobs/{job_id}", tags=["pro"], response_model=ProJobStatusOut)
 def pro_job_status(
     job_id: str,
     _: Annotated[None, Depends(require_pro_jobs_feature)],
-    __: Annotated[dict[str, object], Depends(require_session_jwt)],
+    claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
 ) -> ProJobStatusOut:
-    st = _pro_job_status.get(job_id)
-    if st is None:
+    session_id = _session_id_or_401(claims)
+    row = store.get_job(job_id, session_id=session_id)
+    if row is None:
         raise HTTPException(status_code=404, detail="Unknown job_id")
-    detail = _pro_job_materialization.get(job_id)
-    mid = None if not detail or "error" in detail else detail.get("materialization_id")
-    ck = None if not detail or "error" in detail else detail.get("cache_key")
-    if st == "queued":
-        _pro_job_status[job_id] = "completed"
-        return ProJobStatusOut(
-            job_id=job_id,
-            status="queued",
-            bundle_download_url=None,
-            materialization_id=mid if isinstance(mid, str) else None,
-            cache_key=ck if isinstance(ck, str) else None,
-            materialization_summary=detail,
-        )
-    return ProJobStatusOut(
-        job_id=job_id,
-        status="completed",
-        bundle_download_url=None,
-        materialization_id=mid if isinstance(mid, str) else None,
-        cache_key=ck if isinstance(ck, str) else None,
-        materialization_summary=detail,
+    return _pro_status_out(row)
+
+
+@app.get("/api/v1/pro/vlm/model-manifest", tags=["pro"], response_model=ProVlmModelManifest)
+def pro_vlm_model_manifest(
+    s: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    __: Annotated[dict[str, object], Depends(require_session_jwt)],
+) -> ProVlmModelManifest:
+    contract_ids = s.pro_vlm_model_contract_id_list()
+    if not (
+        s.pro_vlm_model_bundle_id.strip()
+        and s.pro_vlm_model_revision.strip()
+        and s.pro_vlm_model_download_url.strip()
+        and s.pro_vlm_model_sha256.strip()
+        and s.pro_vlm_model_size_bytes > 0
+        and contract_ids
+    ):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="PRO VLM model manifest is not configured")
+    return ProVlmModelManifest(
+        model_bundle_id=s.pro_vlm_model_bundle_id.strip(),
+        revision=s.pro_vlm_model_revision.strip(),
+        download_url=s.pro_vlm_model_download_url.strip(),
+        sha256=s.pro_vlm_model_sha256.strip().lower(),
+        size_bytes=s.pro_vlm_model_size_bytes,
+        runtime=s.pro_vlm_model_runtime.strip() or "leap",
+        contract_ids=contract_ids,
     )
+
+
+@app.post("/api/v1/pro/jobs/{job_id}/cancel", tags=["pro"], response_model=ProJobCancelOut)
+def pro_cancel_job(
+    job_id: str,
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
+) -> ProJobCancelOut:
+    session_id = _session_id_or_401(claims)
+    outcome = store.request_cancel(job_id, session_id=session_id)
+    if outcome == "not_found":
+        raise HTTPException(status_code=404, detail="Unknown job_id")
+    if outcome in {"completed", "failed"}:
+        raise HTTPException(status_code=409, detail=f"Job already {outcome}")
+    return ProJobCancelOut(status=outcome)
+
+
+@app.get("/api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}", tags=["pro"], response_model=None)
+def pro_get_artifact(
+    job_id: str,
+    artifact_id: str,
+    s: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
+) -> FileResponse:
+    session_id = _session_id_or_401(claims)
+    row = store.get_job(job_id, session_id=session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Unknown job_id")
+    artifact = next((a for a in row.artifact_manifest or [] if a.get("artifact_id") == artifact_id), None)
+    if artifact is None:
+        raise HTTPException(status_code=404, detail="Unknown artifact_id")
+    path = _artifact_path(s.pro_artifact_root, job_id, artifact_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Artifact bytes are not available")
+    return FileResponse(
+        path,
+        media_type=str(artifact.get("mime_type") or "application/octet-stream"),
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
+
+
+def _session_id_or_401(claims: dict[str, object]) -> str:
+    session_id = str(claims.get("session_id") or "")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="session_id missing in token")
+    return session_id
+
+
+def _parse_status_filter(raw: str | None) -> set[str] | None:
+    if not raw:
+        return None
+    allowed = {"queued", "running", "completed", "failed", "cancelled"}
+    statuses = {part.strip() for part in raw.split(",") if part.strip()}
+    unknown = statuses - allowed
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Unknown PRO job status filter: {', '.join(sorted(unknown))}")
+    return statuses or None
+
+
+def _pro_status_out(row: ProJobRecord) -> ProJobStatusOut:
+    artifacts = [_artifact_ref(row.job_id, a) for a in row.artifact_manifest or []]
+    analysis_artifacts = [a for a in artifacts if a.profile != "brief_only"]
+    brief_artifacts = [a for a in artifacts if a.profile == "brief_only" or a.kind == "brief"]
+    status_reason = row.error_class or ("cancelled" if row.status == "cancelled" else None)
+    materialization_summary = row.materialization_summary or None
+    return ProJobStatusOut(
+        job_id=row.job_id,
+        status=row.status,
+        status_reason=status_reason,
+        error_class=row.error_class,
+        error_detail=row.error_detail,
+        progress_pct=row.progress_pct,
+        profile=row.analysis_profile,
+        analysis_profile=row.analysis_profile,
+        started_at=row.started_at,
+        finished_at=row.finished_at,
+        artifacts=artifacts,
+        analysis_artifacts=analysis_artifacts,
+        brief_artifacts=brief_artifacts,
+        scene_provenance=row.scene_provenance or None,
+        on_device_payload=_on_device_payload(materialization_summary, analysis_artifacts),
+        bundle_download_url=None,
+        materialization_id=row.materialization_id,
+        cache_key=row.cache_key,
+        materialization_summary=materialization_summary,
+    )
+
+
+def _artifact_ref(job_id: str, raw: dict[str, object]) -> ProArtifactRef:
+    artifact_id = str(raw.get("artifact_id") or "")
+    download_url = f"/api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}" if artifact_id else None
+    return ProArtifactRef(
+        artifact_id=artifact_id,
+        kind=str(raw.get("kind") or "binary"),
+        mime_type=str(raw.get("mime_type") or "application/octet-stream"),
+        size_bytes=raw.get("size_bytes") if isinstance(raw.get("size_bytes"), int) else None,
+        profile=str(raw.get("profile") or "") or None,
+        contract_id=str(raw.get("contract_id") or "") or None,
+        role=str(raw.get("role") or "") or None,
+        category=str(raw.get("category") or "") or None,
+        required_for_profile=bool(raw.get("required_for_profile")),
+        download_url=download_url,
+    )
+
+
+def _on_device_payload(
+    materialization_summary: dict[str, object] | None,
+    analysis_artifacts: list[ProArtifactRef],
+) -> ProOnDevicePayload | None:
+    if not materialization_summary:
+        return None
+    brief = materialization_summary.get("brief_summary")
+    if not isinstance(brief, dict):
+        return None
+    sections: list[ProBriefSection] = []
+    executive_summary = brief.get("executive_summary")
+    if isinstance(executive_summary, str) and executive_summary.strip():
+        sections.append(
+            ProBriefSection(
+                title="Executive summary",
+                body=_bounded_text(executive_summary, 2000),
+                confidence=_brief_confidence(brief),
+            )
+        )
+    key_findings = brief.get("key_findings")
+    if isinstance(key_findings, list) and key_findings:
+        body = "\n".join(f"- {str(item)[:300]}" for item in key_findings[:5])
+        sections.append(ProBriefSection(title="Key findings", body=_bounded_text(body, 2000), confidence=_brief_confidence(brief)))
+    recommended_actions = brief.get("recommended_actions")
+    if isinstance(recommended_actions, list) and recommended_actions:
+        body = "\n".join(f"- {str(item)[:300]}" for item in recommended_actions[:5])
+        sections.append(ProBriefSection(title="Recommended actions", body=_bounded_text(body, 2000), confidence=None))
+    if not sections and not analysis_artifacts:
+        return None
+    return ProOnDevicePayload(
+        brief_sections=sections[:5],
+        overlay_refs=analysis_artifacts[:4],
+        confidence_summary=_brief_confidence(brief),
+    )
+
+
+def _brief_confidence(brief: dict[str, object]) -> str | None:
+    confidence = brief.get("confidence")
+    if isinstance(confidence, str) and confidence.strip():
+        return confidence.strip()[:64]
+    return None
+
+
+def _bounded_text(raw: str, max_len: int) -> str:
+    text = raw.strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
+
+
+def _artifact_path(root: str, job_id: str, artifact_id: str) -> Path | None:
+    job_dir = Path(root) / job_id
+    if not job_dir.exists() or not job_dir.is_dir():
+        return None
+    for child in job_dir.iterdir():
+        if child.is_file() and child.stem == artifact_id:
+            return child
+    return None
 
 
 def _maybe_mount_gradio(app_: FastAPI, s: Settings) -> None:

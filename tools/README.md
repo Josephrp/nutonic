@@ -46,3 +46,49 @@ For **real LFM-VL** captions, install **`inference/lfm_vl_hint_service`** with *
 Outputs: **`data/cache/<content-version>/streetview/<location_id>.json`** and **`reports/streetview_failures.json`**.
 
 **CI / tests:** `pytest tools/tests inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests` (see `.github/workflows/nutonic-ci.yml`).
+
+## Live HF Space smoke checks (`live_inference_smoke.py`)
+
+Quick client for deployed Hugging Face Spaces before wiring deeper PRO tab flows.
+
+```bash
+python tools/live_inference_smoke.py --preset full --strict
+```
+
+Optional deeper calls (may consume API/GPU budget):
+
+```bash
+python tools/live_inference_smoke.py --preset pro-readiness --strict
+```
+
+Optional TerraMind forward (slow / expensive):
+
+```bash
+python tools/live_inference_smoke.py --preset terramind-deploy --run-terramind-export
+```
+
+Write a JSON run artifact:
+
+```bash
+python tools/live_inference_smoke.py --preset pro-readiness --strict --json-report-path artifacts/live-smoke.json
+```
+
+Defaults derive from these Space repo IDs:
+
+- `NuTonic/nutonic-game-server`
+- `Tonic/nutonic-lfm-vl-streetview`
+- `Tonic/nutonic-terramind-tim`
+- `NuTonic/nutonic-pro-materialization`
+
+Override with URL env vars if needed:
+`NUTONIC_GAME_SERVER_URL`,
+`NUTONIC_LFM_VL_HINT_URL`,
+`NUTONIC_TERRAMIND_TIM_URL`,
+`NUTONIC_PRO_MATERIALIZATION_URL`.
+
+Available presets:
+
+- `full` (all service health checks; deep calls off unless flags are passed)
+- `lfm-deploy`, `terramind-deploy`, `game-deploy` (service-specific post-deploy checks)
+- `pro-deploy` (PRO health + `materialize` smoke)
+- `pro-readiness` (cross-service health + PRO `materialize` + game `pro/jobs` attempt)

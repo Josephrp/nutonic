@@ -41,3 +41,9 @@ def health() -> dict[str, Any]:
 def infer_route(req: SatelliteInferRequest) -> SatelliteInferResponse:
     """Mapbox / ortho still → caption (``task=caption``)."""
     return infer(req)
+
+
+@app.post("/v1/pro/caption", response_model=SatelliteInferResponse)
+def pro_caption_route(req: SatelliteInferRequest) -> SatelliteInferResponse:
+    """PRO alias carrying profile and contract context for composable map captions."""
+    return infer(req)

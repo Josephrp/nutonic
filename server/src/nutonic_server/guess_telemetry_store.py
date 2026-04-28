@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from sqlalchemy import Column, Float, Integer, MetaData, String, Table, insert, select
 
@@ -49,9 +49,10 @@ class GuessTelemetryIn:
 
 
 class GuessTelemetryStore:
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, on_write: Callable[[], None] | None = None) -> None:
         self._engine = engine
         self._lock = Lock()
+        self._on_write = on_write
 
     def initialize_schema(self) -> None:
         metadata.create_all(self._engine)
@@ -98,7 +99,13 @@ class GuessTelemetryStore:
                             row_id=rid,
                         )
                     )
+                self._sync_after_write()
                 return int(rid)
+
+    def _sync_after_write(self) -> None:
+        if self._on_write is None:
+            return
+        self._on_write()
 
 
 def create_guess_telemetry_engine(url: str):
@@ -108,13 +115,22 @@ def create_guess_telemetry_engine(url: str):
 
 
 def create_guess_telemetry_store(url: str) -> GuessTelemetryStore | None:
-    from nutonic_server.leaderboard_store import _ensure_parent_dir_for_sqlite_file
+    from nutonic_server.hf_persistence import HfSqliteSync
+    from nutonic_server.leaderboard_store import _ensure_parent_dir_for_sqlite_file, sqlite_file_path_from_url
+    from nutonic_server.settings import load_settings
 
     u = url.strip()
     if not u or u.lower() == "disabled":
         return None
     _ensure_parent_dir_for_sqlite_file(u)
+    sync_hook = None
+    db_path = sqlite_file_path_from_url(u)
+    if db_path is not None:
+        hf = HfSqliteSync.from_settings(load_settings())
+        if hf is not None:
+            hf.bootstrap_sqlite_file(local_path=db_path, logical_name="guess_telemetry")
+            sync_hook = hf.make_write_sync_hook(local_path=db_path, logical_name="guess_telemetry")
     eng = create_guess_telemetry_engine(u)
-    st = GuessTelemetryStore(eng)
+    st = GuessTelemetryStore(eng, on_write=sync_hook)
     st.initialize_schema()
     return st

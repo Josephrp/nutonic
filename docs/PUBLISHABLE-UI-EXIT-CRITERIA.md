@@ -15,6 +15,7 @@
 | 1.3 | **No build-type UI fork**: debug and release artifacts follow the same player-facing behavior and copy | Inspect route rendering + settings under both build types |
 | 1.4 | No **TODO** / **FIXME** in `nutonic/shared/src/commonMain/kotlin/com/nutonic/screens/` on default play paths | `rg TODO screens` |
 | 1.5 | CI endpoint config for game/Hugging Face hosts is documented and consumed from committed config + env injection (not ad-hoc local-only tables) | CI config + docs review |
+| 1.6 | **IMP-148 deferred policy honored:** no required screenshot baseline or visual-regression CI gate for this release track | Plan/rule review |
 
 ---
 
@@ -39,7 +40,7 @@
 | 3.3 | **Offline / server-down** messaging follows the manifest copy matrix in [`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`](../plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md) §2.4 with permissive “keep playing” semantics | Manual with server stopped |
 | 3.4 | Primary CTAs use **theme** `cta` shape (12–16dp) and semantic colors | Design review vs `docs/DESIGN.md` |
 | 3.5 | **Vendored structure parity**: sign-off table references first-party contracts (`docs/VENDORED-UI-CONTRACT-PACK.md`, `rules/07`, `docs/NU_TONIC_ARTIFACT_REFERENCE.md`, publishable plan) with **≥90%** control coverage per screen | Design owner |
-| 3.6 | `content_version` mismatch does **not** block core SCAN/gameplay flows when shipped data can provide a playable round; guesses persist locally and sync when possible | Manual offline/online toggle + repository checks |
+| 3.6 | `content_version` mismatch does **not** block core SCAN/gameplay flows when shipped data can provide a playable round; guesses persist locally first and sync with retry/idempotent replay when possible | Manual offline/online toggle + repository checks |
 
 ---
 
@@ -60,3 +61,4 @@
 | 0.2 | 2026-04-21 | Removed `refs/stitch/` dependency from sign-off gate; switched to vendored contract parity checks. |
 | 0.3 | 2026-04-21 | Aligned with plan v0.4 AD decisions: permissive skew behavior, debug/release parity, CI endpoint-config documentation, and non-blocking Web share overlays. |
 | 0.4 | 2026-04-21 | Note: client **photo gallery** template removed; exit criteria unchanged — no gallery-specific sign-off. |
+| 0.5 | 2026-04-27 | Clarified IMP-147 acceptance language (local-first + retry/idempotent sync) and added explicit IMP-148 deferred visual-regression policy row. |

@@ -9,7 +9,7 @@ Optional deps: ``pip install nutonic-pro-materialization-service[s2]`` (``pystac
 from __future__ import annotations
 
 import math
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, NamedTuple, Sequence
 
 import numpy as np
 
@@ -31,9 +31,16 @@ EARTH_SEARCH_S2L2A_ASSET_KEYS: tuple[str, ...] = (
 )
 
 
+class S2PatchResult(NamedTuple):
+    stack: np.ndarray
+    meta: dict[str, Any]
+    scl_patch: np.ndarray | None = None
+
+
 def _require_stac_rasterio() -> Any:
     try:
-        import rasterio  # noqa: F401
+        import rasterio
+        import rasterio.warp  # noqa: F401 — ensure ``rasterio.warp.*`` is bound (lazy submodules)
     except ImportError as e:  # pragma: no cover
         raise ImportError(
             "Sentinel materialization needs rasterio (pip install nutonic-pro-materialization-service[s2])",
@@ -44,8 +51,6 @@ def _require_stac_rasterio() -> Any:
         raise ImportError(
             "Sentinel materialization needs pystac-client (pip install nutonic-pro-materialization-service[s2])",
         ) from e
-    import rasterio
-
     return rasterio
 
 
@@ -111,11 +116,16 @@ def load_s2l2a_patch_np(
     asset_keys: Sequence[str] | None,
     max_items: int,
     include_scl: bool = False,
-) -> tuple[np.ndarray, dict[str, Any], np.ndarray | None]:
+    scene_id: str | None = None,
+) -> S2PatchResult:
     """
-    Return ``stack`` float32 ``(12, patch_hw, patch_hw)`` in TerraMind band order,
+    Return the shared ``S2PatchResult`` shape used by TiM local:
+    ``stack`` float32 ``(12, patch_hw, patch_hw)`` in TerraMind band order,
     metadata (item id, datetime, asset keys used), and optional SCL patch
     ``(patch_hw, patch_hw)`` float32 (class codes) when ``include_scl`` is true.
+
+    ``S2PatchResult`` is a ``NamedTuple``, so existing tuple-unpack callers remain
+    compatible while both worker families expose the same semantic return type.
     """
     rasterio = _require_stac_rasterio()
     from pystac_client import Client
@@ -125,20 +135,41 @@ def load_s2l2a_patch_np(
 
     west, south, east, north = _bbox_around(lon, lat, half_km)
     client = Client.open(stac_url)
-    search = client.search(
-        collections=[collection],
-        bbox=[west, south, east, north],
-        datetime=datetime_range,
-        max_items=max(1, int(max_items)),
-        query={"eo:cloud_cover": {"lt": float(max_cloud)}},
-    )
+    search_kwargs = {
+        "collections": [collection],
+        "bbox": [west, south, east, north],
+        "datetime": datetime_range,
+        "max_items": max(1, int(max_items)),
+        "query": {"eo:cloud_cover": {"lt": float(max_cloud)}},
+    }
+    if scene_id:
+        search_kwargs["ids"] = [scene_id]
+    try:
+        search = client.search(
+            **search_kwargs,
+            sortby=[{"field": "properties.eo:cloud_cover", "direction": "asc"}],
+        )
+    except TypeError:
+        search = client.search(**search_kwargs)
     items = list(search.items())
     if not items:
+        if scene_id:
+            raise RuntimeError(
+                f"No STAC item for pinned scene_id={scene_id!r} bbox=({west:.5f},{south:.5f},{east:.5f},{north:.5f}) "
+                f"datetime={datetime_range!r} collection={collection!r}",
+            )
         raise RuntimeError(
             f"No STAC items for bbox=({west:.5f},{south:.5f},{east:.5f},{north:.5f}) "
             f"datetime={datetime_range!r} collection={collection!r}",
         )
-    item = min(items, key=lambda i: float(i.properties.get("eo:cloud_cover") or 999.0))
+    items.sort(
+        key=lambda i: (
+            float(i.properties.get("eo:cloud_cover") or 999.0),
+            i.datetime.isoformat() if i.datetime else "",
+            str(getattr(i, "id", "")),
+        ),
+    )
+    item = items[0]
 
     keys = tuple(asset_keys) if asset_keys is not None else EARTH_SEARCH_S2L2A_ASSET_KEYS
     if len(keys) != 12:
@@ -155,6 +186,7 @@ def load_s2l2a_patch_np(
         "eo_cloud_cover": item.properties.get("eo:cloud_cover"),
         "reference_asset": ref_key,
         "band_asset_keys": [],
+        "scene_id_requested": scene_id,
     }
 
     with rasterio.open(ref_href) as ref:
@@ -252,7 +284,7 @@ def load_s2l2a_patch_np(
                 boundless=False,
             ).astype(np.float32)
 
-    return stack, meta, scl_patch
+    return S2PatchResult(stack=stack, meta=meta, scl_patch=scl_patch)
 
 
 def apply_reflectance_scale(stack: np.ndarray, s2_cfg: Mapping[str, Any] | None = None) -> np.ndarray:

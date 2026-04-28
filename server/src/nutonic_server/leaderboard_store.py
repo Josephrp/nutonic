@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Callable, Protocol, runtime_checkable
 
 from sqlalchemy import (
     Column,
@@ -163,9 +163,10 @@ def _row_from_db(
 class SqliteLeaderboardStore:
     """IMP-060: durable community leaderboard rows + POST idempotency."""
 
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, on_write: Callable[[], None] | None = None) -> None:
         self._engine = engine
         self._lock = Lock()
+        self._on_write = on_write
 
     def initialize_schema(self) -> None:
         metadata.create_all(self._engine)
@@ -192,6 +193,7 @@ class SqliteLeaderboardStore:
                             distance_km=r.distance_km,
                         )
                     )
+            self._sync_after_write()
 
     def list_rows(self, map_id: str) -> list[LeaderboardRow]:
         with self._lock:
@@ -262,7 +264,13 @@ class SqliteLeaderboardStore:
                             row_id=row_id,
                         )
                     )
+        self._sync_after_write()
         return row
+
+    def _sync_after_write(self) -> None:
+        if self._on_write is None:
+            return
+        self._on_write()
 
 
 def create_leaderboard_store(settings: Settings) -> LeaderboardStore:
@@ -271,7 +279,26 @@ def create_leaderboard_store(settings: Settings) -> LeaderboardStore:
     if url.lower() == "memory":
         return InMemoryLeaderboardStore()
     _ensure_parent_dir_for_sqlite_file(url)
+    sync_hook = None
+    db_path = sqlite_file_path_from_url(url)
+    if db_path is not None:
+        from nutonic_server.hf_persistence import HfSqliteSync
+
+        hf = HfSqliteSync.from_settings(settings)
+        if hf is not None:
+            hf.bootstrap_sqlite_file(local_path=db_path, logical_name="leaderboard")
+            sync_hook = hf.make_write_sync_hook(local_path=db_path, logical_name="leaderboard")
     engine = create_leaderboard_engine(url)
-    store = SqliteLeaderboardStore(engine)
+    store = SqliteLeaderboardStore(engine, on_write=sync_hook)
     store.initialize_schema()
     return store
+
+
+def sqlite_file_path_from_url(url: str) -> Path | None:
+    u = make_url(url)
+    if u.drivername not in ("sqlite", "sqlite+pysqlite"):
+        return None
+    db = u.database
+    if not db or db == ":memory:":
+        return None
+    return Path(db)

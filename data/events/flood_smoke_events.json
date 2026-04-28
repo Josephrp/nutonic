@@ -1,0 +1,82 @@
+[
+  {
+    "event_id": "flood_bangladesh_2024_01",
+    "lat": 24.8949,
+    "lon": 91.8687,
+    "event_date": "2024-06-20",
+    "region": "Sylhet Division (Surma–Kushiyara basin)",
+    "notes": "2024 monsoon: heavy rain from ~18 Jun 2024 (DREF MDRBD036); earlier May–Jun spell also affected NE; coords ~Sylhet city."
+  },
+  {
+    "event_id": "flood_pakistan_2022_01",
+    "lat": 26.7333,
+    "lon": 68.3333,
+    "event_date": "2022-08-28",
+    "region": "Sindh (Dadu / lower Indus plain)",
+    "notes": "2022 Pakistan mega-flood; Sindh/Balochistan worst hit; Aug 2022 peak Indus plain inundation; Dadu division among heavily flooded districts."
+  },
+  {
+    "event_id": "flood_brazil_2024_01",
+    "lat": -30.0346,
+    "lon": -51.2177,
+    "event_date": "2024-05-05",
+    "region": "Rio Grande do Sul (Porto Alegre / Guaíba)",
+    "notes": "Apr–May 2024 RS hydrometeorologic disaster; Guaíba record levels; widespread metro inundation (Canoas, Eldorado do Sul, etc.)."
+  },
+  {
+    "event_id": "flood_libya_derna_2023",
+    "lat": 32.7575,
+    "lon": 22.6375,
+    "event_date": "2023-09-11",
+    "region": "Derna (Wadi Derna dam break)",
+    "notes": "Storm Daniel rainfall; Abu Mansour / Derna dam failures 10–11 Sep 2023; catastrophic urban flood wave."
+  },
+  {
+    "event_id": "flood_germany_ahr_2021",
+    "lat": 50.542,
+    "lon": 7.108,
+    "event_date": "2021-07-15",
+    "region": "Rhineland-Palatinate (Ahr valley / Bad Neuenahr-Ahrweiler)",
+    "notes": "Cyclone Bernd Jul 2021; record Ahr discharge; GEER reconnaissance bridges ~50.54N 7.10–7.12E."
+  },
+  {
+    "event_id": "flood_us_vt_2023",
+    "lat": 44.2601,
+    "lon": -72.5754,
+    "event_date": "2023-07-11",
+    "region": "Vermont (Montpelier / Winooski River)",
+    "notes": "Great Vermont flood 10–11 Jul 2023; Montpelier Winooski crest morning 11 Jul (NWS BTV summary)."
+  },
+  {
+    "event_id": "flood_spain_valencia_2024",
+    "lat": 39.428,
+    "lon": -0.417,
+    "event_date": "2024-10-29",
+    "region": "Valencian Community (Horta Sud / Paiporta corridor)",
+    "notes": "29 Oct 2024 DANA flash floods; extreme rainfall western Valencia province; high casualties (see 2024 Spanish floods)."
+  },
+  {
+    "event_id": "flood_china_zhengzhou_2021",
+    "lat": 34.7466,
+    "lon": 113.6253,
+    "event_date": "2021-07-20",
+    "region": "Henan (Zhengzhou metro)",
+    "notes": "20 Jul 2021 record hourly rainfall; urban and tunnel flooding in central Henan."
+  },
+  {
+    "event_id": "flood_australia_lismore_2022",
+    "lat": -28.809,
+    "lon": 153.279,
+    "event_date": "2022-02-28",
+    "region": "NSW Northern Rivers (Lismore / Wilsons River)",
+    "notes": "Feb–Mar 2022 East Australia floods; Lismore CBD exceeded 2017 flood levels; major EO flood extent studies."
+  },
+  {
+    "event_id": "flood_uk_storm_babet_2023",
+    "lat": 53.523,
+    "lon": -1.133,
+    "event_date": "2023-10-21",
+    "region": "South Yorkshire / Doncaster (River Don)",
+    "notes": "Storm Babet Oct 2023; severe riverine flooding across eastern England; Don catchment high flows."
+  }
+]

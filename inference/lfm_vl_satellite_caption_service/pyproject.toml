@@ -21,6 +21,10 @@ model = [
     "transformers>=5.2.0,<6",
     "accelerate>=0.33.0,<1",
 ]
+serve = [
+    "gradio>=4.44.0,<6",
+    "spaces>=0.44.0,<1",
+]
 dev = ["pytest>=8.0.0"]
 
 [tool.hatch.build.targets.wheel]

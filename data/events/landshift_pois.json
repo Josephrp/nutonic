@@ -1,0 +1,1815 @@
+[
+  {
+    "event_id": "ls_br_matopiba_barreiras",
+    "lat": -12.14,
+    "lon": -45.0,
+    "event_date": "2024-07-01",
+    "notes": "MATOPIBA soy/cerrado expansion frontier."
+  },
+  {
+    "event_id": "ls_br_matopiba_lemag",
+    "lat": -12.1,
+    "lon": -45.78,
+    "event_date": "2024-07-15",
+    "notes": "Lu\u00eds Eduardo Magalh\u00e3es ag hub."
+  },
+  {
+    "event_id": "ls_br_matopiba_palmas",
+    "lat": -10.17,
+    "lon": -48.33,
+    "event_date": "2024-06-20",
+    "notes": "Tocantins capital; cerrado edge."
+  },
+  {
+    "event_id": "ls_br_matopiba_gurupi",
+    "lat": -11.73,
+    "lon": -49.07,
+    "event_date": "2024-08-05",
+    "notes": "MATOPIBA southern corridor."
+  },
+  {
+    "event_id": "ls_br_matopiba_bom_jesus",
+    "lat": -13.25,
+    "lon": -44.42,
+    "event_date": "2024-07-22",
+    "notes": "Bahia cerrado transition."
+  },
+  {
+    "event_id": "ls_br_matopiba_formosa",
+    "lat": -15.54,
+    "lon": -47.33,
+    "event_date": "2024-06-10",
+    "notes": "Goias agricultural belt."
+  },
+  {
+    "event_id": "ls_br_cerrado_brasilia_outskirts",
+    "lat": -15.85,
+    "lon": -47.55,
+    "event_date": "2024-09-01",
+    "notes": "Federal District peri-urban / cerrado."
+  },
+  {
+    "event_id": "ls_br_amazon_santarem",
+    "lat": -2.44,
+    "lon": -54.71,
+    "event_date": "2024-05-28",
+    "notes": "Tapaj\u00f3s deforestation / port corridor."
+  },
+  {
+    "event_id": "ls_br_amazon_novo_progresso",
+    "lat": -7.07,
+    "lon": -55.38,
+    "event_date": "2024-06-15",
+    "notes": "BR-163 arc of deforestation."
+  },
+  {
+    "event_id": "ls_br_amazon_paragominas",
+    "lat": -3.41,
+    "lon": -47.35,
+    "event_date": "2024-07-08",
+    "notes": "Eastern Par\u00e1 frontier."
+  },
+  {
+    "event_id": "ls_br_rondonia_ji_parana",
+    "lat": -10.88,
+    "lon": -61.95,
+    "event_date": "2024-08-12",
+    "notes": "Southern Amazon clearing dynamics."
+  },
+  {
+    "event_id": "ls_br_rondonia_ariquemes",
+    "lat": -9.94,
+    "lon": -63.08,
+    "event_date": "2024-06-25",
+    "notes": "Pasture / soy mosaic."
+  },
+  {
+    "event_id": "ls_br_mt_sinop",
+    "lat": -11.86,
+    "lon": -55.5,
+    "event_date": "2024-07-18",
+    "notes": "Mato Grosso soy frontier."
+  },
+  {
+    "event_id": "ls_br_mt_sorriso",
+    "lat": -12.55,
+    "lon": -55.72,
+    "event_date": "2024-08-01",
+    "notes": "Central MT mechanized cropland."
+  },
+  {
+    "event_id": "ls_br_chaco_mariscal",
+    "lat": -22.03,
+    "lon": -60.55,
+    "event_date": "2024-09-05",
+    "notes": "Gran Chaco dry forest conversion context."
+  },
+  {
+    "event_id": "ls_py_boqueron",
+    "lat": -22.1,
+    "lon": -60.05,
+    "event_date": "2024-07-05",
+    "notes": "Chaco agricultural expansion."
+  },
+  {
+    "event_id": "ls_id_kalimantan_palangka",
+    "lat": -2.21,
+    "lon": 113.92,
+    "event_date": "2024-06-08",
+    "notes": "Central Kalimantan peat / plantation mosaic."
+  },
+  {
+    "event_id": "ls_id_kalimantan_samarinda",
+    "lat": -0.5,
+    "lon": 117.15,
+    "event_date": "2024-08-20",
+    "notes": "East Kalimantan coal / land change."
+  },
+  {
+    "event_id": "ls_id_sumatra_jambi",
+    "lat": -1.59,
+    "lon": 103.61,
+    "event_date": "2024-07-12",
+    "notes": "Oil palm / peat landscape."
+  },
+  {
+    "event_id": "ls_id_sumatra_pekanbaru",
+    "lat": 0.51,
+    "lon": 101.45,
+    "event_date": "2024-06-18",
+    "notes": "Riau plantation belt."
+  },
+  {
+    "event_id": "ls_my_sarawak_miri",
+    "lat": 4.4,
+    "lon": 113.99,
+    "event_date": "2024-09-02",
+    "notes": "Borneo coastal land change."
+  },
+  {
+    "event_id": "ls_vn_mekong_can_tho",
+    "lat": 10.03,
+    "lon": 105.78,
+    "event_date": "2024-07-25",
+    "notes": "Mekong delta triple cropping / aquaculture."
+  },
+  {
+    "event_id": "ls_vn_mekong_an_giang",
+    "lat": 10.52,
+    "lon": 105.12,
+    "event_date": "2024-08-08",
+    "notes": "Delta floodplain modification."
+  },
+  {
+    "event_id": "ls_kh_battambang",
+    "lat": 13.1,
+    "lon": 103.2,
+    "event_date": "2024-06-22",
+    "notes": "Tonle Sap basin agriculture."
+  },
+  {
+    "event_id": "ls_th_nakhon_ratchasima",
+    "lat": 14.98,
+    "lon": 102.1,
+    "event_date": "2024-07-30",
+    "notes": "Khorat plateau cassava / sugar expansion."
+  },
+  {
+    "event_id": "ls_la_savannakhet",
+    "lat": 16.55,
+    "lon": 104.75,
+    "event_date": "2024-08-14",
+    "notes": "Mekong corridor land change."
+  },
+  {
+    "event_id": "ls_et_oromia_awassa",
+    "lat": 7.05,
+    "lon": 38.48,
+    "event_date": "2024-09-01",
+    "notes": "Rift valley smallholder intensification."
+  },
+  {
+    "event_id": "ls_ke_nakuru",
+    "lat": -0.3,
+    "lon": 36.07,
+    "event_date": "2024-07-08",
+    "notes": "Highland agriculture mosaic."
+  },
+  {
+    "event_id": "ls_bf_ouagadougou_outskirts",
+    "lat": 12.25,
+    "lon": -1.42,
+    "event_date": "2024-06-05",
+    "notes": "Sahel peri-urban expansion."
+  },
+  {
+    "event_id": "ls_ml_bamako_outskirts",
+    "lat": 12.45,
+    "lon": -8.12,
+    "event_date": "2024-08-22",
+    "notes": "Niger River agriculture fringe."
+  },
+  {
+    "event_id": "ls_ng_kano_outskirts",
+    "lat": 12.05,
+    "lon": 8.55,
+    "event_date": "2024-07-14",
+    "notes": "Sudano-Sahelian cropland expansion."
+  },
+  {
+    "event_id": "ls_cd_kinshasa_east",
+    "lat": -4.42,
+    "lon": 15.52,
+    "event_date": "2024-06-28",
+    "notes": "Central Africa peri-urban fringe."
+  },
+  {
+    "event_id": "ls_ao_luanda_south",
+    "lat": -8.95,
+    "lon": 13.28,
+    "event_date": "2024-09-12",
+    "notes": "Coastal urban sprawl corridor."
+  },
+  {
+    "event_id": "ls_mg_morondava",
+    "lat": -20.28,
+    "lon": 44.28,
+    "event_date": "2024-07-20",
+    "notes": "Dry forest / agriculture frontier."
+  },
+  {
+    "event_id": "ls_in_punjab_ludhiana",
+    "lat": 30.9,
+    "lon": 75.85,
+    "event_date": "2024-10-01",
+    "notes": "Indo-Gangetic irrigation / rice-wheat."
+  },
+  {
+    "event_id": "ls_in_gujarat_mehsana",
+    "lat": 23.6,
+    "lon": 72.38,
+    "event_date": "2024-08-18",
+    "notes": "Groundwater-intensive agriculture."
+  },
+  {
+    "event_id": "ls_in_telangana_warangal",
+    "lat": 17.97,
+    "lon": 79.6,
+    "event_date": "2024-06-12",
+    "notes": "Deccan cotton / soy mosaic."
+  },
+  {
+    "event_id": "ls_cn_inner_mongolia_baotou",
+    "lat": 40.65,
+    "lon": 109.82,
+    "event_date": "2024-07-05",
+    "notes": "Steppe mining / land modification."
+  },
+  {
+    "event_id": "ls_cn_xinjiang_aksu",
+    "lat": 41.17,
+    "lon": 80.26,
+    "event_date": "2024-08-25",
+    "notes": "Oasis cotton irrigation belts."
+  },
+  {
+    "event_id": "ls_au_murray_griffith",
+    "lat": -34.25,
+    "lon": 146.05,
+    "event_date": "2024-09-05",
+    "notes": "Murray-Darling irrigated horticulture."
+  },
+  {
+    "event_id": "ls_au_pilbara_newman",
+    "lat": -23.36,
+    "lon": 119.74,
+    "event_date": "2024-06-20",
+    "notes": "Mining infrastructure footprint."
+  },
+  {
+    "event_id": "ls_us_central_valley_fresno",
+    "lat": 36.75,
+    "lon": -119.77,
+    "event_date": "2024-08-01",
+    "notes": "California permanent crop expansion."
+  },
+  {
+    "event_id": "ls_us_phoenix_outskirts",
+    "lat": 33.45,
+    "lon": -112.05,
+    "event_date": "2024-07-12",
+    "notes": "Sonoran desert urban fringe."
+  },
+  {
+    "event_id": "ls_us_vegas_outskirts",
+    "lat": 36.15,
+    "lon": -115.05,
+    "event_date": "2024-06-15",
+    "notes": "Mojave sprawl / golf irrigation."
+  },
+  {
+    "event_id": "ls_us_texas_mcallen",
+    "lat": 26.2,
+    "lon": -98.23,
+    "event_date": "2024-09-18",
+    "notes": "Rio Grande Valley agriculture."
+  },
+  {
+    "event_id": "ls_mx_chihuahua_irrigation",
+    "lat": 28.63,
+    "lon": -106.08,
+    "event_date": "2024-07-28",
+    "notes": "Northern Mexico irrigated belts."
+  },
+  {
+    "event_id": "ls_ar_santiago_estero",
+    "lat": -27.78,
+    "lon": -64.27,
+    "event_date": "2024-08-10",
+    "notes": "Gran Chaco soy expansion context."
+  },
+  {
+    "event_id": "ls_ua_dnipro_ag",
+    "lat": 48.45,
+    "lon": 35.05,
+    "event_date": "2024-06-01",
+    "notes": "Black Earth cropland mosaic (pre-conflict baseline season)."
+  },
+  {
+    "event_id": "ls_ro_dobrogea",
+    "lat": 44.18,
+    "lon": 28.05,
+    "event_date": "2024-07-22",
+    "notes": "Danube delta agriculture fringe."
+  },
+  {
+    "event_id": "ls_es_murcia",
+    "lat": 37.98,
+    "lon": -1.13,
+    "event_date": "2024-08-28",
+    "notes": "Mediterranean intensive irrigation."
+  },
+  {
+    "event_id": "ls_fr_landes_forest",
+    "lat": 44.0,
+    "lon": -0.75,
+    "event_date": "2024-09-08",
+    "notes": "Managed forest / fire scar dynamics."
+  },
+  {
+    "event_id": "ls_pl_bialowieza_edge",
+    "lat": 52.7,
+    "lon": 23.87,
+    "event_date": "2024-06-25",
+    "notes": "Forest management / edge effects."
+  },
+  {
+    "event_id": "ls_de_brandenburg_outskirts",
+    "lat": 52.35,
+    "lon": 13.62,
+    "event_date": "2024-07-18",
+    "notes": "Berlin peri-urban solar / land use."
+  },
+  {
+    "event_id": "ls_uk_east_anglia",
+    "lat": 52.45,
+    "lon": 0.85,
+    "event_date": "2024-08-05",
+    "notes": "Arable intensification / drainage."
+  },
+  {
+    "event_id": "ls_ie_midlands",
+    "lat": 53.35,
+    "lon": -7.55,
+    "event_date": "2024-09-15",
+    "notes": "Peatland / grassland change context."
+  },
+  {
+    "event_id": "ls_pt_alentejo",
+    "lat": 38.02,
+    "lon": -7.88,
+    "event_date": "2024-07-08",
+    "notes": "Irrigated olive / vineyard expansion."
+  },
+  {
+    "event_id": "ls_gr_thessaly",
+    "lat": 39.64,
+    "lon": 22.42,
+    "event_date": "2024-06-30",
+    "notes": "Intensive cereal plain."
+  },
+  {
+    "event_id": "ls_tr_central_anatolia",
+    "lat": 39.82,
+    "lon": 34.81,
+    "event_date": "2024-08-12",
+    "notes": "Konya plain irrigation."
+  },
+  {
+    "event_id": "ls_ir_khuzestan",
+    "lat": 31.32,
+    "lon": 48.67,
+    "event_date": "2024-07-14",
+    "notes": "Khuzestan sugar / cane belts."
+  },
+  {
+    "event_id": "ls_sa_qassim",
+    "lat": 26.33,
+    "lon": 43.97,
+    "event_date": "2024-09-02",
+    "notes": "Center-pivot desert agriculture."
+  },
+  {
+    "event_id": "ls_eg_western_desert_oasis",
+    "lat": 29.2,
+    "lon": 30.65,
+    "event_date": "2024-06-08",
+    "notes": "New Valley irrigation projects."
+  },
+  {
+    "event_id": "ls_ma_marrakesh_plain",
+    "lat": 31.63,
+    "lon": -8.01,
+    "event_date": "2024-08-20",
+    "notes": "Atlas foothill agriculture."
+  },
+  {
+    "event_id": "ls_za_mpumalanga",
+    "lat": -25.47,
+    "lon": 30.98,
+    "event_date": "2024-07-25",
+    "notes": "Highveld maize / coal belt mosaic."
+  },
+  {
+    "event_id": "ls_zw_harare_outskirts",
+    "lat": -17.85,
+    "lon": 31.15,
+    "event_date": "2024-06-18",
+    "notes": "Miombo peri-urban agriculture."
+  },
+  {
+    "event_id": "ls_tz_dodoma",
+    "lat": -6.17,
+    "lon": 35.74,
+    "event_date": "2024-09-20",
+    "notes": "Central corridor land clearing."
+  },
+  {
+    "event_id": "ls_ug_mbarara",
+    "lat": -0.61,
+    "lon": 30.65,
+    "event_date": "2024-08-02",
+    "notes": "Lake Victoria dairy / banana mosaic."
+  },
+  {
+    "event_id": "ls_rw_kigali_east",
+    "lat": -1.92,
+    "lon": 30.18,
+    "event_date": "2024-07-05",
+    "notes": "Highland terraced agriculture intensification."
+  },
+  {
+    "event_id": "ls_br_amazon_manaus_ring",
+    "lat": -3.1,
+    "lon": -60.02,
+    "event_date": "2024-06-12",
+    "notes": "BR-174 corridor dynamics."
+  },
+  {
+    "event_id": "ls_co_llanos_oriente",
+    "lat": 4.15,
+    "lon": -72.05,
+    "event_date": "2024-08-14",
+    "notes": "Llanos oil palm / ranching frontier."
+  },
+  {
+    "event_id": "ls_pe_ucayali",
+    "lat": -8.38,
+    "lon": -74.55,
+    "event_date": "2024-07-30",
+    "notes": "Amazon piedmont smallholder clearing."
+  },
+  {
+    "event_id": "ls_bo_santa_cruz",
+    "lat": -17.78,
+    "lon": -63.18,
+    "event_date": "2024-09-08",
+    "notes": "Eastern lowlands soy expansion."
+  },
+  {
+    "event_id": "ls_py_caaguazu",
+    "lat": -25.45,
+    "lon": -56.02,
+    "event_date": "2024-06-22",
+    "notes": "Atlantic Forest / soy interface."
+  },
+  {
+    "event_id": "ls_cl_maule",
+    "lat": -35.43,
+    "lon": -71.68,
+    "event_date": "2024-08-05",
+    "notes": "Central Valley orchards / vineyards."
+  },
+  {
+    "event_id": "ls_ca_prairies_regina",
+    "lat": 50.45,
+    "lon": -104.62,
+    "event_date": "2024-07-12",
+    "notes": "Prairie crop rotation mosaic."
+  },
+  {
+    "event_id": "ls_us_iowa_ames",
+    "lat": 42.03,
+    "lon": -93.65,
+    "event_date": "2024-09-01",
+    "notes": "Corn-belt homogeneous fields."
+  },
+  {
+    "event_id": "ls_us_nd_grand_forks",
+    "lat": 47.92,
+    "lon": -97.03,
+    "event_date": "2024-08-18",
+    "notes": "Red River Valley sugarbeet / soy."
+  },
+  {
+    "event_id": "ls_mx_yucatan_merida",
+    "lat": 20.97,
+    "lon": -89.62,
+    "event_date": "2024-06-28",
+    "notes": "Karst peri-urban / henequen legacy."
+  },
+  {
+    "event_id": "ls_gt_peten_south",
+    "lat": 16.9,
+    "lon": -90.05,
+    "event_date": "2024-07-20",
+    "notes": "Selva Maya land-use pressure."
+  },
+  {
+    "event_id": "ls_hn_comayagua",
+    "lat": 14.45,
+    "lon": -87.65,
+    "event_date": "2024-08-25",
+    "notes": "Central American coffee / pasture mosaic."
+  },
+  {
+    "event_id": "ls_ph_mindanao_bukidnon",
+    "lat": 8.15,
+    "lon": 125.12,
+    "event_date": "2024-09-12",
+    "notes": "Highland pineapple / corn belts."
+  },
+  {
+    "event_id": "ls_cn_heilongjiang_harbin_south",
+    "lat": 45.5,
+    "lon": 126.65,
+    "event_date": "2024-06-05",
+    "notes": "Manchurian black-soil cropland."
+  },
+  {
+    "event_id": "ls_kz_north_kazakhstan",
+    "lat": 54.87,
+    "lon": 69.15,
+    "event_date": "2024-07-28",
+    "notes": "Steppe wheat expansion belt."
+  },
+  {
+    "event_id": "ls_ru_krasnodar",
+    "lat": 45.04,
+    "lon": 38.98,
+    "event_date": "2024-08-08",
+    "notes": "Kuban irrigated row crops."
+  },
+  {
+    "event_id": "ls_jp_hokkaido_tokachi",
+    "lat": 42.92,
+    "lon": 143.2,
+    "event_date": "2024-09-18",
+    "notes": "Large-field dairy / forage."
+  },
+  {
+    "event_id": "ls_kr_gangwon_wonju",
+    "lat": 37.35,
+    "lon": 127.95,
+    "event_date": "2024-07-08",
+    "notes": "Mountain valley peri-urban."
+  },
+  {
+    "event_id": "ls_tw_chiayi_plain",
+    "lat": 23.48,
+    "lon": 120.42,
+    "event_date": "2024-06-15",
+    "notes": "Intensive paddy / aquaculture."
+  },
+  {
+    "event_id": "ls_bd_sylhet_haor",
+    "lat": 24.9,
+    "lon": 91.88,
+    "event_date": "2024-08-01",
+    "notes": "Floodplain wetland agriculture."
+  },
+  {
+    "event_id": "ls_np_terai_biratnagar",
+    "lat": 26.45,
+    "lon": 87.28,
+    "event_date": "2024-07-25",
+    "notes": "Terai rice intensification."
+  },
+  {
+    "event_id": "ls_pk_punjab_faisalabad",
+    "lat": 31.42,
+    "lon": 73.08,
+    "event_date": "2024-09-05",
+    "notes": "Indus canal irrigation mosaic."
+  },
+  {
+    "event_id": "ls_ir_mazandaran",
+    "lat": 36.47,
+    "lon": 52.35,
+    "event_date": "2024-06-20",
+    "notes": "Caspian citrus / rice belts."
+  },
+  {
+    "event_id": "ls_sy_al_hasakah",
+    "lat": 36.5,
+    "lon": 40.75,
+    "event_date": "2024-08-12",
+    "notes": "Khabur irrigation agriculture (baseline)."
+  },
+  {
+    "event_id": "ls_il_negev_besor",
+    "lat": 31.25,
+    "lon": 34.45,
+    "event_date": "2024-07-18",
+    "notes": "Desert irrigation / solar coexistence."
+  },
+  {
+    "event_id": "ls_eg_nile_delta_mansoura",
+    "lat": 31.05,
+    "lon": 31.38,
+    "event_date": "2024-08-22",
+    "notes": "Delta urban / cropland interdigitation."
+  },
+  {
+    "event_id": "ls_br_pantanal_cuiaba",
+    "lat": -15.6,
+    "lon": -56.1,
+    "event_date": "2024-09-01",
+    "notes": "Cerrado-pantanal transition ranching."
+  },
+  {
+    "event_id": "ls_br_caatinga_petrolina",
+    "lat": -9.4,
+    "lon": -40.5,
+    "event_date": "2024-06-28",
+    "notes": "Irrigated fruit in semi-arid."
+  },
+  {
+    "event_id": "ls_pe_coastal_chiclayo",
+    "lat": -6.77,
+    "lon": -79.84,
+    "event_date": "2024-07-14",
+    "notes": "Coastal desert irrigation valleys."
+  },
+  {
+    "event_id": "ls_ec_manabi",
+    "lat": -1.05,
+    "lon": -80.45,
+    "event_date": "2024-08-05",
+    "notes": "Banana / oil palm coastal belt."
+  },
+  {
+    "event_id": "ls_ve_llanos_barinas",
+    "lat": 8.62,
+    "lon": -70.22,
+    "event_date": "2024-07-05",
+    "notes": "Llanos ranching / cropland."
+  },
+  {
+    "event_id": "ls_nz_canterbury",
+    "lat": -43.53,
+    "lon": 172.63,
+    "event_date": "2024-10-02",
+    "notes": "Irrigated pasture / dairy conversion."
+  },
+  {
+    "event_id": "ls_fj_viti_levu_coral_coast",
+    "lat": -18.2,
+    "lon": 177.65,
+    "event_date": "2024-08-14",
+    "notes": "Sugar / resort coastal modification."
+  },
+  {
+    "event_id": "ls_pg_madang",
+    "lat": -5.22,
+    "lon": 145.79,
+    "event_date": "2024-06-18",
+    "notes": "PNG coastal plantation mosaic."
+  },
+  {
+    "event_id": "ls_id_java_indramayu",
+    "lat": -6.33,
+    "lon": 108.32,
+    "event_date": "2024-09-22",
+    "notes": "Java north coast rice intensification."
+  },
+  {
+    "event_id": "ls_cn_yunnan_xishuangbanna",
+    "lat": 21.96,
+    "lon": 100.75,
+    "event_date": "2024-07-30",
+    "notes": "Rubber plantation expansion context."
+  },
+  {
+    "event_id": "ls_la_bokeo",
+    "lat": 20.28,
+    "lon": 100.42,
+    "event_date": "2024-08-18",
+    "notes": "Golden Triangle agriculture / forest edge."
+  },
+  {
+    "event_id": "ls_mm_sagaing",
+    "lat": 21.88,
+    "lon": 95.98,
+    "event_date": "2024-06-12",
+    "notes": "Dry zone agriculture expansion."
+  },
+  {
+    "event_id": "ls_bd_khulna_sundarbans_edge",
+    "lat": 22.35,
+    "lon": 89.35,
+    "event_date": "2024-07-22",
+    "notes": "Mangrove\u2013aquaculture interface."
+  },
+  {
+    "event_id": "ls_gh_ashanti_kumasi",
+    "lat": 6.7,
+    "lon": -1.62,
+    "event_date": "2024-08-28",
+    "notes": "Forest\u2013cocoa mosaic dynamics."
+  },
+  {
+    "event_id": "ls_ci_yamoussoukro",
+    "lat": 6.82,
+    "lon": -5.28,
+    "event_date": "2024-09-05",
+    "notes": "Guinea savanna cocoa belt."
+  },
+  {
+    "event_id": "ls_cm_adamawa",
+    "lat": 9.33,
+    "lon": 13.58,
+    "event_date": "2024-07-08",
+    "notes": "Sudanian savanna agriculture."
+  },
+  {
+    "event_id": "ls_sd_gezira",
+    "lat": 14.4,
+    "lon": 33.52,
+    "event_date": "2024-06-25",
+    "notes": "Irrigated cotton scheme."
+  },
+  {
+    "event_id": "ls_et_amhara_bahir_dar",
+    "lat": 11.6,
+    "lon": 37.39,
+    "event_date": "2024-08-10",
+    "notes": "Lake Tana basin land use."
+  },
+  {
+    "event_id": "ls_ug_lake_albert_rift",
+    "lat": 1.7,
+    "lon": 31.08,
+    "event_date": "2024-07-12",
+    "notes": "Oil / agriculture rift mosaic."
+  },
+  {
+    "event_id": "ls_tz_morogoro",
+    "lat": -6.82,
+    "lon": 37.66,
+    "event_date": "2024-09-18",
+    "notes": "Eastern miombo agriculture."
+  },
+  {
+    "event_id": "ls_mw_salima",
+    "lat": -13.78,
+    "lon": 34.46,
+    "event_date": "2024-06-08",
+    "notes": "Lake Malawi fisheries / agriculture."
+  },
+  {
+    "event_id": "ls_zm_copperbelt",
+    "lat": -13.05,
+    "lon": 28.22,
+    "event_date": "2024-08-01",
+    "notes": "Mining\u2013agriculture land mosaic."
+  },
+  {
+    "event_id": "ls_bw_francistown",
+    "lat": -21.17,
+    "lon": 27.51,
+    "event_date": "2024-07-28",
+    "notes": "Kalahari fringe ranching."
+  },
+  {
+    "event_id": "ls_na_otjiwarongo",
+    "lat": -20.46,
+    "lon": 16.65,
+    "event_date": "2024-09-02",
+    "notes": "Commercial ranch / bush encroachment."
+  },
+  {
+    "event_id": "ls_ly_jeffara",
+    "lat": 32.12,
+    "lon": 11.55,
+    "event_date": "2024-06-30",
+    "notes": "Coastal oasis agriculture."
+  },
+  {
+    "event_id": "ls_tn_sfax_steppe",
+    "lat": 34.74,
+    "lon": 10.76,
+    "event_date": "2024-08-14",
+    "notes": "Olive / cereal rainfed expansion."
+  },
+  {
+    "event_id": "ls_dz_el_oued",
+    "lat": 33.37,
+    "lon": 6.86,
+    "event_date": "2024-07-18",
+    "notes": "Oasis date palm irrigation."
+  },
+  {
+    "event_id": "ls_us_fl_everglades_ag",
+    "lat": 26.32,
+    "lon": -80.62,
+    "event_date": "2024-08-22",
+    "notes": "Sugar cane / suburban edge."
+  },
+  {
+    "event_id": "ls_mx_sonora_ciudad_obregon",
+    "lat": 27.48,
+    "lon": -109.93,
+    "event_date": "2024-09-12",
+    "notes": "Desert irrigation wheat / veg."
+  },
+  {
+    "event_id": "ls_br_santa_catarina_joinville",
+    "lat": -26.3,
+    "lon": -48.85,
+    "event_date": "2024-06-15",
+    "notes": "Atlantic forest agriculture interface."
+  },
+  {
+    "event_id": "ls_ar_buenos_pampa_humeda",
+    "lat": -34.6,
+    "lon": -61.1,
+    "event_date": "2024-07-25",
+    "notes": "Pampas soybean rotation."
+  },
+  {
+    "event_id": "ls_uy_artigas",
+    "lat": -30.4,
+    "lon": -56.47,
+    "event_date": "2024-08-08",
+    "notes": "Rice / pasture border mosaic."
+  },
+  {
+    "event_id": "ls_bo_oruro_altiplano",
+    "lat": -17.97,
+    "lon": -67.12,
+    "event_date": "2024-09-05",
+    "notes": "Altiplano quinoa / pasture dynamics."
+  },
+  {
+    "event_id": "ls_br_acre_rio_branco_ring",
+    "lat": -9.97,
+    "lon": -67.8,
+    "event_date": "2024-07-03",
+    "notes": "Western Amazon arc; cattle and soy pressure (MAAP-style hotspots)."
+  },
+  {
+    "event_id": "ls_br_roraima_boa_vista_south",
+    "lat": 2.82,
+    "lon": -60.67,
+    "event_date": "2024-08-11",
+    "notes": "Savanna\u2013forest transition; northern frontier dynamics."
+  },
+  {
+    "event_id": "ls_br_mt_paranatinga",
+    "lat": -14.42,
+    "lon": -54.05,
+    "event_date": "2024-06-18",
+    "notes": "Xingu basin soy expansion mosaic."
+  },
+  {
+    "event_id": "ls_br_pa_itaituba",
+    "lat": -4.27,
+    "lon": -55.99,
+    "event_date": "2024-09-04",
+    "notes": "Tapaj\u00f3s river port; logging and clearing interface."
+  },
+  {
+    "event_id": "ls_br_pa_altamira_south",
+    "lat": -3.2,
+    "lon": -52.2,
+    "event_date": "2024-07-29",
+    "notes": "Xingu Big Bend region land-use pressure."
+  },
+  {
+    "event_id": "ls_br_pa_maraba",
+    "lat": -5.35,
+    "lon": -49.12,
+    "event_date": "2024-08-07",
+    "notes": "Caraj\u00e1s rail corridor agriculture."
+  },
+  {
+    "event_id": "ls_br_ma_imperatriz",
+    "lat": -5.52,
+    "lon": -47.48,
+    "event_date": "2024-06-14",
+    "notes": "Cerrado\u2013Amazon transition ranching."
+  },
+  {
+    "event_id": "ls_bo_pando_north",
+    "lat": -11.02,
+    "lon": -68.75,
+    "event_date": "2024-09-01",
+    "notes": "Bolivian Amazon northern clearing context."
+  },
+  {
+    "event_id": "ls_pe_madre_de_dios",
+    "lat": -12.6,
+    "lon": -70.0,
+    "event_date": "2024-07-17",
+    "notes": "Interoceanic Highway land-use mosaic."
+  },
+  {
+    "event_id": "ls_ec_sucumbios",
+    "lat": 0.08,
+    "lon": -76.88,
+    "event_date": "2024-08-13",
+    "notes": "Northern Ecuador oil palm / agriculture frontier."
+  },
+  {
+    "event_id": "ls_pe_san_martin",
+    "lat": -6.5,
+    "lon": -76.75,
+    "event_date": "2024-06-22",
+    "notes": "Upper Amazon smallholder clearing belt."
+  },
+  {
+    "event_id": "ls_ga_minvoul",
+    "lat": 2.15,
+    "lon": 12.12,
+    "event_date": "2024-09-11",
+    "notes": "Gabon\u2013Cameroon forest logging interface."
+  },
+  {
+    "event_id": "ls_cm_south",
+    "lat": 2.92,
+    "lon": 13.12,
+    "event_date": "2024-07-21",
+    "notes": "Congo Basin southern logging roads."
+  },
+  {
+    "event_id": "ls_cd_kisangani",
+    "lat": 0.52,
+    "lon": 25.2,
+    "event_date": "2024-08-02",
+    "notes": "Congo River agriculture mosaic (GFW hotspot context)."
+  },
+  {
+    "event_id": "ls_cd_kindu",
+    "lat": -2.95,
+    "lon": 25.92,
+    "event_date": "2024-06-27",
+    "notes": "Eastern DRC shifting cultivation corridor."
+  },
+  {
+    "event_id": "ls_cd_mbandaka",
+    "lat": 0.05,
+    "lon": 18.28,
+    "event_date": "2024-09-18",
+    "notes": "Equatorial forest riverine agriculture."
+  },
+  {
+    "event_id": "ls_cd_bukavu_hinterland",
+    "lat": -2.5,
+    "lon": 28.85,
+    "event_date": "2024-07-08",
+    "notes": "Kivu artisanal mining / agriculture mosaic."
+  },
+  {
+    "event_id": "ls_rw_gisenyi",
+    "lat": -1.68,
+    "lon": 29.25,
+    "event_date": "2024-08-19",
+    "notes": "Highland agriculture intensification."
+  },
+  {
+    "event_id": "ls_bi_ruyigi",
+    "lat": -3.48,
+    "lon": 30.25,
+    "event_date": "2024-06-11",
+    "notes": "Burundi hillside cropping expansion."
+  },
+  {
+    "event_id": "ls_ne_diffa",
+    "lat": 13.32,
+    "lon": 12.61,
+    "event_date": "2024-09-05",
+    "notes": "Lake Chad basin pastoral / cropland variability."
+  },
+  {
+    "event_id": "ls_ne_maradi",
+    "lat": 13.5,
+    "lon": 7.1,
+    "event_date": "2024-07-14",
+    "notes": "Sahelian rainfed expansion belt."
+  },
+  {
+    "event_id": "ls_ml_sikasso",
+    "lat": 11.32,
+    "lon": -5.67,
+    "event_date": "2024-08-21",
+    "notes": "Sudanian savanna cotton / maize."
+  },
+  {
+    "event_id": "ls_sn_tambacounda",
+    "lat": 14.77,
+    "lon": -13.68,
+    "event_date": "2024-06-29",
+    "notes": "Groundnut basin land rotation."
+  },
+  {
+    "event_id": "ls_gn_kankan",
+    "lat": 10.38,
+    "lon": -9.3,
+    "event_date": "2024-09-02",
+    "notes": "Upper Niger savanna agriculture."
+  },
+  {
+    "event_id": "ls_lr_buchanan",
+    "lat": 5.88,
+    "lon": -10.05,
+    "event_date": "2024-07-26",
+    "notes": "Liberian rubber / plantation legacy mosaic."
+  },
+  {
+    "event_id": "ls_sl_bo",
+    "lat": 7.57,
+    "lon": -11.74,
+    "event_date": "2024-08-08",
+    "notes": "West Africa forest\u2013farm mosaic."
+  },
+  {
+    "event_id": "ls_ng_benin_city",
+    "lat": 6.34,
+    "lon": 5.62,
+    "event_date": "2024-06-17",
+    "notes": "Niger Delta peri-urban oil palm / cassava."
+  },
+  {
+    "event_id": "ls_ng_port_harcourt_ring",
+    "lat": 4.82,
+    "lon": 7.08,
+    "event_date": "2024-09-13",
+    "notes": "Coastal mangrove\u2013urban land change."
+  },
+  {
+    "event_id": "ls_ng_kaduna",
+    "lat": 10.52,
+    "lon": 7.44,
+    "event_date": "2024-07-31",
+    "notes": "Sudan savanna agriculture intensification."
+  },
+  {
+    "event_id": "ls_td_sarh",
+    "lat": 9.15,
+    "lon": 18.39,
+    "event_date": "2024-08-16",
+    "notes": "Southern Chad cotton / sorghum belt."
+  },
+  {
+    "event_id": "ls_cf_batouri",
+    "lat": 4.43,
+    "lon": 14.38,
+    "event_date": "2024-06-24",
+    "notes": "Southeast CAR logging road agriculture."
+  },
+  {
+    "event_id": "ls_id_papua_merauke",
+    "lat": -8.5,
+    "lon": 140.4,
+    "event_date": "2024-09-07",
+    "notes": "Merauke food estate / peat context."
+  },
+  {
+    "event_id": "ls_id_west_papua_sorong",
+    "lat": -0.87,
+    "lon": 131.25,
+    "event_date": "2024-07-12",
+    "notes": "Bird's Head oil palm frontier."
+  },
+  {
+    "event_id": "ls_id_sulawesi_palu",
+    "lat": -0.9,
+    "lon": 119.87,
+    "event_date": "2024-08-25",
+    "notes": "Post-disaster urban / cocoa replanting mosaic."
+  },
+  {
+    "event_id": "ls_id_sulawesi_kendari",
+    "lat": -3.98,
+    "lon": 122.52,
+    "event_date": "2024-06-16",
+    "notes": "Southeast Sulawesi nickel corridor context."
+  },
+  {
+    "event_id": "ls_id_flores_ende",
+    "lat": -8.84,
+    "lon": 121.65,
+    "event_date": "2024-09-09",
+    "notes": "Smallholder dryland agriculture expansion."
+  },
+  {
+    "event_id": "ls_id_bali_tabanan",
+    "lat": -8.42,
+    "lon": 115.08,
+    "event_date": "2024-07-20",
+    "notes": "Tourism / rice terrace land pressure."
+  },
+  {
+    "event_id": "ls_my_sabah_lahad_datu",
+    "lat": 5.03,
+    "lon": 118.32,
+    "event_date": "2024-08-03",
+    "notes": "Oil palm\u2013forest frontier (Borneo)."
+  },
+  {
+    "event_id": "ls_my_johor_pontian",
+    "lat": 1.48,
+    "lon": 103.38,
+    "event_date": "2024-09-01",
+    "notes": "Johor oil palm and peri-urban sprawl."
+  },
+  {
+    "event_id": "ls_th_surat_thani",
+    "lat": 9.14,
+    "lon": 99.33,
+    "event_date": "2024-07-05",
+    "notes": "Malay Peninsula rubber / oil palm belt."
+  },
+  {
+    "event_id": "ls_mm_chin",
+    "lat": 22.42,
+    "lon": 93.62,
+    "event_date": "2024-08-12",
+    "notes": "Chin Hills shifting cultivation mosaic."
+  },
+  {
+    "event_id": "ls_np_chitwan_edge",
+    "lat": 27.58,
+    "lon": 84.5,
+    "event_date": "2024-06-21",
+    "notes": "Terai forest\u2013tourism\u2013agriculture interface."
+  },
+  {
+    "event_id": "ls_bt_phuntsholing",
+    "lat": 26.85,
+    "lon": 89.38,
+    "event_date": "2024-09-14",
+    "notes": "Himalayan foothill urban fringe."
+  },
+  {
+    "event_id": "ls_bt_sarpang",
+    "lat": 26.95,
+    "lon": 90.48,
+    "event_date": "2024-07-18",
+    "notes": "Southern Bhutan agriculture intensification."
+  },
+  {
+    "event_id": "ls_cn_guangxi_chongzuo",
+    "lat": 22.42,
+    "lon": 107.37,
+    "event_date": "2024-08-06",
+    "notes": "Karst sugarcane / fruit belt expansion."
+  },
+  {
+    "event_id": "ls_cn_fujian_longyan",
+    "lat": 25.09,
+    "lon": 117.03,
+    "event_date": "2024-06-28",
+    "notes": "Red soil tea / eucalyptus plantation mosaic."
+  },
+  {
+    "event_id": "ls_mn_selenge",
+    "lat": 49.48,
+    "lon": 106.48,
+    "event_date": "2024-09-03",
+    "notes": "Steppe wheat belt Mongolia\u2013Russia trade corridor."
+  },
+  {
+    "event_id": "ls_ge_kakheti",
+    "lat": 41.72,
+    "lon": 45.72,
+    "event_date": "2024-07-11",
+    "notes": "Caucasus vineyard expansion."
+  },
+  {
+    "event_id": "ls_am_armavir",
+    "lat": 40.15,
+    "lon": 44.02,
+    "event_date": "2024-08-18",
+    "notes": "Ararat valley irrigated fruit."
+  },
+  {
+    "event_id": "ls_az_ganja_plain",
+    "lat": 40.68,
+    "lon": 46.36,
+    "event_date": "2024-06-19",
+    "notes": "Kura-Aras lowland cotton / grain."
+  },
+  {
+    "event_id": "ls_tm_mary_oasis",
+    "lat": 37.6,
+    "lon": 61.83,
+    "event_date": "2024-09-16",
+    "notes": "Karakum irrigation cotton belt."
+  },
+  {
+    "event_id": "ls_uz_jizzakh",
+    "lat": 40.12,
+    "lon": 67.85,
+    "event_date": "2024-07-27",
+    "notes": "Fergana valley margin wheat expansion."
+  },
+  {
+    "event_id": "ls_tj_khatlon",
+    "lat": 37.83,
+    "lon": 68.78,
+    "event_date": "2024-08-14",
+    "notes": "Vakhsh irrigation cotton / fruit."
+  },
+  {
+    "event_id": "ls_sy_idlib_ag",
+    "lat": 35.93,
+    "lon": 36.63,
+    "event_date": "2024-06-13",
+    "notes": "Mediterranean rainfed olive / wheat mosaic (baseline)."
+  },
+  {
+    "event_id": "ls_lb_bekaa",
+    "lat": 33.85,
+    "lon": 35.92,
+    "event_date": "2024-09-08",
+    "notes": "Intensive irrigated horticulture plain."
+  },
+  {
+    "event_id": "ls_jo_azraq",
+    "lat": 31.82,
+    "lon": 36.82,
+    "event_date": "2024-07-16",
+    "notes": "Desert irrigation and groundwater stress belt."
+  },
+  {
+    "event_id": "ls_kw_wafra",
+    "lat": 28.63,
+    "lon": 48.12,
+    "event_date": "2024-08-29",
+    "notes": "Pivot-irrigation desert agriculture."
+  },
+  {
+    "event_id": "ls_om_salalah_hinterland",
+    "lat": 17.1,
+    "lon": 54.25,
+    "event_date": "2024-06-23",
+    "notes": "Monsoon oasis agriculture fringe."
+  },
+  {
+    "event_id": "ls_et_benshangul",
+    "lat": 10.78,
+    "lon": 35.58,
+    "event_date": "2024-09-04",
+    "notes": "Gumuz resettlement / reservoir agriculture context."
+  },
+  {
+    "event_id": "ls_ss_yei",
+    "lat": 4.09,
+    "lon": 30.68,
+    "event_date": "2024-07-25",
+    "notes": "Equatorial forest agriculture under conflict recovery."
+  },
+  {
+    "event_id": "ls_cf_berberati",
+    "lat": 4.26,
+    "lon": 15.78,
+    "event_date": "2024-08-01",
+    "notes": "Western CAR cocoa\u2013diamond belt mosaic."
+  },
+  {
+    "event_id": "ls_lr_gbarnga",
+    "lat": 7.0,
+    "lon": -9.48,
+    "event_date": "2024-06-30",
+    "notes": "Liberian interior rubber mosaic."
+  },
+  {
+    "event_id": "ls_gh_bole",
+    "lat": 9.03,
+    "lon": -2.5,
+    "event_date": "2024-09-12",
+    "notes": "Northern Ghana shea / cereal expansion."
+  },
+  {
+    "event_id": "ls_bf_banfora",
+    "lat": 10.63,
+    "lon": -4.77,
+    "event_date": "2024-07-09",
+    "notes": "Sudanian savanna sugar and rice schemes."
+  },
+  {
+    "event_id": "ls_ci_daloa",
+    "lat": 6.88,
+    "lon": -6.45,
+    "event_date": "2024-08-17",
+    "notes": "Western cocoa belt smallholder mosaic."
+  },
+  {
+    "event_id": "ls_lr_greenville",
+    "lat": 5.02,
+    "lon": -9.03,
+    "event_date": "2024-06-12",
+    "notes": "Sinoe rubber plantation interface."
+  },
+  {
+    "event_id": "ls_gy_berbice",
+    "lat": 6.25,
+    "lon": -57.52,
+    "event_date": "2024-09-05",
+    "notes": "Coastal rice and sugar estuary modification."
+  },
+  {
+    "event_id": "ls_sr_commewijne",
+    "lat": 5.92,
+    "lon": -55.08,
+    "event_date": "2024-07-22",
+    "notes": "Atlantic mangrove\u2013rice polder belt."
+  },
+  {
+    "event_id": "ls_ve_delta_amacuro",
+    "lat": 8.95,
+    "lon": -61.12,
+    "event_date": "2024-08-09",
+    "notes": "Orinoco delta wetland conversion context."
+  },
+  {
+    "event_id": "ls_gy_rupununi",
+    "lat": 2.82,
+    "lon": -59.32,
+    "event_date": "2024-06-25",
+    "notes": "Rupununi savanna ranching expansion."
+  },
+  {
+    "event_id": "ls_ca_alberta_peace_river",
+    "lat": 56.23,
+    "lon": -117.29,
+    "event_date": "2024-08-22",
+    "notes": "Boreal forest\u2013agriculture clearing edge."
+  },
+  {
+    "event_id": "ls_ca_sask_melfort",
+    "lat": 52.86,
+    "lon": -104.61,
+    "event_date": "2024-09-01",
+    "notes": "Prairie parkland crop expansion."
+  },
+  {
+    "event_id": "ls_us_minnesota_red_river",
+    "lat": 47.92,
+    "lon": -97.03,
+    "event_date": "2024-07-28",
+    "notes": "Red River Valley sugarbeet / soy rotation."
+  },
+  {
+    "event_id": "ls_us_kansas_dodge_city",
+    "lat": 37.75,
+    "lon": -100.02,
+    "event_date": "2024-08-05",
+    "notes": "Ogallala aquifer irrigated corn belt."
+  },
+  {
+    "event_id": "ls_mx_bajio_irapuato",
+    "lat": 20.68,
+    "lon": -101.35,
+    "event_date": "2024-06-18",
+    "notes": "Baj\u00edo berry and vegetable greenhouse belt."
+  },
+  {
+    "event_id": "ls_mx_tabasco_centla",
+    "lat": 18.45,
+    "lon": -92.68,
+    "event_date": "2024-09-17",
+    "notes": "Grijalva wetland cattle and oil palm pressure."
+  },
+  {
+    "event_id": "ls_gt_izabal",
+    "lat": 15.73,
+    "lon": -88.6,
+    "event_date": "2024-07-13",
+    "notes": "Caribbean lowland banana and oil palm."
+  },
+  {
+    "event_id": "ls_hn_la_mosquitia",
+    "lat": 15.2,
+    "lon": -84.3,
+    "event_date": "2024-08-11",
+    "notes": "Miskito Coast forest\u2013cattle frontier."
+  },
+  {
+    "event_id": "ls_ni_raan",
+    "lat": 13.75,
+    "lon": -84.62,
+    "event_date": "2024-06-14",
+    "notes": "Caribbean Nicaragua cattle ranch expansion."
+  },
+  {
+    "event_id": "ls_cr_guanacaste",
+    "lat": 10.62,
+    "lon": -85.45,
+    "event_date": "2024-09-06",
+    "notes": "Dry forest tourism and pineapple belts."
+  },
+  {
+    "event_id": "ls_pa_darien",
+    "lat": 8.42,
+    "lon": -77.92,
+    "event_date": "2024-07-30",
+    "notes": "Dari\u00e9n Gap road pressure / land access context."
+  },
+  {
+    "event_id": "ls_co_putumayo",
+    "lat": 0.5,
+    "lon": -75.52,
+    "event_date": "2024-08-28",
+    "notes": "Amazon piedmont coca\u2013pasture mosaic (optical land-cover training)."
+  },
+  {
+    "event_id": "ls_ec_napo_coca",
+    "lat": -0.35,
+    "lon": -76.95,
+    "event_date": "2024-06-26",
+    "notes": "Oil frontier road land-use change."
+  },
+  {
+    "event_id": "ls_br_ro_porto_velho_south",
+    "lat": -8.78,
+    "lon": -63.92,
+    "event_date": "2024-09-10",
+    "notes": "BR-319 arc soy pressure context."
+  },
+  {
+    "event_id": "ls_br_ap_macapa_west",
+    "lat": 0.05,
+    "lon": -51.15,
+    "event_date": "2024-07-07",
+    "notes": "Amazon estuary mangrove\u2013urban fringe."
+  },
+  {
+    "event_id": "ls_gf_cayenne_hinterland",
+    "lat": 4.92,
+    "lon": -52.32,
+    "event_date": "2024-08-04",
+    "notes": "Guiana Shield smallholder gold mining scars."
+  },
+  {
+    "event_id": "ls_sr_brokopondo",
+    "lat": 5.05,
+    "lon": -54.98,
+    "event_date": "2024-06-09",
+    "notes": "Afobaka reservoir drawdown agriculture."
+  },
+  {
+    "event_id": "ls_au_kimberley_kununurra",
+    "lat": -15.77,
+    "lon": 128.74,
+    "event_date": "2024-09-14",
+    "notes": "Ord River irrigation sugar and sandalwood."
+  },
+  {
+    "event_id": "ls_au_cape_york_weipa",
+    "lat": -12.63,
+    "lon": 141.88,
+    "event_date": "2024-07-19",
+    "notes": "Bauxite mining and savanna mosaic."
+  },
+  {
+    "event_id": "ls_pg_ok_tedi",
+    "lat": -5.22,
+    "lon": 141.12,
+    "event_date": "2024-08-16",
+    "notes": "Fly River mining sediment footprint."
+  },
+  {
+    "event_id": "ls_sb_isabel",
+    "lat": -8.0,
+    "lon": 159.08,
+    "event_date": "2024-06-20",
+    "notes": "Logging road forest degradation."
+  },
+  {
+    "event_id": "ls_vu_santo",
+    "lat": -15.4,
+    "lon": 167.2,
+    "event_date": "2024-09-03",
+    "notes": "Pacific kava and copra smallholder mosaic."
+  },
+  {
+    "event_id": "ls_ws_upolu_south",
+    "lat": -14.02,
+    "lon": -171.75,
+    "event_date": "2024-07-24",
+    "notes": "Samoa coconut and subsistence intensification."
+  },
+  {
+    "event_id": "ls_to_tongatapu",
+    "lat": -21.18,
+    "lon": -175.15,
+    "event_date": "2024-08-07",
+    "notes": "Root crop agriculture on limited land."
+  },
+  {
+    "event_id": "ls_ki_tarawa",
+    "lat": 1.45,
+    "lon": 173.03,
+    "event_date": "2024-06-17",
+    "notes": "Atoll urban\u2013agriculture land squeeze."
+  },
+  {
+    "event_id": "ls_mv_addu",
+    "lat": -0.68,
+    "lon": 73.16,
+    "event_date": "2024-09-11",
+    "notes": "Southern atoll sparse vegetation change context."
+  },
+  {
+    "event_id": "ls_bt_samdrup_jongkhar",
+    "lat": 26.87,
+    "lon": 91.5,
+    "event_date": "2024-08-20",
+    "notes": "Eastern Bhutan subtropical agriculture."
+  },
+  {
+    "event_id": "ls_cn_shanxi_datong",
+    "lat": 40.09,
+    "lon": 113.3,
+    "event_date": "2024-07-02",
+    "notes": "Loess plateau reforestation / mining mosaic."
+  },
+  {
+    "event_id": "ls_cn_guizhou_liupanshui",
+    "lat": 26.59,
+    "lon": 104.83,
+    "event_date": "2024-09-09",
+    "notes": "Karst rocky desertification control belts."
+  },
+  {
+    "event_id": "ls_in_odisha_koraput",
+    "lat": 18.82,
+    "lon": 82.71,
+    "event_date": "2024-06-15",
+    "notes": "Eastern Ghats shifting cultivation and orchards."
+  },
+  {
+    "event_id": "ls_in_assam_dibrugarh",
+    "lat": 27.48,
+    "lon": 94.91,
+    "event_date": "2024-08-13",
+    "notes": "Brahmaputra floodplain tea and rice."
+  },
+  {
+    "event_id": "ls_bd_bogra",
+    "lat": 24.85,
+    "lon": 89.37,
+    "event_date": "2024-07-21",
+    "notes": "Jamuna char land cropping dynamics."
+  },
+  {
+    "event_id": "ls_mm_mandalay_outskirts",
+    "lat": 21.88,
+    "lon": 96.05,
+    "event_date": "2024-09-02",
+    "notes": "Dry zone sesame and bean expansion."
+  },
+  {
+    "event_id": "ls_kh_stung_treng",
+    "lat": 13.52,
+    "lon": 105.97,
+    "event_date": "2024-08-24",
+    "notes": "Mekong mainstream dam reservoir drawdown belt."
+  },
+  {
+    "event_id": "ls_la_attapeu",
+    "lat": 14.81,
+    "lon": 106.83,
+    "event_date": "2024-06-28",
+    "notes": "Southern Laos rubber and hydropower resettlement."
+  },
+  {
+    "event_id": "ls_id_sumatra_medan_ring",
+    "lat": 3.6,
+    "lon": 98.68,
+    "event_date": "2024-09-15",
+    "notes": "Deli Serdang urban\u2013plantation fringe."
+  },
+  {
+    "event_id": "ls_ph_palawan_quezon",
+    "lat": 9.23,
+    "lon": 118.02,
+    "event_date": "2024-07-17",
+    "notes": "Palawan oil palm and tourism corridor."
+  },
+  {
+    "event_id": "ls_ph_mindoro_occidental",
+    "lat": 13.13,
+    "lon": 120.73,
+    "event_date": "2024-08-02",
+    "notes": "Mangrove\u2013fishpond conversion belt."
+  },
+  {
+    "event_id": "ls_tw_hualien_coastal_plain",
+    "lat": 23.98,
+    "lon": 121.6,
+    "event_date": "2024-06-21",
+    "notes": "East Rift Valley agriculture and gravel mining."
+  },
+  {
+    "event_id": "ls_jp_okinawa_ishigaki_ag",
+    "lat": 24.4,
+    "lon": 124.18,
+    "event_date": "2024-09-08",
+    "notes": "Subtropical sugarcane and resort land competition."
+  },
+  {
+    "event_id": "ls_kr_jeju_seogwipo",
+    "lat": 33.25,
+    "lon": 126.5,
+    "event_date": "2024-07-29",
+    "notes": "Volcanic island citrus and greenhouse belts."
+  },
+  {
+    "event_id": "ls_ru_amur_blagoveshchensk",
+    "lat": 50.26,
+    "lon": 127.54,
+    "event_date": "2024-08-10",
+    "notes": "Amur\u2013Zeya floodplain soybean expansion."
+  },
+  {
+    "event_id": "ls_ua_cherkasy",
+    "lat": 49.44,
+    "lon": 32.06,
+    "event_date": "2024-06-22",
+    "notes": "Forest-steppe cropland rotation mosaic."
+  },
+  {
+    "event_id": "ls_md_bugeac",
+    "lat": 46.35,
+    "lon": 28.82,
+    "event_date": "2024-09-07",
+    "notes": "Moldova sunflower and vineyard belt."
+  },
+  {
+    "event_id": "ls_bg_dobrudzha",
+    "lat": 43.85,
+    "lon": 27.25,
+    "event_date": "2024-07-23",
+    "notes": "Black Sea wheat and sunflower plain."
+  },
+  {
+    "event_id": "ls_rs_vojvodina",
+    "lat": 45.38,
+    "lon": 19.88,
+    "event_date": "2024-08-18",
+    "notes": "Pannonian irrigation maize belt."
+  },
+  {
+    "event_id": "ls_hu_szeged",
+    "lat": 46.25,
+    "lon": 20.15,
+    "event_date": "2024-06-16",
+    "notes": "Tisza floodplain horticulture."
+  },
+  {
+    "event_id": "ls_cz_south_moravia",
+    "lat": 48.95,
+    "lon": 16.6,
+    "event_date": "2024-09-04",
+    "notes": "Wine and solar coexistence on farmland."
+  },
+  {
+    "event_id": "ls_at_burgenland",
+    "lat": 47.84,
+    "lon": 16.52,
+    "event_date": "2024-07-11",
+    "notes": "Neusiedl lake reedbed agriculture mosaic."
+  },
+  {
+    "event_id": "ls_ch_valais",
+    "lat": 46.2,
+    "lon": 7.35,
+    "event_date": "2024-08-29",
+    "notes": "Alpine valley fruit and vineyard terraces."
+  },
+  {
+    "event_id": "ls_it_po_delta",
+    "lat": 45.0,
+    "lon": 12.2,
+    "event_date": "2024-09-12",
+    "notes": "Adriatic reclaimed delta agriculture."
+  },
+  {
+    "event_id": "ls_es_extremadura",
+    "lat": 38.98,
+    "lon": -6.38,
+    "event_date": "2024-06-27",
+    "notes": "Iberian dehesa oak\u2013pasture intensification."
+  },
+  {
+    "event_id": "ls_ie_wexford",
+    "lat": 52.34,
+    "lon": -6.46,
+    "event_date": "2024-08-07",
+    "notes": "Southeast tillage and drainage change."
+  },
+  {
+    "event_id": "ls_uk_cornwall",
+    "lat": 50.35,
+    "lon": -4.78,
+    "event_date": "2024-07-14",
+    "notes": "Pasture to maize silage conversion belt."
+  },
+  {
+    "event_id": "ls_no_hedmark",
+    "lat": 60.88,
+    "lon": 11.08,
+    "event_date": "2024-09-18",
+    "notes": "Southern boreal forest harvest regrowth mosaic."
+  },
+  {
+    "event_id": "ls_se_varmland",
+    "lat": 59.38,
+    "lon": 13.5,
+    "event_date": "2024-06-19",
+    "notes": "Clear-cut and replanting rotation."
+  },
+  {
+    "event_id": "ls_fi_lapland_sodankyla",
+    "lat": 67.42,
+    "lon": 26.58,
+    "event_date": "2024-08-21",
+    "notes": "Northern peatland forestry and tourism tracks."
+  },
+  {
+    "event_id": "ls_is_akureyri_hinterland",
+    "lat": 65.65,
+    "lon": -18.08,
+    "event_date": "2024-09-01",
+    "notes": "Subarctic hayfield expansion."
+  },
+  {
+    "event_id": "ls_cl_patagonia_coyhaique",
+    "lat": -45.57,
+    "lon": -72.07,
+    "event_date": "2024-07-26",
+    "notes": "Patagonian steppe sheep to forestry conversion."
+  },
+  {
+    "event_id": "ls_ar_rio_negro_fruit",
+    "lat": -39.03,
+    "lon": -67.58,
+    "event_date": "2024-08-12",
+    "notes": "Alto Valle irrigation fruit export belt."
+  },
+  {
+    "event_id": "ls_br_rs_pelotas",
+    "lat": -31.77,
+    "lon": -52.34,
+    "event_date": "2024-06-24",
+    "notes": "Pampa rice rotation and wetlands drainage context."
+  },
+  {
+    "event_id": "ls_py_itapua",
+    "lat": -26.85,
+    "lon": -55.95,
+    "event_date": "2024-09-13",
+    "notes": "Itaip\u00fa reservoir agriculture fringe."
+  },
+  {
+    "event_id": "ls_bo_tarija_vine",
+    "lat": -21.53,
+    "lon": -64.73,
+    "event_date": "2024-07-08",
+    "notes": "Inter-Andean valley irrigation expansion."
+  }
+]

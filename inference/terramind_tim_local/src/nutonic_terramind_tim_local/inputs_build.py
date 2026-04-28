@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -87,21 +88,96 @@ def _is_s2l2a_modality(name: str) -> bool:
     return "S2L2A" in name.upper()
 
 
+_PROFILE_INPUT_DEFAULTS: dict[str, dict[str, Any]] = {
+    "wildfire": {"datetime_window_days": 45, "max_cloud": 30.0, "temporal_slices": ("t0", "t1")},
+    "oceanscout_ship_detection": {
+        "datetime_window_days": 21,
+        "max_cloud": 35.0,
+        "temporal_slices": ("t0", "t1", "t2"),
+    },
+    "land_use_change": {"datetime_window_days": 730, "max_cloud": 40.0, "temporal_slices": ("t0", "t1")},
+    "flood_pulse": {"datetime_window_days": 30, "max_cloud": 50.0, "temporal_slices": ("t0", "t1")},
+    "brief_only": {"datetime_window_days": 120, "max_cloud": 60.0, "temporal_slices": ("t1",)},
+}
+
+
+def profile_input_defaults(analysis_profile: str | None) -> dict[str, Any]:
+    key = (analysis_profile or "brief_only").strip() or "brief_only"
+    if key == "vessel_monitoring":
+        key = "oceanscout_ship_detection"
+    return dict(_PROFILE_INPUT_DEFAULTS.get(key, _PROFILE_INPUT_DEFAULTS["brief_only"]))
+
+
+def _analysis_profile(in_cfg: Mapping[str, Any], row: Mapping[str, Any]) -> str:
+    return str(row.get("analysis_profile") or in_cfg.get("analysis_profile") or "brief_only")
+
+
+def _default_datetime_interval(days: int) -> str:
+    end = datetime.now(timezone.utc).date()
+    start = end - timedelta(days=max(1, int(days)))
+    return f"{start.isoformat()}/{end.isoformat()}"
+
+
+def _previous_datetime_interval(datetime_interval: str, days: int) -> str:
+    raw_start, sep, raw_end = datetime_interval.partition("/")
+    if not sep:
+        return datetime_interval
+    start = _parse_interval_date(raw_start)
+    end = _parse_interval_date(raw_end)
+    if start is None:
+        return datetime_interval
+    width = max(1, (end - start).days if end is not None else int(days))
+    prev_end = start - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=width)
+    return f"{prev_start.isoformat()}/{prev_end.isoformat()}"
+
+
+def _parse_interval_date(value: str) -> Any | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return datetime.strptime(raw[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+
+def _s2_params_with_profile_defaults(in_cfg: Mapping[str, Any], row: Mapping[str, Any]) -> dict[str, Any]:
+    s2 = stac_s2_params_from_cfg(in_cfg, row)
+    profile_defaults = profile_input_defaults(_analysis_profile(in_cfg, row))
+    s2.setdefault("max_cloud", profile_defaults["max_cloud"])
+    s2.setdefault("datetime", _default_datetime_interval(int(profile_defaults["datetime_window_days"])))
+    return s2
+
+
 def _stac_s12_tensor(
     device: torch.device,
     in_cfg: Mapping[str, Any],
     row: Mapping[str, Any],
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """One STAC read → ``(1,12,H,W)`` float tensor on ``device`` + STAC metadata."""
-    s2 = stac_s2_params_from_cfg(in_cfg, row)
+    s2 = _s2_params_with_profile_defaults(in_cfg, row)
+    return _stac_s12_tensor_from_params(device, s2)
+
+
+def _stac_s12_tensor_from_params(
+    device: torch.device,
+    s2: Mapping[str, Any],
+    *,
+    temporal_slice: str | None = None,
+) -> tuple[torch.Tensor, dict[str, Any]]:
+    """One STAC read from resolved params → ``(1,12,H,W)`` tensor + metadata."""
     if s2.get("lat") is None or s2.get("lon") is None:
         raise ValueError("STAC S2 requires lat/lon in inputs.s2, inputs root, or batch row")
     lat = float(s2["lat"])
     lon = float(s2["lon"])
-    dt = str(s2.get("datetime") or in_cfg.get("datetime") or "").strip()
+    dt = str(s2.get("datetime") or "").strip()
     if not dt:
         raise ValueError("inputs.s2.datetime (or inputs.datetime / batch row) is required for STAC S2")
-    stack, meta = load_s2l2a_patch_np(
+    patch = load_s2l2a_patch_np(
         lat=lat,
         lon=lon,
         datetime_range=dt,
@@ -112,10 +188,73 @@ def _stac_s12_tensor(
         max_cloud=float(s2.get("max_cloud", 60.0)),
         asset_keys=s2.get("asset_keys"),
         max_items=int(s2.get("max_items", 20)),
+        scene_id=str(s2["scene_id"]) if s2.get("scene_id") else None,
     )
+    stack, meta = _patch_result_parts(patch)
+    if temporal_slice:
+        meta["temporal_slice"] = temporal_slice
     stack = apply_reflectance_scale(stack, s2)
-    t = torch.from_numpy(stack).unsqueeze(0).to(device)
+    t = _torch_tensor_from_np(stack).unsqueeze(0).to(device)
     return t, meta
+
+
+def _patch_result_parts(patch: Any) -> tuple[np.ndarray, dict[str, Any]]:
+    if hasattr(patch, "stack") and hasattr(patch, "meta"):
+        return patch.stack, dict(patch.meta)
+    stack, meta, _scl_patch = patch
+    return stack, dict(meta)
+
+
+def _torch_tensor_from_np(arr: np.ndarray) -> torch.Tensor:
+    try:
+        return torch.from_numpy(arr)
+    except RuntimeError as exc:
+        if "Numpy is not available" not in str(exc):
+            raise
+        return torch.tensor(arr.tolist(), dtype=torch.float32)
+
+
+def _temporal_s2_specs(in_cfg: Mapping[str, Any], row: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = row.get("temporal_s2") or in_cfg.get("temporal_s2")
+    if isinstance(raw, Mapping):
+        base = _s2_params_with_profile_defaults(in_cfg, row)
+        out: dict[str, dict[str, Any]] = {}
+        for label in ("t0", "t1", "t2"):
+            slice_cfg = raw.get(label)
+            if not isinstance(slice_cfg, Mapping):
+                continue
+            params = dict(base)
+            params.update(slice_cfg)
+            if row.get(f"scene_id_{label}") is not None:
+                params["scene_id"] = row[f"scene_id_{label}"]
+            out[label] = params
+        return out
+
+    profile_defaults = profile_input_defaults(_analysis_profile(in_cfg, row))
+    labels = tuple(profile_defaults.get("temporal_slices") or ("t1",))
+    if labels == ("t1",) and not any(row.get(f"scene_id_{label}") for label in ("t0", "t1", "t2")):
+        return {}
+    base = _s2_params_with_profile_defaults(in_cfg, row)
+    dt = str(base.get("datetime") or _default_datetime_interval(int(profile_defaults["datetime_window_days"])))
+    out = {}
+    for label in labels:
+        params = dict(base)
+        params["datetime"] = _previous_datetime_interval(dt, int(profile_defaults["datetime_window_days"])) if label == "t0" else dt
+        if row.get(f"scene_id_{label}") is not None:
+            params["scene_id"] = row[f"scene_id_{label}"]
+        out[label] = params
+    return out
+
+
+def _load_temporal_stac(
+    device: torch.device,
+    in_cfg: Mapping[str, Any],
+    row: Mapping[str, Any],
+) -> dict[str, tuple[torch.Tensor, dict[str, Any]]]:
+    out: dict[str, tuple[torch.Tensor, dict[str, Any]]] = {}
+    for label, params in _temporal_s2_specs(in_cfg, row).items():
+        out[label] = _stac_s12_tensor_from_params(device, params, temporal_slice=label)
+    return out
 
 
 def _s2_tensor(
@@ -240,8 +379,14 @@ def _build_inputs(
     out: dict[str, torch.Tensor] = {}
     aux: dict[str, Any] = {}
     shared_stac: tuple[torch.Tensor, dict[str, Any]] | None = None
+    temporal_stac: dict[str, tuple[torch.Tensor, dict[str, Any]]] = {}
     if _batch_row_needs_shared_stac_stack(modalities, in_cfg, row, per_mod):
-        shared_stac = _stac_s12_tensor(device, in_cfg, row)
+        temporal_stac = _load_temporal_stac(device, in_cfg, row)
+        if temporal_stac:
+            active_label = "t1" if "t1" in temporal_stac else sorted(temporal_stac.keys())[-1]
+            shared_stac = temporal_stac[active_label]
+        else:
+            shared_stac = _stac_s12_tensor(device, in_cfg, row)
 
     for mod in modalities:
         if not isinstance(mod, str):
@@ -262,4 +407,15 @@ def _build_inputs(
     if shared_stac is not None and "s2_stac" not in aux:
         aux["s2_stac"] = shared_stac[1]
         aux["s2_stac_modality_key"] = "RGB(s2_rgb)"
+    if temporal_stac:
+        aux["temporal_s2_stac"] = {label: meta for label, (_tensor, meta) in temporal_stac.items()}
+        aux["scene_provenance"] = {
+            label: {
+                "item_id": meta.get("stac_item_id"),
+                "datetime": meta.get("stac_datetime"),
+                "cloud_pct": meta.get("eo_cloud_cover"),
+                "scene_id_requested": meta.get("scene_id_requested"),
+            }
+            for label, (_tensor, meta) in temporal_stac.items()
+        }
     return out, aux

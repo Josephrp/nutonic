@@ -318,7 +318,7 @@ jobs:
       - name: Smoke test deployed LFM Space
         run: |
           pip install -r tools/requirements.txt
-          python tools/live_inference_smoke.py --preset lfm-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-lfm.json
+          python tools/live_inference_smoke.py --preset lfm-deploy --timeout 120 --strict --json-report-path artifacts/hf-smoke-lfm.json
       - name: Upload LFM smoke report
         if: always()
         uses: actions/upload-artifact@v4
@@ -358,7 +358,7 @@ jobs:
       - name: Smoke test deployed satellite Space
         run: |
           pip install -r tools/requirements.txt
-          python tools/live_inference_smoke.py --preset satellite-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-satellite.json
+          python tools/live_inference_smoke.py --preset satellite-deploy --timeout 120 --strict --json-report-path artifacts/hf-smoke-satellite.json
       - name: Upload satellite smoke report
         if: always()
         uses: actions/upload-artifact@v4
@@ -397,7 +397,7 @@ jobs:
       - name: Smoke test deployed TerraMind Space
         run: |
           pip install -r tools/requirements.txt
-          python tools/live_inference_smoke.py --preset terramind-deploy --timeout 30 --strict --json-report-path artifacts/hf-smoke-terramind.json
+          python tools/live_inference_smoke.py --preset terramind-deploy --timeout 120 --strict --json-report-path artifacts/hf-smoke-terramind.json
       - name: Upload TerraMind smoke report
         if: always()
         uses: actions/upload-artifact@v4

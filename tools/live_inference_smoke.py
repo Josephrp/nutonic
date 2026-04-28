@@ -128,9 +128,19 @@ def _request_json(
     expected_statuses: tuple[int, ...] = (200,),
     json_body: dict[str, Any] | None = None,
     headers: dict[str, str] | None = None,
+    sign_with_env_hmac: bool = False,
 ) -> tuple[CheckResult, dict[str, Any] | list[Any] | str | None]:
+    req_headers = dict(headers or {})
+    content: bytes | None = None
+    if json_body is not None:
+        content = json.dumps(json_body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        req_headers.setdefault("Content-Type", "application/json")
+    if sign_with_env_hmac:
+        signed = nutonic_hmac_headers_from_env(method, url, body=content or b"")
+        req_headers.update(signed)
+
     try:
-        response = client.request(method, url, json=json_body, headers=headers)
+        response = client.request(method, url, content=content, headers=req_headers)
     except httpx.HTTPError as exc:
         return _fail(name, f"{type(exc).__name__}: {exc}"), None
 
@@ -326,23 +336,21 @@ def main(argv: list[str] | None = None) -> int:
         # Street View pano
         if "streetview" in services:
             streetview_health_url = f"{urls['streetview_pano']}/health"
-            streetview_headers = nutonic_hmac_headers_from_env("GET", streetview_health_url)
             r, _ = _request_json(
                 client,
                 "GET",
                 streetview_health_url,
                 name="streetview.health",
-                headers=streetview_headers,
+                sign_with_env_hmac=True,
             )
             results.append(r)
             sample_url = f"{urls['streetview_pano']}/api/v1/panos/sample"
-            sample_headers = nutonic_hmac_headers_from_env("POST", sample_url)
             r, _ = _request_json(
                 client,
                 "POST",
                 sample_url,
                 name="streetview.panos_sample",
-                headers=sample_headers,
+                sign_with_env_hmac=True,
                 json_body={
                     "request_id": "hf_live_smoke",
                     "center": {"lat": args.lat, "lon": args.lon},
@@ -416,34 +424,31 @@ def main(argv: list[str] | None = None) -> int:
         # PRO materialization
         if "pro" in services:
             pro_health_url = f"{urls['pro_materialization']}/health"
-            pro_health_headers = nutonic_hmac_headers_from_env("GET", pro_health_url)
             r, _ = _request_json(
                 client,
                 "GET",
                 pro_health_url,
                 name="pro.health",
-                headers=pro_health_headers,
+                sign_with_env_hmac=True,
             )
             results.append(r)
             pro_healthz_url = f"{urls['pro_materialization']}/internal/v1/healthz"
-            pro_healthz_headers = nutonic_hmac_headers_from_env("GET", pro_healthz_url)
             r, _ = _request_json(
                 client,
                 "GET",
                 pro_healthz_url,
                 name="pro.healthz",
-                headers=pro_healthz_headers,
+                sign_with_env_hmac=True,
             )
             results.append(r)
             if run_pro_materialize:
                 mat_url = f"{urls['pro_materialization']}/internal/v1/materialize"
-                headers = nutonic_hmac_headers_from_env("POST", mat_url)
                 r, _ = _request_json(
                     client,
                     "POST",
                     mat_url,
                     name="pro.materialize",
-                    headers=headers,
+                    sign_with_env_hmac=True,
                     json_body={
                         "latitude": args.lat,
                         "longitude": args.lon,

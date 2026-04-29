@@ -8,6 +8,7 @@ data/*
 data/scripts/tests/_scratch_raster/
 !data/catalog/
 !data/catalog/**
+
 # PRO SFT event catalogs (fire/flood POI JSON, etc.) — tracked so cloud clones can run orchestrator defaults.
 !data/events/
 !data/events/**

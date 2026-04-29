@@ -372,24 +372,30 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     # Persisted incremental scan state for fallback progress reporting (keyed by local_dir).
     scan_state: dict[str, Any] = {"stack": [], "seen_dirs": set(), "bytes": 0, "files": 0, "init": False}
 
-    def _du_bytes(root: Path) -> int | None:
+    def _du_bytes(root: Path, *, exclude_hf_cache: bool) -> int | None:
         """
         Return apparent size in bytes using `du -sb` (fast in native code).
         Falls back to None if `du` isn't available.
         """
         root_str = str(root)
         # Try a few common du variants across GNU coreutils / BusyBox.
-        # Exclude HF's transient lock directory (lots of concurrent create/delete).
         excl = "--exclude=.cache/huggingface/download"
-        candidates: list[list[str]] = [
-            ["du", "-sb", excl, root_str],  # GNU coreutils
-            ["du", "-s", "--block-size=1", excl, root_str],  # GNU coreutils alt
-            ["du", "-sk", excl, root_str],  # portable-ish (KiB)
-            # Fallbacks without exclude (BusyBox may not support --exclude).
-            ["du", "-sb", root_str],
-            ["du", "-s", "--block-size=1", root_str],
-            ["du", "-sk", root_str],
-        ]
+        if exclude_hf_cache:
+            candidates: list[list[str]] = [
+                ["du", "-sb", excl, root_str],  # GNU coreutils
+                ["du", "-s", "--block-size=1", excl, root_str],  # GNU coreutils alt
+                ["du", "-sk", excl, root_str],  # portable-ish (KiB)
+                # Fallbacks without exclude (BusyBox may not support --exclude).
+                ["du", "-sb", root_str],
+                ["du", "-s", "--block-size=1", root_str],
+                ["du", "-sk", root_str],
+            ]
+        else:
+            candidates = [
+                ["du", "-sb", root_str],
+                ["du", "-s", "--block-size=1", root_str],
+                ["du", "-sk", root_str],
+            ]
         for cmd in candidates:
             try:
                 cp = subprocess.run(
@@ -506,26 +512,28 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     th.start()
     last = time.monotonic()
     prev_t = last
-    prev_b = _du_bytes(local_dir)
+    prev_total = _du_bytes(local_dir, exclude_hf_cache=False)
     while th.is_alive():
         th.join(timeout=1.0)
         now = time.monotonic()
         if now - last >= heartbeat_s:
             last = now
-            b = _du_bytes(local_dir)
+            total = _du_bytes(local_dir, exclude_hf_cache=False)
+            finalish = _du_bytes(local_dir, exclude_hf_cache=True)
             rate = ""
-            if b is not None and prev_b is not None:
+            if total is not None and prev_total is not None:
                 dt = max(1e-6, now - prev_t)
-                dmb = (b - prev_b) / (1024 * 1024)
+                dmb = (total - prev_total) / (1024 * 1024)
                 rate = f", +{dmb/dt:.1f} MiB/s"
-            if b is not None:
-                mib = b / (1024 * 1024)
+            if total is not None:
+                mib_total = total / (1024 * 1024)
+                suffix = ""
+                if finalish is not None:
+                    mib_fin = finalish / (1024 * 1024)
+                    suffix = f", dataset~{mib_fin:.1f} MiB (excl hf cache)"
                 counts = _top_level_file_counts(local_dir)
                 extra = f", top-level files={counts}" if counts else ""
-                print(
-                    f"  snapshot heartbeat: {repo_id}: ~{mib:.1f} MiB on disk{rate}{extra}",
-                    flush=True,
-                )
+                print(f"  snapshot heartbeat: {repo_id}: total~{mib_total:.1f} MiB{rate}{suffix}{extra}", flush=True)
             else:
                 # Fallback: incremental lower-bound probe without expensive full tree walk.
                 bb, nf = _incremental_size_probe(local_dir, budget_ms=200.0)
@@ -536,11 +544,11 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
                     flush=True,
                 )
             prev_t = now
-            prev_b = b
+            prev_total = total
     if err:
         raise RuntimeError(f"snapshot_download failed for {repo_id}: {err[0]}") from err[0]
     path = str(result.get("path") or local_dir)
-    b_final = _du_bytes(Path(path))
+    b_final = _du_bytes(Path(path), exclude_hf_cache=False)
     n_bytes = int(b_final) if b_final is not None else 0
     print(
         f"Snapshot download done: {repo_id}: {n_bytes/(1024*1024):.1f} MiB at {path}",

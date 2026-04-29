@@ -352,7 +352,16 @@ class SourceSpec:
     tag: str
 
 
-def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revision: str | None) -> Path:
+def _snapshot_download_dataset(
+    *,
+    repo_id: str,
+    token: str,
+    work_dir: Path,
+    revision: str | None,
+    allow_patterns: list[str] | None,
+    ignore_patterns: list[str] | None,
+    max_retries: int,
+) -> Path:
     try:
         from huggingface_hub import snapshot_download
     except ImportError as e:  # pragma: no cover
@@ -492,18 +501,52 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
 
     def _run() -> None:
         try:
-            # snapshot_download returns a cache path; local_dir_use_symlinks is deprecated in new hub versions
-            # but keeping it is harmless for older installs.
-            result["path"] = snapshot_download(
-                repo_id=repo_id,
-                repo_type="dataset",
-                revision=revision,
-                token=token,
-                local_dir=str(local_dir),
-                local_dir_use_symlinks=False,
-                resume_download=True,
-                max_workers=max_workers,
-            )
+            # ``snapshot_download`` is resumable when writing to ``local_dir`` (Hub manages partial files under
+            # ``<local_dir>/.cache/huggingface/``). Deprecated kwargs removed to reduce noisy warnings.
+            #
+            # Reliability tips (remote runners):
+            # - pip install -U hf_transfer && export HF_HUB_ENABLE_HF_TRANSFER=1
+            # - export HF_HUB_DOWNLOAD_TIMEOUT=600  (or higher) if you see ReadTimeout on slow links
+            for attempt in range(1, max(1, int(max_retries)) + 1):
+                try:
+                    result["path"] = snapshot_download(
+                        repo_id=repo_id,
+                        repo_type="dataset",
+                        revision=revision,
+                        token=token,
+                        local_dir=str(local_dir),
+                        max_workers=max_workers,
+                        allow_patterns=allow_patterns,
+                        ignore_patterns=ignore_patterns,
+                    )
+                    break
+                except Exception as e:
+                    # Retry on transient network / Hub overload signals.
+                    msg = str(e).lower()
+                    retryable = any(
+                        s in msg
+                        for s in (
+                            "readtimeout",
+                            "timeout",
+                            "timed out",
+                            "504",
+                            "503",
+                            "502",
+                            "429",
+                            "gateway timeout",
+                            "connection reset",
+                            "connection aborted",
+                        )
+                    )
+                    if not retryable or attempt >= int(max_retries):
+                        raise
+                    wait = min(120.0, 2.0**attempt)
+                    print(
+                        f"snapshot_download retry {attempt}/{max_retries} for {repo_id} after {type(e).__name__}: {e!s}; "
+                        f"sleeping {wait:.1f}s",
+                        flush=True,
+                    )
+                    time.sleep(wait)
         except BaseException as e:  # noqa: BLE001
             err.append(e)
 
@@ -567,6 +610,25 @@ def main() -> int:
         help="Source HF dataset repo id. Repeatable (pass twice for your two datasets).",
     )
     ap.add_argument("--src-revision", default=None, help="Optional source revision/branch (default main).")
+    ap.add_argument(
+        "--download-allow-pattern",
+        action="append",
+        default=None,
+        help="Forwarded to snapshot_download(allow_patterns=...). Repeatable (glob-style).",
+    )
+    ap.add_argument(
+        "--download-ignore-pattern",
+        action="append",
+        default=None,
+        help="Forwarded to snapshot_download(ignore_patterns=...). Repeatable (glob-style). "
+        "Example to skip per-row JSON sidecars: --download-ignore-pattern 'metadata/sft_metadata_rows/**'",
+    )
+    ap.add_argument(
+        "--download-max-retries",
+        type=int,
+        default=8,
+        help="Retries for snapshot_download on transient Hub/network failures (default 8).",
+    )
     ap.add_argument("--out-repo-id", required=True, help="Destination HF dataset repo id (org/name).")
     ap.add_argument("--private", action="store_true", help="Create destination repo as private if missing.")
     ap.add_argument(
@@ -682,6 +744,9 @@ def main() -> int:
             token=token,
             work_dir=work_dir,
             revision=args.src_revision,
+            allow_patterns=list(args.download_allow_pattern) if args.download_allow_pattern else None,
+            ignore_patterns=list(args.download_ignore_pattern) if args.download_ignore_pattern else None,
+            max_retries=int(args.download_max_retries),
         )
         stage = work_dir / "staged" / _safe_tag(spec.repo_id)
         st = _postprocess_dataset_tree(

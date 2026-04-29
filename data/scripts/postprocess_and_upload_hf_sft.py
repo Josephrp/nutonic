@@ -28,6 +28,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -360,19 +362,67 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     if max_workers <= 0:
         max_workers = 8
 
+    heartbeat_s = float(os.environ.get("HF_SNAPSHOT_HEARTBEAT_S", "0") or "0")
+    if heartbeat_s <= 0:
+        heartbeat_s = 30.0
+
     local_dir = work_dir / "snapshots" / _safe_tag(repo_id)
     local_dir.parent.mkdir(parents=True, exist_ok=True)
-    # snapshot_download returns a cache path; local_dir_use_symlinks=False makes a real directory tree
-    # we can hardlink/copy easily.
-    path = snapshot_download(
-        repo_id=repo_id,
-        repo_type="dataset",
-        revision=revision,
-        token=token,
-        local_dir=str(local_dir),
-        local_dir_use_symlinks=False,
-        resume_download=True,
-        max_workers=max_workers,
+
+    def _disk_stats(root: Path) -> tuple[int, int]:
+        """(file_count, total_bytes) under root; best-effort and fast enough for periodic heartbeats."""
+        n_files = 0
+        n_bytes = 0
+        if not root.exists():
+            return 0, 0
+        for dirpath, _dirnames, filenames in os.walk(root):
+            n_files += len(filenames)
+            for fn in filenames:
+                try:
+                    n_bytes += (Path(dirpath) / fn).stat().st_size
+                except OSError:
+                    continue
+        return n_files, n_bytes
+
+    result: dict[str, Any] = {}
+    err: list[BaseException] = []
+
+    def _run() -> None:
+        try:
+            # snapshot_download returns a cache path; local_dir_use_symlinks is deprecated in new hub versions
+            # but keeping it is harmless for older installs.
+            result["path"] = snapshot_download(
+                repo_id=repo_id,
+                repo_type="dataset",
+                revision=revision,
+                token=token,
+                local_dir=str(local_dir),
+                local_dir_use_symlinks=False,
+                resume_download=True,
+                max_workers=max_workers,
+            )
+        except BaseException as e:  # noqa: BLE001
+            err.append(e)
+
+    th = threading.Thread(target=_run, name=f"hf-snapshot:{repo_id}", daemon=True)
+    print(f"Snapshot download start: {repo_id} -> {local_dir} (max_workers={max_workers})", flush=True)
+    th.start()
+    last = time.monotonic()
+    while th.is_alive():
+        th.join(timeout=1.0)
+        now = time.monotonic()
+        if now - last >= heartbeat_s:
+            last = now
+            n_files, n_bytes = _disk_stats(local_dir)
+            mib = n_bytes / (1024 * 1024)
+            print(f"  snapshot heartbeat: {repo_id}: {n_files} files, {mib:.1f} MiB on disk so far...", flush=True)
+    if err:
+        raise RuntimeError(f"snapshot_download failed for {repo_id}: {err[0]}") from err[0]
+    path = str(result.get("path") or local_dir)
+    n_files, n_bytes = _disk_stats(Path(path))
+    print(
+        f"Snapshot download done: {repo_id}: {n_files} files, {n_bytes/(1024*1024):.1f} MiB at {path}",
+        flush=True,
     )
     return Path(path)
 
@@ -406,6 +456,12 @@ def main() -> int:
         default=32,
         help="Concurrency for Hugging Face snapshot_download (default 32). "
         "Higher helps when downloading many small files on higher-latency links.",
+    )
+    ap.add_argument(
+        "--download-heartbeat-seconds",
+        type=float,
+        default=30.0,
+        help="Seconds between snapshot_download progress heartbeats (default 30s).",
     )
     ap.add_argument(
         "--max-assistant-chars",
@@ -474,6 +530,7 @@ def main() -> int:
     token = _resolve_hf_token(args.hf_token)
     # Pass download concurrency via env so we don't thread it through many helper signatures.
     os.environ["HF_SNAPSHOT_MAX_WORKERS"] = str(max(1, int(args.download_max_workers)))
+    os.environ["HF_SNAPSHOT_HEARTBEAT_S"] = str(max(5.0, float(args.download_heartbeat_seconds)))
     work_dir: Path = Path(args.work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 

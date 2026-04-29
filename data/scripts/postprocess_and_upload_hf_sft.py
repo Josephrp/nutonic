@@ -379,10 +379,16 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
         """
         root_str = str(root)
         # Try a few common du variants across GNU coreutils / BusyBox.
+        # Exclude HF's transient lock directory (lots of concurrent create/delete).
+        excl = "--exclude=.cache/huggingface/download"
         candidates: list[list[str]] = [
-            ["du", "-sb", root_str],  # GNU coreutils
-            ["du", "-s", "--block-size=1", root_str],  # GNU coreutils alt
-            ["du", "-sk", root_str],  # portable-ish (KiB)
+            ["du", "-sb", excl, root_str],  # GNU coreutils
+            ["du", "-s", "--block-size=1", excl, root_str],  # GNU coreutils alt
+            ["du", "-sk", excl, root_str],  # portable-ish (KiB)
+            # Fallbacks without exclude (BusyBox may not support --exclude).
+            ["du", "-sb", root_str],
+            ["du", "-s", "--block-size=1", root_str],
+            ["du", "-sk", root_str],
         ]
         for cmd in candidates:
             try:
@@ -394,8 +400,6 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
                     text=True,
                 )
             except Exception:
-                continue
-            if cp.returncode != 0:
                 continue
             head = (cp.stdout or "").strip().split(maxsplit=1)
             if not head:

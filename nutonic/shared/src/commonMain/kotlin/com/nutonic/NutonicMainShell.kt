@@ -77,7 +77,7 @@ fun NutonicMainShell(
     guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
 ) {
     /** Shared map id for SCAN hub pick, RANK community panel, and results → RANK deep link. */
-    var mapContextId by rememberSaveable { mutableStateOf("demo") }
+    var mapContextId by rememberSaveable { mutableStateOf("poi_0000") }
 
     /** Title from catalog row when known (SCAN list); cleared when map id is edited elsewhere (e.g. RANK text field). */
     var mapContextTitle by rememberSaveable { mutableStateOf<String?>(null) }

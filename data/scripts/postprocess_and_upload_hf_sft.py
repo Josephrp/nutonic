@@ -369,30 +369,96 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     local_dir = work_dir / "snapshots" / _safe_tag(repo_id)
     local_dir.parent.mkdir(parents=True, exist_ok=True)
 
+    # Persisted incremental scan state for fallback progress reporting (keyed by local_dir).
+    scan_state: dict[str, Any] = {"stack": [], "seen_dirs": set(), "bytes": 0, "files": 0, "init": False}
+
     def _du_bytes(root: Path) -> int | None:
         """
         Return apparent size in bytes using `du -sb` (fast in native code).
         Falls back to None if `du` isn't available.
         """
-        try:
-            cp = subprocess.run(
-                ["du", "-sb", str(root)],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-            )
-        except Exception:
-            return None
-        if cp.returncode != 0:
-            return None
-        head = (cp.stdout or "").strip().split(maxsplit=1)
-        if not head:
-            return None
-        try:
-            return int(head[0])
-        except ValueError:
-            return None
+        root_str = str(root)
+        # Try a few common du variants across GNU coreutils / BusyBox.
+        candidates: list[list[str]] = [
+            ["du", "-sb", root_str],  # GNU coreutils
+            ["du", "-s", "--block-size=1", root_str],  # GNU coreutils alt
+            ["du", "-sk", root_str],  # portable-ish (KiB)
+        ]
+        for cmd in candidates:
+            try:
+                cp = subprocess.run(
+                    cmd,
+                    check=False,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+            except Exception:
+                continue
+            if cp.returncode != 0:
+                continue
+            head = (cp.stdout or "").strip().split(maxsplit=1)
+            if not head:
+                continue
+            try:
+                n = int(head[0])
+            except ValueError:
+                continue
+            # If we used -sk, the number is KiB.
+            if cmd[:2] == ["du", "-sk"]:
+                return n * 1024
+            return n
+        return None
+
+    def _incremental_size_probe(root: Path, *, budget_ms: float = 200.0) -> tuple[int, int]:
+        """
+        Best-effort incremental scan that avoids full `os.walk` cost on huge trees.
+        Returns (bytes_seen_lower_bound, files_seen_count).
+
+        We scan directory entries in a stack with a small time budget per heartbeat.
+        Over time it converges upward as more of the tree is visited.
+        """
+        if not root.exists():
+            return 0, 0
+        if not scan_state["init"]:
+            scan_state["stack"] = [root]
+            scan_state["seen_dirs"] = set()
+            scan_state["bytes"] = 0
+            scan_state["files"] = 0
+            scan_state["init"] = True
+
+        deadline = time.monotonic() + (budget_ms / 1000.0)
+        stack: list[Path] = scan_state["stack"]
+        seen_dirs: set[str] = scan_state["seen_dirs"]
+        while stack and time.monotonic() < deadline:
+            d = stack.pop()
+            key = str(d)
+            if key in seen_dirs:
+                continue
+            seen_dirs.add(key)
+            try:
+                with os.scandir(d) as it:
+                    for ent in it:
+                        if time.monotonic() >= deadline:
+                            # Put directory back to continue later.
+                            stack.append(d)
+                            break
+                        try:
+                            if ent.is_symlink():
+                                continue
+                            if ent.is_file(follow_symlinks=False):
+                                scan_state["files"] += 1
+                                try:
+                                    scan_state["bytes"] += ent.stat(follow_symlinks=False).st_size
+                                except OSError:
+                                    continue
+                            elif ent.is_dir(follow_symlinks=False):
+                                stack.append(Path(ent.path))
+                        except OSError:
+                            continue
+            except OSError:
+                continue
+        return int(scan_state["bytes"]), int(scan_state["files"])
 
     def _top_level_file_counts(root: Path) -> dict[str, int]:
         """
@@ -457,7 +523,14 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
                     flush=True,
                 )
             else:
-                print(f"  snapshot heartbeat: {repo_id}: still running (size unavailable)", flush=True)
+                # Fallback: incremental lower-bound probe without expensive full tree walk.
+                bb, nf = _incremental_size_probe(local_dir, budget_ms=200.0)
+                mib2 = bb / (1024 * 1024)
+                print(
+                    f"  snapshot heartbeat: {repo_id}: still running (du unavailable); "
+                    f"scanned>={nf} files, >= {mib2:.1f} MiB so far...",
+                    flush=True,
+                )
             prev_t = now
             prev_b = b
     if err:

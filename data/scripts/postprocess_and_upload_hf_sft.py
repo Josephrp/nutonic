@@ -369,20 +369,47 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     local_dir = work_dir / "snapshots" / _safe_tag(repo_id)
     local_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    def _disk_stats(root: Path) -> tuple[int, int]:
-        """(file_count, total_bytes) under root; best-effort and fast enough for periodic heartbeats."""
-        n_files = 0
-        n_bytes = 0
-        if not root.exists():
-            return 0, 0
-        for dirpath, _dirnames, filenames in os.walk(root):
-            n_files += len(filenames)
-            for fn in filenames:
-                try:
-                    n_bytes += (Path(dirpath) / fn).stat().st_size
-                except OSError:
-                    continue
-        return n_files, n_bytes
+    def _du_bytes(root: Path) -> int | None:
+        """
+        Return apparent size in bytes using `du -sb` (fast in native code).
+        Falls back to None if `du` isn't available.
+        """
+        try:
+            cp = subprocess.run(
+                ["du", "-sb", str(root)],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except Exception:
+            return None
+        if cp.returncode != 0:
+            return None
+        head = (cp.stdout or "").strip().split(maxsplit=1)
+        if not head:
+            return None
+        try:
+            return int(head[0])
+        except ValueError:
+            return None
+
+    def _top_level_file_counts(root: Path) -> dict[str, int]:
+        """
+        Cheap-ish progress proxy: count files in a few known top-level directories without
+        recursively walking the entire tree.
+        """
+        counts: dict[str, int] = {}
+        for name in ("data", "images", "mapbox_stills", "analysis_images", "overlays", "metadata"):
+            d = root / name
+            if not d.is_dir():
+                continue
+            try:
+                # Only count direct children (fast); sharded layouts will still show growth.
+                counts[name] = sum(1 for p in d.iterdir() if p.is_file())
+            except OSError:
+                continue
+        return counts
 
     result: dict[str, Any] = {}
     err: list[BaseException] = []
@@ -408,20 +435,38 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     print(f"Snapshot download start: {repo_id} -> {local_dir} (max_workers={max_workers})", flush=True)
     th.start()
     last = time.monotonic()
+    prev_t = last
+    prev_b = _du_bytes(local_dir)
     while th.is_alive():
         th.join(timeout=1.0)
         now = time.monotonic()
         if now - last >= heartbeat_s:
             last = now
-            n_files, n_bytes = _disk_stats(local_dir)
-            mib = n_bytes / (1024 * 1024)
-            print(f"  snapshot heartbeat: {repo_id}: {n_files} files, {mib:.1f} MiB on disk so far...", flush=True)
+            b = _du_bytes(local_dir)
+            rate = ""
+            if b is not None and prev_b is not None:
+                dt = max(1e-6, now - prev_t)
+                dmb = (b - prev_b) / (1024 * 1024)
+                rate = f", +{dmb/dt:.1f} MiB/s"
+            if b is not None:
+                mib = b / (1024 * 1024)
+                counts = _top_level_file_counts(local_dir)
+                extra = f", top-level files={counts}" if counts else ""
+                print(
+                    f"  snapshot heartbeat: {repo_id}: ~{mib:.1f} MiB on disk{rate}{extra}",
+                    flush=True,
+                )
+            else:
+                print(f"  snapshot heartbeat: {repo_id}: still running (size unavailable)", flush=True)
+            prev_t = now
+            prev_b = b
     if err:
         raise RuntimeError(f"snapshot_download failed for {repo_id}: {err[0]}") from err[0]
     path = str(result.get("path") or local_dir)
-    n_files, n_bytes = _disk_stats(Path(path))
+    b_final = _du_bytes(Path(path))
+    n_bytes = int(b_final) if b_final is not None else 0
     print(
-        f"Snapshot download done: {repo_id}: {n_files} files, {n_bytes/(1024*1024):.1f} MiB at {path}",
+        f"Snapshot download done: {repo_id}: {n_bytes/(1024*1024):.1f} MiB at {path}",
         flush=True,
     )
     return Path(path)

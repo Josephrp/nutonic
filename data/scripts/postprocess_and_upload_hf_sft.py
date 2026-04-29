@@ -356,6 +356,10 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
     except ImportError as e:  # pragma: no cover
         raise ImportError("huggingface_hub is required: pip install -U huggingface_hub") from e
 
+    max_workers = int(os.environ.get("HF_SNAPSHOT_MAX_WORKERS", "0") or "0")
+    if max_workers <= 0:
+        max_workers = 8
+
     local_dir = work_dir / "snapshots" / _safe_tag(repo_id)
     local_dir.parent.mkdir(parents=True, exist_ok=True)
     # snapshot_download returns a cache path; local_dir_use_symlinks=False makes a real directory tree
@@ -368,6 +372,7 @@ def _snapshot_download_dataset(*, repo_id: str, token: str, work_dir: Path, revi
         local_dir=str(local_dir),
         local_dir_use_symlinks=False,
         resume_download=True,
+        max_workers=max_workers,
     )
     return Path(path)
 
@@ -394,6 +399,13 @@ def main() -> int:
         type=Path,
         default=REPO_ROOT / "data" / "downloads" / "hf_postprocess_work",
         help="Working directory for snapshots + staging outputs.",
+    )
+    ap.add_argument(
+        "--download-max-workers",
+        type=int,
+        default=32,
+        help="Concurrency for Hugging Face snapshot_download (default 32). "
+        "Higher helps when downloading many small files on higher-latency links.",
     )
     ap.add_argument(
         "--max-assistant-chars",
@@ -460,6 +472,8 @@ def main() -> int:
         _validate_repo_id(rid)
 
     token = _resolve_hf_token(args.hf_token)
+    # Pass download concurrency via env so we don't thread it through many helper signatures.
+    os.environ["HF_SNAPSHOT_MAX_WORKERS"] = str(max(1, int(args.download_max_workers)))
     work_dir: Path = Path(args.work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 

@@ -23,6 +23,8 @@ Auth:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import fnmatch
 import json
 import os
 import shutil
@@ -361,9 +363,11 @@ def _snapshot_download_dataset(
     allow_patterns: list[str] | None,
     ignore_patterns: list[str] | None,
     max_retries: int,
+    reuse_existing_snapshot: bool,
+    download_file_list_mode: bool,
 ) -> Path:
     try:
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import HfApi, hf_hub_download, snapshot_download
     except ImportError as e:  # pragma: no cover
         raise ImportError("huggingface_hub is required: pip install -U huggingface_hub") from e
 
@@ -377,6 +381,122 @@ def _snapshot_download_dataset(
 
     local_dir = work_dir / "snapshots" / _safe_tag(repo_id)
     local_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    if reuse_existing_snapshot:
+        data_dir = local_dir / "data"
+        has_examples = data_dir.is_dir() and any(data_dir.glob("*.jsonl")) or any(data_dir.glob("*.json"))
+        if has_examples:
+            print(f"Snapshot reuse: {repo_id}: using existing local snapshot at {local_dir}", flush=True)
+            return local_dir
+        raise FileNotFoundError(
+            f"--reuse-existing-snapshot was set, but {local_dir} does not look usable "
+            "(expected data/*.jsonl or data/*.json)."
+        )
+
+    def _matches_any(path: str, patterns: list[str] | None) -> bool:
+        if not patterns:
+            return False
+        return any(fnmatch.fnmatch(path, pat) for pat in patterns)
+
+    def _allowed_file(path: str) -> bool:
+        if allow_patterns and not _matches_any(path, allow_patterns):
+            return False
+        if _matches_any(path, ignore_patterns):
+            return False
+        return True
+
+    def _download_expected_files() -> Path:
+        api = HfApi(token=token)
+        print(f"File-list download start: {repo_id}: listing repo files...", flush=True)
+        files = [
+            p
+            for p in api.list_repo_files(repo_id=repo_id, repo_type="dataset", revision=revision)
+            if _allowed_file(p)
+        ]
+        if not files:
+            raise RuntimeError(
+                f"No files matched download filters for {repo_id}. "
+                "Check --download-allow-pattern / --download-ignore-pattern."
+            )
+        missing = [p for p in files if not (local_dir / p).is_file()]
+        print(
+            f"File-list download plan: {repo_id}: expected={len(files):,}, "
+            f"already_present={len(files) - len(missing):,}, missing={len(missing):,}",
+            flush=True,
+        )
+
+        def _download_one(path_in_repo: str) -> str:
+            last_exc: Exception | None = None
+            for attempt in range(1, max(1, int(max_retries)) + 1):
+                try:
+                    hf_hub_download(
+                        repo_id=repo_id,
+                        repo_type="dataset",
+                        revision=revision,
+                        token=token,
+                        filename=path_in_repo,
+                        local_dir=str(local_dir),
+                    )
+                    return path_in_repo
+                except Exception as e:
+                    last_exc = e
+                    msg = str(e).lower()
+                    retryable = any(
+                        s in msg
+                        for s in (
+                            "readtimeout",
+                            "timeout",
+                            "timed out",
+                            "504",
+                            "503",
+                            "502",
+                            "429",
+                            "gateway timeout",
+                            "connection reset",
+                            "connection aborted",
+                        )
+                    )
+                    if not retryable or attempt >= int(max_retries):
+                        raise
+                    wait = min(120.0, 2.0**attempt)
+                    print(
+                        f"file retry {attempt}/{max_retries}: {repo_id}/{path_in_repo} after "
+                        f"{type(e).__name__}: {e!s}; sleeping {wait:.1f}s",
+                        flush=True,
+                    )
+                    time.sleep(wait)
+            if last_exc is not None:
+                raise last_exc
+            raise RuntimeError(f"Failed to download {repo_id}/{path_in_repo}")
+
+        if missing:
+            done = 0
+            started = time.monotonic()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as ex:
+                futures = {ex.submit(_download_one, p): p for p in missing}
+                for fut in concurrent.futures.as_completed(futures):
+                    fut.result()
+                    done += 1
+                    if done == 1 or done % 250 == 0 or done == len(missing):
+                        elapsed = max(1e-6, time.monotonic() - started)
+                        print(
+                            f"  file-list progress: {repo_id}: {done:,}/{len(missing):,} missing files "
+                            f"downloaded ({done/elapsed:.1f} files/s)",
+                            flush=True,
+                        )
+
+        still_missing = [p for p in files if not (local_dir / p).is_file()]
+        if still_missing:
+            preview = ", ".join(still_missing[:10])
+            raise RuntimeError(
+                f"File-list download incomplete for {repo_id}: {len(still_missing):,} files still missing. "
+                f"First missing: {preview}"
+            )
+        print(f"File-list download done: {repo_id}: verified {len(files):,} files at {local_dir}", flush=True)
+        return local_dir
+
+    if download_file_list_mode:
+        return _download_expected_files()
 
     # Persisted incremental scan state for fallback progress reporting (keyed by local_dir).
     scan_state: dict[str, Any] = {"stack": [], "seen_dirs": set(), "bytes": 0, "files": 0, "init": False}
@@ -629,6 +749,18 @@ def main() -> int:
         default=8,
         help="Retries for snapshot_download on transient Hub/network failures (default 8).",
     )
+    ap.add_argument(
+        "--reuse-existing-snapshot",
+        action="store_true",
+        help="Skip snapshot_download and use the existing local snapshot under --work-dir/snapshots/<repo>. "
+        "Useful when Hub reconciliation stalls after files are already present.",
+    )
+    ap.add_argument(
+        "--download-file-list-mode",
+        action="store_true",
+        help="Avoid snapshot_download; list expected files, apply allow/ignore patterns, download only missing files, "
+        "then verify all expected files exist before postprocessing.",
+    )
     ap.add_argument("--out-repo-id", required=True, help="Destination HF dataset repo id (org/name).")
     ap.add_argument("--private", action="store_true", help="Create destination repo as private if missing.")
     ap.add_argument(
@@ -747,6 +879,8 @@ def main() -> int:
             allow_patterns=list(args.download_allow_pattern) if args.download_allow_pattern else None,
             ignore_patterns=list(args.download_ignore_pattern) if args.download_ignore_pattern else None,
             max_retries=int(args.download_max_retries),
+            reuse_existing_snapshot=bool(args.reuse_existing_snapshot),
+            download_file_list_mode=bool(args.download_file_list_mode),
         )
         stage = work_dir / "staged" / _safe_tag(spec.repo_id)
         st = _postprocess_dataset_tree(

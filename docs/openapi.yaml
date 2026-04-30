@@ -585,6 +585,54 @@ paths:
         "404":
           description: Unknown job, artifact, or artifact bytes
 
+  /api/v1/pro/jobs/{job_id}/bundle:
+    get:
+      tags: [pro]
+      summary: Fetch the atomic evidence bundle for a completed PRO job
+      description: |
+        Returns a zip containing `pro_bundle_manifest.json` plus artifact bytes under `artifacts/`.
+        Intended as the cache/export unit for PRO runs; equivalent evidence to per-artifact downloads.
+      operationId: getProJobBundle
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evidence bundle zip
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: features.pro_jobs is false
+        "404":
+          description: Unknown job
+        "409":
+          description: Job is not completed yet
+
+  /api/v1/pro/readiness:
+    get:
+      tags: [pro]
+      summary: PRO readiness contract (feature + worker + VLM state)
+      operationId: getProReadiness
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Readiness payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProReadinessOut"
+        "401":
+          description: Missing or invalid token
+
   /api/v1/pro/vlm/model-manifest:
     get:
       tags: [pro]
@@ -603,6 +651,26 @@ paths:
           description: features.pro_jobs is false
         "503":
           description: PRO VLM model manifest is not configured
+
+  /api/v1/pro/vlm/model-bundle:
+    get:
+      tags: [pro]
+      summary: Download the publish-time PRO VLM model bundle from the game server image
+      operationId: getProVlmModelBundle
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Model bundle bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: features.pro_jobs is false
+        "404":
+          description: Model bundle is not baked into the server image
 
 components:
   securitySchemes:
@@ -1200,6 +1268,51 @@ components:
           type: array
           minItems: 1
           description: Supported VLM image contracts. Clients fail closed when their required contract id is absent.
+          items:
+            type: string
+
+    ProReadinessOut:
+      type: object
+      required:
+        [
+          feature_enabled,
+          ready,
+          materialization_configured,
+          lfm_brief_configured,
+          inference_worker_configured,
+          vlm_model_configured,
+          vlm_model_available,
+          degraded_reasons,
+        ]
+      properties:
+        feature_enabled:
+          type: boolean
+        ready:
+          type: boolean
+        materialization_configured:
+          type: boolean
+        materialization_healthy:
+          type: boolean
+          nullable: true
+        lfm_brief_configured:
+          type: boolean
+        lfm_brief_healthy:
+          type: boolean
+          nullable: true
+        inference_worker_configured:
+          type: boolean
+        inference_worker_healthy:
+          type: boolean
+          nullable: true
+        vlm_model_configured:
+          type: boolean
+        vlm_model_available:
+          type: boolean
+        vlm_model_bundle_id:
+          type: string
+          nullable: true
+        degraded_reasons:
+          type: array
           items:
             type: string
 

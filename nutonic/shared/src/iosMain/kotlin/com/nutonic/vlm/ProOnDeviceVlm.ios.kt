@@ -28,4 +28,3 @@ actual suspend fun saveCachedProVlmModelBytes(
     record: ProVlmCacheRecord,
     bytes: ByteArray,
 ) = Unit
-

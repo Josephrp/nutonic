@@ -50,15 +50,30 @@ data class ProEvidenceBundleItem(
 )
 
 fun parseStoredProEvidenceBundle(bytes: ByteArray): ProEvidenceBundlePreview {
-    val entries = readStoredZipEntries(bytes)
-        ?: return ProEvidenceBundlePreview(sizeBytes = bytes.size, manifest = null, error = "Bundle zip parse failed")
-    val manifestBytes = entries["pro_bundle_manifest.json"]
-        ?: return ProEvidenceBundlePreview(sizeBytes = bytes.size, manifest = null, error = "Bundle manifest missing")
-    val manifest = runCatching {
-        NutonicJson.decodeFromString(ProEvidenceBundleManifest.serializer(), manifestBytes.decodeToString())
-    }.getOrElse {
-        return ProEvidenceBundlePreview(sizeBytes = bytes.size, manifest = null, error = "Bundle manifest parse failed: ${it.message}")
-    }
+    val entries =
+        readStoredZipEntries(bytes)
+            ?: return ProEvidenceBundlePreview(
+                sizeBytes = bytes.size,
+                manifest = null,
+                error = "Bundle zip parse failed",
+            )
+    val manifestBytes =
+        entries["pro_bundle_manifest.json"]
+            ?: return ProEvidenceBundlePreview(
+                sizeBytes = bytes.size,
+                manifest = null,
+                error = "Bundle manifest missing",
+            )
+    val manifest =
+        runCatching {
+            NutonicJson.decodeFromString(ProEvidenceBundleManifest.serializer(), manifestBytes.decodeToString())
+        }.getOrElse {
+            return ProEvidenceBundlePreview(
+                sizeBytes = bytes.size,
+                manifest = null,
+                error = "Bundle manifest parse failed: ${it.message}",
+            )
+        }
     val items =
         manifest.artifacts.mapNotNull { artifact ->
             val path = artifact.path ?: return@mapNotNull null

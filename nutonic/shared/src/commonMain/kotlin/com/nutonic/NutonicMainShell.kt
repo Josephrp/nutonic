@@ -39,6 +39,7 @@ import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.ProJobStatusOut
+import com.nutonic.api.ProReadinessOut
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.cache.ProOverlayGuessRepository
 import com.nutonic.leaderboard.GuessRecordOutboxRepository
@@ -831,6 +832,7 @@ private fun ProTabRoot(
     val scope = rememberCoroutineScope()
     val proEnabled = serverFeatureFlags?.proJobs == true
     var probeStatus by remember { mutableStateOf("Idle") }
+    var readiness by remember { mutableStateOf<ProReadinessOut?>(null) }
     var recentJobs by remember { mutableStateOf<List<ProJobStatusOut>>(emptyList()) }
     var recentStatus by remember { mutableStateOf("Not loaded") }
 
@@ -840,6 +842,7 @@ private fun ProTabRoot(
             refreshProTabProbeAndJobs(
                 client = client,
                 onProbe = { probeStatus = it },
+                onReadiness = { readiness = it },
                 onRecentStatus = { recentStatus = it },
                 onJobs = { recentJobs = it },
             )
@@ -874,6 +877,15 @@ private fun ProTabRoot(
         NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
             Text("TiM / on-device VLM health", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text("Server probe: $probeStatus", style = MaterialTheme.typography.body2)
+            readiness?.let {
+                Text(
+                    "PRO ready: ${if (it.ready) "yes" else "degraded"} · VLM bundle: ${it.vlmModelBundleId ?: "not available"}",
+                    style = MaterialTheme.typography.body2,
+                )
+                if (it.degradedReasons.isNotEmpty()) {
+                    Text("Needs attention: ${it.degradedReasons.joinToString()}", style = MaterialTheme.typography.caption)
+                }
+            }
             Text("Current gameplay map: $currentMapId · PRO overlays shared: $proOverlayCount", style = MaterialTheme.typography.caption)
             NutonicGhostButton(
                 text = "Refresh PRO server probe",
@@ -884,6 +896,7 @@ private fun ProTabRoot(
                         refreshProTabProbeAndJobs(
                             client = client,
                             onProbe = { probeStatus = it },
+                            onReadiness = { readiness = it },
                             onRecentStatus = { recentStatus = it },
                             onJobs = { recentJobs = it },
                         )
@@ -924,21 +937,10 @@ private fun ProTabRoot(
 private suspend fun refreshProTabProbeAndJobs(
     client: NutonicApiClient,
     onProbe: (String) -> Unit,
+    onReadiness: (ProReadinessOut?) -> Unit,
     onRecentStatus: (String) -> Unit,
     onJobs: (List<ProJobStatusOut>) -> Unit,
 ) {
-    onProbe(
-        when (val config = client.getConfig()) {
-            is ApiResult.Ok ->
-                if (config.value.features.proJobs) {
-                    "Available"
-                } else {
-                    "Disabled by server"
-                }
-            is ApiResult.HttpFailure -> config.userMessage
-            is ApiResult.NetworkFailure -> "Network unavailable"
-        },
-    )
     onRecentStatus("Requesting session token...")
     val token =
         when (val auth = client.postAuthToken()) {
@@ -952,6 +954,26 @@ private suspend fun refreshProTabProbeAndJobs(
                 return
             }
         }
+    when (val readiness = client.getProReadiness(token)) {
+        is ApiResult.Ok -> {
+            onReadiness(readiness.value)
+            onProbe(
+                if (readiness.value.ready) {
+                    "Ready"
+                } else {
+                    "Degraded: ${readiness.value.degradedReasons.joinToString().ifBlank { "unknown" }}"
+                },
+            )
+        }
+        is ApiResult.HttpFailure -> {
+            onReadiness(null)
+            onProbe(readiness.userMessage)
+        }
+        is ApiResult.NetworkFailure -> {
+            onReadiness(null)
+            onProbe("Network unavailable")
+        }
+    }
     when (val jobs = client.listProJobs(token, limit = 5)) {
         is ApiResult.Ok -> {
             onJobs(jobs.value)

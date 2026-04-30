@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -594,6 +595,45 @@ def main(argv: list[str] | None = None) -> int:
                         results.append(_skip("game.pro_job_create", "FEATURE_PRO_JOBS is disabled on server config."))
                     else:
                         headers = {"Authorization": f"Bearer {token}"}
+                        readiness_check, readiness_payload = _request_json(
+                            client,
+                            "GET",
+                            f"{urls['game_server']}/api/v1/pro/readiness",
+                            name="game.pro_readiness",
+                            headers=headers,
+                        )
+                        results.append(readiness_check)
+                        if isinstance(readiness_payload, dict) and not readiness_payload.get("ready"):
+                            reasons = readiness_payload.get("degraded_reasons")
+                            results.append(
+                                _fail(
+                                    "game.pro_readiness.ready",
+                                    f"PRO readiness is degraded: {reasons}",
+                                    readiness_check.http_status,
+                                )
+                            )
+                        else:
+                            results.append(_ok("game.pro_readiness.ready", "PRO readiness reports ready."))
+
+                        manifest_check, manifest_payload = _request_json(
+                            client,
+                            "GET",
+                            f"{urls['game_server']}/api/v1/pro/vlm/model-manifest",
+                            name="game.pro_vlm_model_manifest",
+                            headers=headers,
+                        )
+                        results.append(manifest_check)
+                        if isinstance(manifest_payload, dict):
+                            missing = [
+                                key
+                                for key in ("model_bundle_id", "revision", "download_url", "sha256", "size_bytes", "contract_ids")
+                                if not manifest_payload.get(key)
+                            ]
+                            if missing:
+                                results.append(_fail("game.pro_vlm_model_manifest.fields", f"Missing fields: {missing}"))
+                            else:
+                                results.append(_ok("game.pro_vlm_model_manifest.fields", "Manifest has required fields."))
+
                         create_check, create_payload = _request_json(
                             client,
                             "POST",
@@ -615,14 +655,24 @@ def main(argv: list[str] | None = None) -> int:
                         if create_check.status == "ok" and isinstance(create_payload, dict):
                             jid = str(create_payload.get("job_id") or "")
                             if jid:
-                                status_check, _ = _request_json(
+                                status_check, status_payload = _poll_pro_job(
                                     client,
-                                    "GET",
-                                    f"{urls['game_server']}/api/v1/pro/jobs/{jid}",
-                                    name="game.pro_job_status",
+                                    url=f"{urls['game_server']}/api/v1/pro/jobs/{jid}",
                                     headers=headers,
+                                    timeout_seconds=max(30.0, args.timeout * 4),
                                 )
                                 results.append(status_check)
+                                if isinstance(status_payload, dict) and status_payload.get("status") == "completed":
+                                    payload = status_payload.get("on_device_payload")
+                                    if isinstance(payload, dict) and payload.get("vlm_image_set"):
+                                        results.append(_ok("game.pro_job_on_device_payload", "Completed job includes VLM image set."))
+                                    else:
+                                        results.append(
+                                            _fail(
+                                                "game.pro_job_on_device_payload",
+                                                "Completed job is missing on_device_payload.vlm_image_set.",
+                                            )
+                                        )
                             else:
                                 results.append(_fail("game.pro_job_status", "No job_id in create response."))
             else:
@@ -646,6 +696,40 @@ def main(argv: list[str] | None = None) -> int:
         _print_results(results, as_json=False)
     failed = any(r.status == "fail" for r in results)
     return 1 if (args.strict and failed) else 0
+
+
+def _poll_pro_job(
+    client: httpx.Client,
+    *,
+    url: str,
+    headers: dict[str, str],
+    timeout_seconds: float,
+) -> tuple[CheckResult, dict[str, Any] | list[Any] | str | None]:
+    deadline = time.monotonic() + timeout_seconds
+    last_result: CheckResult | None = None
+    last_payload: dict[str, Any] | list[Any] | str | None = None
+    while time.monotonic() < deadline:
+        status_check, status_payload = _request_json(
+            client,
+            "GET",
+            url,
+            name="game.pro_job_status",
+            headers=headers,
+        )
+        last_result = status_check
+        last_payload = status_payload
+        if status_check.status != "ok":
+            return status_check, status_payload
+        if isinstance(status_payload, dict) and status_payload.get("status") in {"completed", "failed", "cancelled"}:
+            status = status_payload.get("status")
+            if status == "completed":
+                return _ok("game.pro_job_status", f"Job completed at {status_payload.get('progress_pct')}%.", status_check.http_status), status_payload
+            return _fail("game.pro_job_status", f"Job ended with status {status}: {status_payload}", status_check.http_status), status_payload
+        time.sleep(2.0)
+    detail = "Timed out waiting for PRO job terminal status."
+    if isinstance(last_payload, dict):
+        detail += f" Last status: {last_payload.get('status')} {last_payload.get('progress_pct')}%."
+    return _fail("game.pro_job_status", detail, last_result.http_status if last_result else None), last_payload
 
 
 if __name__ == "__main__":

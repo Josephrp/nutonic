@@ -376,10 +376,34 @@ class NutonicApiClient(
         return getAuthenticatedBytes(url, bearerAccessToken)
     }
 
+    suspend fun getProBundleByUrl(
+        bundleDownloadUrl: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> {
+        val path = bundleDownloadUrl.trim()
+        if (path.isBlank()) {
+            return ApiResult.NetworkFailure("PRO bundle URL is blank")
+        }
+        val url =
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                originTrimmed.trimEnd('/') + "/" + path.trimStart('/')
+            }
+        return getAuthenticatedBytes(url, bearerAccessToken)
+    }
+
     suspend fun getProVlmModelManifest(
         bearerAccessToken: String,
     ): ApiResult<ProVlmModelManifest> =
         getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/vlm/model-manifest") {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+
+    suspend fun getProReadiness(
+        bearerAccessToken: String,
+    ): ApiResult<ProReadinessOut> =
+        getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/readiness") {
             header("Authorization", "Bearer $bearerAccessToken")
         }
 

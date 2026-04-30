@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import json
 import time
+import zipfile
 from threading import Event
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -125,6 +130,9 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert sj["artifacts"][0]["category"] == "vlm_image"
     assert sj["artifacts"][0]["required_for_profile"] is True
     assert sj["artifacts"][0]["size_bytes"] == 5
+    assert sj["on_device_payload"]["vlm_image_set"][0]["artifact_id"] == "mapbox_rgb"
+    assert sj["on_device_payload"]["vlm_image_set"][0]["url"] == f"/api/v1/pro/jobs/{job_id}/artifacts/mapbox_rgb"
+    assert sj["bundle_download_url"] == f"/api/v1/pro/jobs/{job_id}/bundle"
 
     artifact = pro_client.get(
         f"/api/v1/pro/jobs/{job_id}/artifacts/mapbox_rgb",
@@ -132,6 +140,21 @@ def test_pro_job_calls_materialize_when_health_ok(
     )
     assert artifact.status_code == 200
     assert artifact.content == b"hello"
+
+    bundle = pro_client.get(sj["bundle_download_url"], headers=headers)
+    assert bundle.status_code == 200
+    assert bundle.headers["content-type"].startswith("application/zip")
+    assert bundle.headers["x-nutonic-bundle-sha256"] == hashlib.sha256(bundle.content).hexdigest()
+    with zipfile.ZipFile(io.BytesIO(bundle.content)) as zf:
+        assert sorted(zf.namelist()) == ["artifacts/mapbox_rgb.png", "pro_bundle_manifest.json"]
+        assert zf.read("artifacts/mapbox_rgb.png") == b"hello"
+        manifest = json.loads(zf.read("pro_bundle_manifest.json"))
+    assert manifest["schema"] == "nutonic.pro.evidence_bundle.v1"
+    assert manifest["job_id"] == job_id
+    assert manifest["on_device_payload"]["vlm_image_set"][0]["artifact_id"] == "mapbox_rgb"
+    assert manifest["artifacts"][0]["path"] == "artifacts/mapbox_rgb.png"
+    assert manifest["artifacts"][0]["sha256"] == hashlib.sha256(b"hello").hexdigest()
+    assert manifest["artifacts"][0]["missing"] is False
 
 
 def test_pro_vlm_model_manifest_uses_configured_contract_ids(
@@ -154,6 +177,113 @@ def test_pro_vlm_model_manifest_uses_configured_contract_ids(
     assert body["model_bundle_id"] == "nutonic.pro.vlm.test"
     assert body["sha256"] == "a" * 64
     assert body["contract_ids"] == ["nutonic.pro.vlm.v1_512", "nutonic.pro.vlm.v1_512_fc_scl"]
+
+
+def test_pro_vlm_model_manifest_can_serve_publish_time_local_bundle(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    model_path = tmp_path / "pro-vlm.bin"
+    model_bytes = b"publish-time-vlm"
+    model_path.write_bytes(model_bytes)
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_LOCAL_PATH", str(model_path))
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_BUNDLE_ID", "nutonic.pro.vlm.local")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_REVISION", "test-rev")
+    monkeypatch.delenv("NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL", raising=False)
+    monkeypatch.delenv("NUTONIC_PRO_VLM_MODEL_SHA256", raising=False)
+    monkeypatch.delenv("NUTONIC_PRO_VLM_MODEL_SIZE_BYTES", raising=False)
+
+    headers = _auth_header(pro_client)
+    manifest = pro_client.get("/api/v1/pro/vlm/model-manifest", headers=headers)
+    assert manifest.status_code == 200
+    body = manifest.json()
+    assert body["download_url"] == "/api/v1/pro/vlm/model-bundle"
+    assert body["sha256"] == hashlib.sha256(model_bytes).hexdigest()
+    assert body["size_bytes"] == len(model_bytes)
+
+    bundle = pro_client.get(body["download_url"], headers=headers)
+    assert bundle.status_code == 200
+    assert bundle.content == model_bytes
+
+
+def test_pro_readiness_reports_worker_and_vlm_state(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    model_path = tmp_path / "pro-vlm.bin"
+    model_path.write_bytes(b"ready-model")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_LOCAL_PATH", str(model_path))
+    monkeypatch.setenv("NUTONIC_LFM_VL_HINT_SERVICE_URL", "http://lfm.worker.test")
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return "pro.worker.test" in origin or "lfm.worker.test" in origin
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(main, "InferenceClient", FakeIC)
+    headers = _auth_header(pro_client)
+    r = pro_client.get("/api/v1/pro/readiness", headers=headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ready"] is True
+    assert body["materialization_healthy"] is True
+    assert body["lfm_brief_healthy"] is True
+    assert body["vlm_model_available"] is True
+    assert body["degraded_reasons"] == []
+
+
+def test_pro_readiness_accepts_gradio_lfm_space(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    model_path = tmp_path / "pro-vlm.bin"
+    model_path.write_bytes(b"ready-model")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_LOCAL_PATH", str(model_path))
+    monkeypatch.setenv("NUTONIC_LFM_VL_HINT_SERVICE_URL", "http://lfm.worker.test")
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return "pro.worker.test" in origin
+
+        def probe_gradio_origin(self, origin: str) -> bool:
+            return "lfm.worker.test" in origin
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(main, "InferenceClient", FakeIC)
+    headers = _auth_header(pro_client)
+    r = pro_client.get("/api/v1/pro/readiness", headers=headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ready"] is True
+    assert body["lfm_brief_healthy"] is True
+    assert body["degraded_reasons"] == []
 
 
 def test_pro_job_calls_brief_stage_when_lfm_url_configured(
@@ -238,6 +368,63 @@ def test_pro_job_calls_brief_stage_when_lfm_url_configured(
     )
     assert brief.status_code == 200
     assert b"Brief summary" in brief.content
+
+
+def test_pro_job_uses_gradio_brief_fallback_for_zero_gpu_space(
+    pro_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NUTONIC_LFM_VL_HINT_SERVICE_URL", "http://lfm.worker.test")
+    calls: list[str] = []
+
+    class FakeIC:
+        def __init__(self, *, config=None, client=None) -> None:
+            pass
+
+        def probe_health_origin(self, origin: str) -> bool:
+            return "pro.worker.test" in origin or "lfm.worker.test" in origin
+
+        def post_json(self, url: str, *, json_body=None, read_timeout_s=None, extra_headers=None):
+            calls.append(url)
+            if url.endswith("/internal/v1/materialize"):
+                return {
+                    "materialization_id": "mid-gradio",
+                    "cache_key": "ck-gradio",
+                    "vlm_artifacts": [],
+                    "tim_payload": None,
+                    "run_manifest": {"mapbox_center_mode": "user_pin"},
+                }
+            request = httpx.Request("POST", url)
+            response = httpx.Response(404, request=request)
+            raise httpx.HTTPStatusError("not found", request=request, response=response)
+
+        def post_gradio_json(self, origin: str, *, api_name: str, json_body=None, read_timeout_s=None):
+            calls.append(f"{origin}#gradio:{api_name}")
+            return {
+                "executive_summary": "Gradio brief",
+                "key_findings": ["Fallback path"],
+                "confidence": "limited",
+                "recommended_actions": ["Review artifacts"],
+                "warnings": [],
+                "limitations": [],
+            }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(pro_jobs_runner, "InferenceClient", FakeIC)
+    headers = _auth_header(pro_client)
+    r = pro_client.post("/api/v1/pro/jobs", headers=headers, json={"center_lat": 1.0, "center_lon": 1.0})
+    assert r.status_code == 200
+    completed = _wait_for_status(pro_client, r.json()["job_id"], headers, "completed")
+    assert completed["materialization_summary"]["brief_summary"]["executive_summary"] == "Gradio brief"
+    assert calls[-1] == "http://lfm.worker.test#gradio:pro_brief_fuse"
 
 
 def test_pro_job_skips_materialize_when_probe_fails(

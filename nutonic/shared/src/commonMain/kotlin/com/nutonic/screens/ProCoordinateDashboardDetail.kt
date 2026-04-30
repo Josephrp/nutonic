@@ -1,10 +1,12 @@
 package com.nutonic.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,6 +21,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
@@ -30,14 +34,26 @@ import com.nutonic.api.ProJobStatusOut
 import com.nutonic.cache.ProOverlayGuess
 import com.nutonic.map.LatLon
 import com.nutonic.navigation.ShellDetail
+import com.nutonic.pro.ProEvidenceBundleItem
+import com.nutonic.pro.ProEvidenceBundleManifest
+import com.nutonic.pro.parseProEvidenceBundle
 import com.nutonic.screens.pro.ProAnalysisLocationPicker
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
+import com.nutonic.toImageBitmap
 import com.nutonic.vlm.ProOnDeviceVlmCoordinator
 import com.nutonic.vlm.ProVlmResult
 import com.nutonic.vlm.ProVlmStatus
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 @Composable
 fun ProCoordinateDashboardDetail(
@@ -62,6 +78,7 @@ fun ProCoordinateDashboardDetail(
     var lastOverlayCandidate by remember { mutableStateOf<ProGameplayOverlayCandidate?>(null) }
     var proAccessToken by remember { mutableStateOf<String?>(null) }
     var vlmStatus by remember { mutableStateOf<ProVlmStatus>(ProVlmStatus.Idle) }
+    var bundleState by remember { mutableStateOf<ProBundleUiState>(ProBundleUiState.Idle) }
 
     Column(
         modifier =
@@ -128,6 +145,7 @@ fun ProCoordinateDashboardDetail(
                                     ) {
                                         is ApiResult.Ok -> {
                                             currentJob = polled.value
+                                            bundleState = ProBundleUiState.Idle
                                             recentJobs = listOf(polled.value) + recentJobs.take(4)
                                             statusText = "Job ${polled.value.status}"
                                             if (polled.value.status == "completed") {
@@ -185,6 +203,13 @@ fun ProCoordinateDashboardDetail(
             )
         }
         JobStatusCard(currentJob = currentJob, statusText = statusText)
+        ProEvidenceBundleCard(
+            currentJob = currentJob,
+            nutonicApiClient = nutonicApiClient,
+            accessToken = proAccessToken,
+            state = bundleState,
+            onState = { bundleState = it },
+        )
         ArtifactGallery(mergedArtifacts(currentJob))
         OnDeviceVlmCard(
             currentJob = currentJob,
@@ -320,6 +345,208 @@ private fun JobStatusCard(
         }
     }
 }
+
+private sealed class ProBundleUiState {
+    data object Idle : ProBundleUiState()
+
+    data object Loading : ProBundleUiState()
+
+    data class Ready(
+        val sizeBytes: Int,
+        val manifest: ProEvidenceBundleManifest?,
+        val items: List<ProEvidenceBundleRenderedItem> = emptyList(),
+        val warning: String? = null,
+    ) : ProBundleUiState()
+
+    data class Failed(
+        val message: String,
+    ) : ProBundleUiState()
+}
+
+@Composable
+private fun ProEvidenceBundleCard(
+    currentJob: ProJobStatusOut?,
+    nutonicApiClient: NutonicApiClient?,
+    accessToken: String?,
+    state: ProBundleUiState,
+    onState: (ProBundleUiState) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val bundleUrl = currentJob?.bundleDownloadUrl?.takeIf { it.isNotBlank() }
+    val canFetch = bundleUrl != null && nutonicApiClient != null && accessToken != null
+    NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text("Evidence bundle", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text(
+            if (bundleUrl == null) {
+                "Completed jobs expose a zip bundle once their manifest and artifact bytes are finalized."
+            } else {
+                "Bundle ready: $bundleUrl"
+            },
+            style = MaterialTheme.typography.caption,
+        )
+        Text(
+            "Mini-apps render the manifest/artifacts above; the zip is the atomic cache/export unit for the same evidence.",
+            style = MaterialTheme.typography.caption,
+        )
+        when (state) {
+            ProBundleUiState.Idle -> Unit
+            ProBundleUiState.Loading -> {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                Text("Fetching bundle...", style = MaterialTheme.typography.caption)
+            }
+            is ProBundleUiState.Ready -> ProEvidenceBundlePreview(state)
+            is ProBundleUiState.Failed -> Text(state.message, color = MaterialTheme.colors.error)
+        }
+        NutonicGhostButton(
+            text = "Fetch evidence bundle",
+            enabled = canFetch && state !is ProBundleUiState.Loading,
+            onClick = {
+                val client = nutonicApiClient ?: return@NutonicGhostButton
+                val token = accessToken ?: return@NutonicGhostButton
+                val url = bundleUrl ?: return@NutonicGhostButton
+                scope.launch {
+                    onState(ProBundleUiState.Loading)
+                    when (val bytes = client.getProBundleByUrl(url, token)) {
+                        is ApiResult.Ok -> {
+                            val preview = parseProEvidenceBundle(bytes.value)
+                            onState(
+                                ProBundleUiState.Ready(
+                                    sizeBytes = preview.sizeBytes,
+                                    manifest = preview.manifest,
+                                    items = renderBundleItems(preview.items),
+                                    warning = preview.error,
+                                ),
+                            )
+                        }
+                        is ApiResult.HttpFailure -> onState(ProBundleUiState.Failed(bytes.userMessage))
+                        is ApiResult.NetworkFailure -> onState(ProBundleUiState.Failed("Bundle fetch failed: ${bytes.debugMessage}"))
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        )
+    }
+}
+
+private data class ProEvidenceBundleRenderedItem(
+    val item: ProEvidenceBundleItem,
+    val image: ImageBitmap? = null,
+    val summaryRows: List<String> = emptyList(),
+)
+
+@Composable
+private fun ProEvidenceBundlePreview(state: ProBundleUiState.Ready) {
+    val manifest = state.manifest
+    Text(
+        if (manifest == null) {
+            "Fetched ${state.sizeBytes} bytes."
+        } else {
+            "Fetched ${state.sizeBytes} bytes · ${manifest.artifacts.size} artifact(s) · ${manifest.onDevicePayload?.vlmImageSet.orEmpty().size} VLM image(s)"
+        },
+        style = MaterialTheme.typography.body2,
+    )
+    state.warning?.let { Text(it, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption) }
+    manifest?.let {
+        val missing = it.artifacts.count { artifact -> artifact.missing }
+        Text("Bundle ${it.schema} · profile ${it.analysisProfile} · missing $missing", style = MaterialTheme.typography.caption)
+    }
+    val images = state.items.filter { it.image != null }.take(6)
+    if (images.isNotEmpty()) {
+        Text("Image evidence", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+        images.forEach { rendered ->
+            val artifact = rendered.item.artifact
+            Text("${artifact.artifactId} · ${artifact.mimeType} · ${artifact.sizeBytes ?: rendered.item.bytes.size} bytes", style = MaterialTheme.typography.caption)
+            rendered.image?.let { bitmap ->
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = "PRO bundle image ${artifact.artifactId}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 6.dp, bottom = 8.dp),
+                )
+            }
+        }
+    }
+    val summaries = state.items.filter { it.summaryRows.isNotEmpty() }.take(6)
+    if (summaries.isNotEmpty()) {
+        Text("Structured evidence", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+        summaries.forEach { rendered ->
+            Text(rendered.item.artifact.artifactId, style = MaterialTheme.typography.caption, color = MaterialTheme.colors.primary)
+            rendered.summaryRows.take(6).forEach { row ->
+                Text(row, style = MaterialTheme.typography.caption)
+            }
+        }
+    }
+}
+
+private fun renderBundleItems(items: List<ProEvidenceBundleItem>): List<ProEvidenceBundleRenderedItem> =
+    items.map { item ->
+        val mime = item.artifact.mimeType.lowercase()
+        val image =
+            if (mime.startsWith("image/")) {
+                runCatching { item.bytes.toImageBitmap() }.getOrNull()
+            } else {
+                null
+            }
+        val summaryRows =
+            if (mime.contains("json") || item.artifact.kind == "json" || item.artifact.kind == "geojson" || item.artifact.kind == "brief") {
+                summarizeJsonBytes(item.bytes)
+            } else {
+                emptyList()
+            }
+        ProEvidenceBundleRenderedItem(item = item, image = image, summaryRows = summaryRows)
+    }
+
+private fun summarizeJsonBytes(bytes: ByteArray): List<String> {
+    val text = runCatching { bytes.decodeToString() }.getOrNull()?.trim().orEmpty()
+    if (text.isBlank()) {
+        return listOf("Empty JSON payload")
+    }
+    val element = runCatching { com.nutonic.api.NutonicJson.parseToJsonElement(text) }.getOrNull()
+    return if (element == null) {
+        listOf("Non-parseable JSON payload", text.take(220))
+    } else {
+        summarizeJsonElement(element)
+    }
+}
+
+private fun summarizeJsonElement(element: JsonElement): List<String> =
+    when (element) {
+        is JsonObject -> {
+            val entries = element.entries.sortedBy { it.key }
+            val rows = mutableListOf("Object keys: ${entries.size}")
+            entries.take(8).forEach { (key, value) ->
+                rows += "$key: ${summarizePrimitive(value)}"
+            }
+            if (entries.size > 8) {
+                rows += "... ${entries.size - 8} additional keys"
+            }
+            rows
+        }
+        is JsonArray -> {
+            val rows = mutableListOf("Array items: ${element.size}")
+            element.take(5).forEachIndexed { index, item ->
+                rows += "[$index] ${summarizePrimitive(item)}"
+            }
+            if (element.size > 5) {
+                rows += "... ${element.size - 5} additional items"
+            }
+            rows
+        }
+        is JsonPrimitive -> listOf(summarizePrimitive(element))
+        else -> listOf(element.toString().take(220))
+    }
+
+private fun summarizePrimitive(value: JsonElement): String =
+    when (value) {
+        is JsonPrimitive ->
+            value.booleanOrNull?.toString()
+                ?: value.intOrNull?.toString()
+                ?: value.doubleOrNull?.let { "${(it * 1000.0).toInt() / 1000.0}" }
+                ?: value.jsonPrimitive.content.take(120)
+        is JsonObject -> "{${value.keys.take(4).joinToString()}${if (value.keys.size > 4) ", ..." else ""}}"
+        is JsonArray -> "[size=${value.size}]"
+        else -> value.toString().take(120)
+    }
 
 @Composable
 private fun ArtifactGallery(artifacts: List<ProArtifactRef>) {

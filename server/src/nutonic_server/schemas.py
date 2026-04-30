@@ -208,6 +208,21 @@ class ProVlmModelManifest(BaseModel):
     contract_ids: list[str] = Field(default_factory=list)
 
 
+class ProReadinessOut(BaseModel):
+    feature_enabled: bool
+    ready: bool
+    materialization_configured: bool
+    materialization_healthy: bool | None = None
+    lfm_brief_configured: bool
+    lfm_brief_healthy: bool | None = None
+    inference_worker_configured: bool
+    inference_worker_healthy: bool | None = None
+    vlm_model_configured: bool
+    vlm_model_available: bool
+    vlm_model_bundle_id: str | None = None
+    degraded_reasons: list[str] = Field(default_factory=list)
+
+
 class ProJobCreateIn(BaseModel):
     center_lat: float = Field(ge=-90.0, le=90.0)
     center_lon: float = Field(ge=-180.0, le=180.0)

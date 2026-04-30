@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Stage a Hugging Face Space folder, deploy with the **hf** CLI (auth, repos create, upload),
+Stage a Hugging Face Space folder, deploy with the **hf** CLI (auth, repo create, upload),
 then sync Space **variables** / **secrets** / **hardware** via Hugging Face Hub APIs.
 
 The Hub exposes no `hf spaces secret set` today; secret/variable *updates* use
@@ -110,6 +110,12 @@ def _stage_service(service: str) -> Path:
         shutil.copytree(src / "src", stage, dirs_exist_ok=True)
     else:
         shutil.copytree(src / "src", stage / "src", dirs_exist_ok=True)
+        if service == "game_server":
+            bundle_dir = stage / "pro_vlm_bundles"
+            bundle_dir.mkdir(parents=True, exist_ok=True)
+            source_bundle_dir = src / "pro_vlm_bundles"
+            if source_bundle_dir.is_dir():
+                shutil.copytree(source_bundle_dir, bundle_dir, dirs_exist_ok=True)
     shutil.copy2(tmpl, stage / "README.md")
     return stage
 
@@ -284,12 +290,12 @@ def _deploy_with_hf(
 
     _run_hf(
         [
-            "repos",
+            "repo",
             "create",
             repo_id,
             "--repo-type",
             "space",
-            "--space-sdk",
+            "--space_sdk",
             space_sdk,
             "--exist-ok",
         ],

@@ -19,6 +19,7 @@ on:
       - "inference/pro_materialization_service/**"
       - "tools/hf_deploy/**"
       - "tools/live_inference_smoke.py"
+      - "tools/stage_pro_vlm_bundle.py"
       - "tools/requirements.txt"
       - ".github/workflows/huggingface-deploy.yml"
   workflow_dispatch:
@@ -77,6 +78,7 @@ jobs:
             tools:
               - 'tools/hf_deploy/**'
               - 'tools/live_inference_smoke.py'
+              - 'tools/stage_pro_vlm_bundle.py'
               - 'tools/requirements.txt'
               - '.github/workflows/huggingface-deploy.yml'
 
@@ -424,6 +426,15 @@ jobs:
           pip install -U pip
           pip install -r tools/hf_deploy/requirements.txt
           hf --version
+      - name: Stage PRO VLM model bundle
+        if: vars.NUTONIC_PRO_VLM_EMBED_IN_SPACE == 'true'
+        env:
+          # Empty uses tools/stage_pro_vlm_bundle.py default:
+          # https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/main/model.safetensors
+          NUTONIC_PRO_VLM_MODEL_SOURCE_URL: ${{ vars.NUTONIC_PRO_VLM_MODEL_SOURCE_URL }}
+          NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256: ${{ vars.NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256 }}
+        run: |
+          python tools/stage_pro_vlm_bundle.py --required
       - name: Deploy Space (hf upload + runtime sync)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC || secrets.HF_TOKEN || secrets.HF_API_WRITE }}

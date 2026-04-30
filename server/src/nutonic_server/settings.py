@@ -207,6 +207,15 @@ class Settings(BaseSettings):
         description="First-party or signed CDN URL for the VLM model artifact. Never point clients at Hub tokens.",
     )
 
+    pro_vlm_model_local_path: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_LOCAL_PATH", "PRO_VLM_MODEL_LOCAL_PATH"),
+        description=(
+            "Optional path to a model bundle baked into the game-server image at publish time. "
+            "When set, /api/v1/pro/vlm/model-manifest derives size/sha256 from this file."
+        ),
+    )
+
     pro_vlm_model_sha256: str = Field(
         default="",
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SHA256", "PRO_VLM_MODEL_SHA256"),

@@ -109,6 +109,7 @@ android {
     namespace = "com.nutonic.shared"
     sourceSets["main"].manifest.srcFile("src/androidMain/AndroidManifest.xml")
     sourceSets["main"].res.srcDirs("src/androidMain/res")
+    sourceSets["main"].assets.srcDirs("src/androidMain/assets")
 
     defaultConfig {
         minSdk = 26

@@ -6,16 +6,37 @@ sleep_time_seconds: null
 variables:
   FEATURE_RANKED: "false"
   FEATURE_COMMUNITY_LB_POST: "false"
-  FEATURE_PRO_JOBS: "false"
+  # Enable by default so clients can exercise PRO in dev deployments.
+  # Safe even without worker URLs: jobs will complete with "no_worker_configured" summaries.
+  FEATURE_PRO_JOBS: "true"
   NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH: "false"
   NUTONIC_HF_PERSISTENCE_ENABLED: "false"
   NUTONIC_HF_PERSISTENCE_REQUIRED: "false"
   NUTONIC_HF_PERSISTENCE_REPO_ID: ""
   NUTONIC_HF_PERSISTENCE_SUBDIR: "server-persistence"
   NUTONIC_HF_PERSISTENCE_STARTUP_PULL_MODE: "if_missing"
+  # Browser clients need explicit origins; set this to your web app origin(s) when applicable.
+  # Default includes common local dev origins. Add your deployed web host if you ship a browser client.
+  CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,https://NuTonic-nutonic-game-server.hf.space"
+  # Worker fan-out URLs (Hugging Face Spaces; repo defaults in tools/hf_deploy/README.md).
+  # IMPORTANT: these are *origins only* (no /api/v1 suffix).
+  NUTONIC_PRO_MATERIALIZATION_SERVICE_URL: "https://NuTonic-nutonic-pro-materialization.hf.space"
+  NUTONIC_LFM_VL_HINT_SERVICE_URL: "https://Tonic-nutonic-lfm-vl-streetview.hf.space"
+  # Optional: used for extra health probing (e.g. pano service). Not required for PRO materialization.
+  NUTONIC_INFERENCE_WORKER_BASE_URL: "https://Tonic-nutonic-streetview-pano.hf.space"
+  # Keep model bytes out of Git, Git LFS, and the HF Space repo. The client downloads and verifies this URL.
+  NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL: "https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/main/model.safetensors"
+  NUTONIC_PRO_VLM_MODEL_BUNDLE_ID: "nutonic.pro.vlm.lfm2_5_vl_450m"
+  NUTONIC_PRO_VLM_MODEL_REVISION: "main"
+  NUTONIC_PRO_VLM_MODEL_SHA256: "2f6deb5dd43707de5cfe3c59470d3bccf4c3112a810a74570499f4728d412eea"
+  NUTONIC_PRO_VLM_MODEL_SIZE_BYTES: "897484568"
+  NUTONIC_PRO_VLM_MODEL_RUNTIME: "leap"
+  NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS: "nutonic.pro.vlm.v1_512"
 
 secrets:
   JWT_SECRET: NUTONIC_JWT_SECRET
   NUTONIC_LEADERBOARD_DATABASE_URL: NUTONIC_LEADERBOARD_DATABASE_URL
   NUTONIC_RANKED_DATABASE_URL: NUTONIC_RANKED_DATABASE_URL
   HF_API_WRITE: NUTONIC_HF_PERSISTENCE_TOKEN
+  # Optional: if you enable HMAC-protected workers, set this to match worker secrets.
+  NUTONIC_INFERENCE_HMAC_SECRET: NUTONIC_INFERENCE_HMAC_SECRET

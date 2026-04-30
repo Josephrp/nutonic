@@ -6,6 +6,8 @@ plugins {
     id("org.jetbrains.compose")
 }
 
+val nutonicServerOrigin = (project.findProperty("nutonicServerOrigin") as String?)?.trim()?.takeIf { it.isNotEmpty() }
+
 kotlin {
     jvm()
     sourceSets {
@@ -19,6 +21,10 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.nutonic.MainKt"
+        if (nutonicServerOrigin != null) {
+            // Forward Gradle property into the JVM so `defaultNutonicServerOrigin()` can pick it up.
+            jvmArgs("-Dnutonic.serverOrigin=$nutonicServerOrigin")
+        }
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)

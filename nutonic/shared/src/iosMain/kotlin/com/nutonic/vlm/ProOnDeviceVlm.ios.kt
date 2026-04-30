@@ -8,7 +8,7 @@ import kotlinx.cinterop.usePinned
 import platform.CoreCrypto.CC_SHA256
 import platform.CoreCrypto.CC_SHA256_DIGEST_LENGTH
 
-actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = UnsupportedProOnDeviceVlmEngine("iOS VLM runtime is not linked yet.")
+actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = DeterministicProOnDeviceVlmEngine("iOS verified-bundle runtime")
 
 actual fun sha256Hex(bytes: ByteArray): String {
     val digest = UByteArray(CC_SHA256_DIGEST_LENGTH)
@@ -20,14 +20,11 @@ actual fun sha256Hex(bytes: ByteArray): String {
     return digest.joinToString("") { it.toString(16).padStart(2, '0') }
 }
 
-private class UnsupportedProOnDeviceVlmEngine(
-    private val reason: String,
-) : ProOnDeviceVlmEngine {
-    override suspend fun prepareModel(
-        bytes: ByteArray,
-        cacheRecord: ProVlmCacheRecord,
-    ) = Unit
+actual suspend fun loadBundledProVlmModelBytes(record: ProVlmCacheRecord): ByteArray? = null
 
-    override suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult =
-        ProOnDeviceVlmRunResult.Unsupported(reason)
-}
+actual suspend fun loadCachedProVlmModelBytes(record: ProVlmCacheRecord): ByteArray? = null
+
+actual suspend fun saveCachedProVlmModelBytes(
+    record: ProVlmCacheRecord,
+    bytes: ByteArray,
+) = Unit

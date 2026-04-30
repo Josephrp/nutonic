@@ -505,7 +505,7 @@ def main() -> int:
                     print(f"429 rate limit; sleeping {wait:.1f}s then retrying...", flush=sys.stderr)
                     time.sleep(wait)
                     continue
-                if code in (408, 502, 503, 504) and attempt <= 12:
+                if code in (408, 500, 502, 503, 504) and attempt <= 12:
                     wait = ra if ra is not None else min(180.0, 5.0 * attempt)
                     print(
                         f"HTTP {code} on create_commit; sleeping {wait:.1f}s then retrying "

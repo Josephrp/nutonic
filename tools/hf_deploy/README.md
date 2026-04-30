@@ -5,7 +5,7 @@ The workflow **`.github/workflows/huggingface-deploy.yml`** runs **pytest**, the
 1. Stages a Space tree (`pyproject.toml`, `src/`, Space `README.md` from `templates/`, plus either `Dockerfile` for Docker SDK profiles or `app.py` for Gradio SDK profiles).
 2. Uses the **`hf`** CLI (from **`huggingface_hub>=1.10`**, entry point **`hf`**, not `huggingface-cli`):
    - `hf auth login --token …`
-   - `hf repos create <repo> --repo-type space --space-sdk <space_sdk> --exist-ok`
+   - `hf repo create <repo> --repo-type space --space_sdk <space_sdk> --exist-ok`
    - `hf upload <repo> <stagedir> . --repo-type space --delete "*"` (full mirror commit)
 3. Syncs **Space variables**, **secrets**, and **hardware** from **`tools/hf_deploy/profiles/<service>.yaml`** via **`HfApi`** (`add_space_variable`, `add_space_secret`, `request_space_hardware`). The Hub does not yet expose `hf spaces secret set`; add/update at runtime uses those APIs.
 4. Runs a post-deploy smoke test via **`tools/live_inference_smoke.py`** and uploads a JSON artifact (`hf-smoke-*`) per job.

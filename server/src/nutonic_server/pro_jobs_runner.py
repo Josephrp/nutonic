@@ -148,11 +148,22 @@ class ProJobRunner:
 
             brief_url = self._settings.lfm_vl_hint_service_url.strip()
             if brief_url:
-                brief = ic.post_json(
-                    f"{brief_url.rstrip('/')}/v1/pro/brief/fuse",
-                    json_body=_brief_request(job, tim_summary=tim_summary, artifacts=artifacts),
-                    read_timeout_s=60.0,
-                )
+                brief_request = _brief_request(job, tim_summary=tim_summary, artifacts=artifacts)
+                try:
+                    brief = ic.post_json(
+                        f"{brief_url.rstrip('/')}/v1/pro/brief/fuse",
+                        json_body=brief_request,
+                        read_timeout_s=60.0,
+                    )
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code not in (404, 405):
+                        raise
+                    brief = ic.post_gradio_json(
+                        brief_url,
+                        api_name="pro_brief_fuse",
+                        json_body=brief_request,
+                        read_timeout_s=60.0,
+                    )
                 brief_summary = summarize_brief_worker_response(brief)
                 artifacts.append(_persist_brief_artifact(self._settings, job, brief))
             else:

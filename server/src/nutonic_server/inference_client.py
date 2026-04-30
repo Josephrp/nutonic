@@ -110,6 +110,32 @@ class InferenceClient:
         r.raise_for_status()
         return r.json()
 
+    def post_gradio_json(
+        self,
+        origin: str,
+        *,
+        api_name: str,
+        json_body: dict,
+        read_timeout_s: float | None = None,
+    ) -> dict:
+        base = origin.strip().rstrip("/")
+        submit = self.post_json(
+            f"{base}/gradio_api/call/v2/{api_name}",
+            json_body={"req": json_body},
+            read_timeout_s=read_timeout_s,
+        )
+        event_id = str(submit.get("event_id") or submit.get("id") or "").strip()
+        if not event_id:
+            raise ValueError("gradio_missing_event_id")
+        timeout_kw: dict = {}
+        if read_timeout_s is not None:
+            cto = self._config.connect_timeout_s
+            wto = self._config.write_timeout_s
+            timeout_kw["timeout"] = httpx.Timeout(connect=cto, read=read_timeout_s, write=wto, pool=cto)
+        r = self._client.get(f"{base}/gradio_api/call/{api_name}/{event_id}", **timeout_kw)
+        r.raise_for_status()
+        return _parse_gradio_sse_json(r.text)
+
     def probe_health_origin(self, origin: str) -> bool:
         """GET ``{origin}/health`` and require an explicitly healthy JSON body."""
         base = origin.strip().rstrip("/")
@@ -122,6 +148,17 @@ class InferenceClient:
         status = str(data.get("status") or "").strip().lower()
         return status in {"ok", "healthy"}
 
+    def probe_gradio_origin(self, origin: str) -> bool:
+        """ZeroGPU Gradio Spaces expose readiness through ``/gradio_api/info`` instead of ``/health``."""
+        base = origin.strip().rstrip("/")
+        if not base:
+            return False
+        try:
+            data = self.get_json(f"{base}/gradio_api/info")
+        except Exception:
+            return False
+        return isinstance(data.get("named_endpoints"), dict) or isinstance(data.get("dependencies"), list)
+
     def __enter__(self) -> InferenceClient:
         return self
 
@@ -131,3 +168,21 @@ class InferenceClient:
 
 def _json_bytes(json_body: dict) -> bytes:
     return json.dumps(json_body, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def _parse_gradio_sse_json(body: str) -> dict:
+    for line in body.splitlines():
+        if not line.startswith("data:"):
+            continue
+        raw = line.split("data:", 1)[1].strip()
+        if not raw:
+            continue
+        payload = json.loads(raw)
+        if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+            return payload[0]
+        if isinstance(payload, dict):
+            data = payload.get("data")
+            if isinstance(data, list) and data and isinstance(data[0], dict):
+                return data[0]
+            return payload
+    raise ValueError("gradio_missing_data")

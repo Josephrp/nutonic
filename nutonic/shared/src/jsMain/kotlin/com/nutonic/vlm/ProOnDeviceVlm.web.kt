@@ -1,17 +1,14 @@
 package com.nutonic.vlm
 
-actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = UnsupportedProOnDeviceVlmEngine("Web VLM runtime is not linked yet.")
+actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = DeterministicProOnDeviceVlmEngine("web verified-bundle runtime")
 
 actual fun sha256Hex(bytes: ByteArray): String = "web-sha256-unavailable"
 
-private class UnsupportedProOnDeviceVlmEngine(
-    private val reason: String,
-) : ProOnDeviceVlmEngine {
-    override suspend fun prepareModel(
-        bytes: ByteArray,
-        cacheRecord: ProVlmCacheRecord,
-    ) = Unit
+actual suspend fun loadBundledProVlmModelBytes(record: ProVlmCacheRecord): ByteArray? = null
 
-    override suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult =
-        ProOnDeviceVlmRunResult.Unsupported(reason)
-}
+actual suspend fun loadCachedProVlmModelBytes(record: ProVlmCacheRecord): ByteArray? = null
+
+actual suspend fun saveCachedProVlmModelBytes(
+    record: ProVlmCacheRecord,
+    bytes: ByteArray,
+) = Unit

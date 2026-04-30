@@ -19,7 +19,7 @@ dependencies = [
     "peft>=0.18.1",
     "transformers>=4.48.0",
     # requests 2.33 + urllib3 2.6.x can hit ``BaseSSLError`` import errors on some stacks
-    "urllib3>=2.2.0,<2.6",
+    "urllib3>=2.6.3",
     "accelerate>=1.13.0",
     "triton>=3.0.0 ; sys_platform == 'linux'",
 ]

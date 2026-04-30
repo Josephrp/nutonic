@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import zipfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +33,7 @@ from nutonic_server.deps import (
 )
 from nutonic_server.guess_telemetry_store import GuessTelemetryIn, create_guess_telemetry_store
 from nutonic_server.haversine import haversine_km, score_from_distance_km
+from nutonic_server.inference_client import InferenceClient, InferenceClientConfig
 from nutonic_server.jwt_tokens import decode_round_ticket, issue_round_ticket, issue_session_token
 from nutonic_server.leaderboard_store import LeaderboardRow, create_leaderboard_store
 from nutonic_server.pro_jobs_runner import ProJobRunner
@@ -49,6 +52,7 @@ from nutonic_server.schemas import (
     ProJobCreateIn,
     ProJobCreateOut,
     ProJobStatusOut,
+    ProReadinessOut,
     ProVlmModelManifest,
     ProOnDevicePayload,
     RankedClueOut,
@@ -431,13 +435,14 @@ def pro_create_job(
 def pro_list_jobs(
     _: Annotated[None, Depends(require_pro_jobs_feature)],
     claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    s: Annotated[Settings, Depends(get_settings)],
     store: Annotated[ProJobStore, Depends(get_pro_job_store)],
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     status_filter: Annotated[str | None, Query(alias="status")] = None,
 ) -> list[ProJobStatusOut]:
     session_id = _session_id_or_401(claims)
     statuses = _parse_status_filter(status_filter)
-    return [_pro_status_out(row) for row in store.list_jobs(session_id=session_id, limit=limit, statuses=statuses)]
+    return [_pro_status_out(row, s) for row in store.list_jobs(session_id=session_id, limit=limit, statuses=statuses)]
 
 
 @app.get("/api/v1/pro/jobs/{job_id}", tags=["pro"], response_model=ProJobStatusOut)
@@ -445,13 +450,78 @@ def pro_job_status(
     job_id: str,
     _: Annotated[None, Depends(require_pro_jobs_feature)],
     claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    s: Annotated[Settings, Depends(get_settings)],
     store: Annotated[ProJobStore, Depends(get_pro_job_store)],
 ) -> ProJobStatusOut:
     session_id = _session_id_or_401(claims)
     row = store.get_job(job_id, session_id=session_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Unknown job_id")
-    return _pro_status_out(row)
+    return _pro_status_out(row, s)
+
+
+@app.get("/api/v1/pro/readiness", tags=["pro"], response_model=ProReadinessOut)
+def pro_readiness(
+    s: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[dict[str, object], Depends(require_session_jwt)],
+) -> ProReadinessOut:
+    """Client-facing readiness contract: feature flag, worker probes, and local VLM bundle state."""
+    hmac_secret = s.inference_hmac_secret.strip() or None
+    materialization_url = s.pro_materialization_service_url.strip().rstrip("/")
+    lfm_url = s.lfm_vl_hint_service_url.strip().rstrip("/")
+    inference_url = s.inference_worker_base_url.strip().rstrip("/")
+    materialization_healthy: bool | None = None
+    lfm_healthy: bool | None = None
+    inference_healthy: bool | None = None
+    if s.feature_pro_jobs:
+        cfg = InferenceClientConfig(hmac_secret=hmac_secret)
+        with InferenceClient(config=cfg) as ic:
+            if materialization_url:
+                materialization_healthy = ic.probe_health_origin(materialization_url)
+            if lfm_url:
+                lfm_healthy = ic.probe_health_origin(lfm_url) or ic.probe_gradio_origin(lfm_url)
+            if inference_url:
+                inference_healthy = ic.probe_health_origin(inference_url)
+
+    model_meta = _pro_vlm_model_manifest_or_none(s)
+    degraded: list[str] = []
+    if not s.feature_pro_jobs:
+        degraded.append("feature_disabled")
+    if not materialization_url:
+        degraded.append("materialization_url_missing")
+    elif materialization_healthy is False:
+        degraded.append("materialization_unhealthy")
+    if not lfm_url:
+        degraded.append("lfm_brief_url_missing")
+    elif lfm_healthy is False:
+        degraded.append("lfm_brief_unhealthy")
+    if inference_url and inference_healthy is False:
+        degraded.append("inference_worker_unhealthy")
+    if model_meta is None:
+        degraded.append("vlm_model_unavailable")
+
+    ready = (
+        s.feature_pro_jobs
+        and bool(materialization_url)
+        and materialization_healthy is True
+        and bool(lfm_url)
+        and lfm_healthy is True
+        and model_meta is not None
+    )
+    return ProReadinessOut(
+        feature_enabled=s.feature_pro_jobs,
+        ready=ready,
+        materialization_configured=bool(materialization_url),
+        materialization_healthy=materialization_healthy,
+        lfm_brief_configured=bool(lfm_url),
+        lfm_brief_healthy=lfm_healthy,
+        inference_worker_configured=bool(inference_url),
+        inference_worker_healthy=inference_healthy,
+        vlm_model_configured=bool(s.pro_vlm_model_local_path.strip() or s.pro_vlm_model_download_url.strip()),
+        vlm_model_available=model_meta is not None,
+        vlm_model_bundle_id=model_meta.model_bundle_id if model_meta else None,
+        degraded_reasons=degraded,
+    )
 
 
 @app.get("/api/v1/pro/vlm/model-manifest", tags=["pro"], response_model=ProVlmModelManifest)
@@ -460,25 +530,22 @@ def pro_vlm_model_manifest(
     _: Annotated[None, Depends(require_pro_jobs_feature)],
     __: Annotated[dict[str, object], Depends(require_session_jwt)],
 ) -> ProVlmModelManifest:
-    contract_ids = s.pro_vlm_model_contract_id_list()
-    if not (
-        s.pro_vlm_model_bundle_id.strip()
-        and s.pro_vlm_model_revision.strip()
-        and s.pro_vlm_model_download_url.strip()
-        and s.pro_vlm_model_sha256.strip()
-        and s.pro_vlm_model_size_bytes > 0
-        and contract_ids
-    ):
+    manifest = _pro_vlm_model_manifest_or_none(s)
+    if manifest is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="PRO VLM model manifest is not configured")
-    return ProVlmModelManifest(
-        model_bundle_id=s.pro_vlm_model_bundle_id.strip(),
-        revision=s.pro_vlm_model_revision.strip(),
-        download_url=s.pro_vlm_model_download_url.strip(),
-        sha256=s.pro_vlm_model_sha256.strip().lower(),
-        size_bytes=s.pro_vlm_model_size_bytes,
-        runtime=s.pro_vlm_model_runtime.strip() or "leap",
-        contract_ids=contract_ids,
-    )
+    return manifest
+
+
+@app.get("/api/v1/pro/vlm/model-bundle", tags=["pro"], response_model=None)
+def pro_vlm_model_bundle(
+    s: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    __: Annotated[dict[str, object], Depends(require_session_jwt)],
+) -> FileResponse:
+    path = _local_model_path(s)
+    if path is None:
+        raise HTTPException(status_code=404, detail="PRO VLM model bundle is not baked into this server image")
+    return FileResponse(path, media_type="application/octet-stream", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.post("/api/v1/pro/jobs/{job_id}/cancel", tags=["pro"], response_model=ProJobCancelOut)
@@ -523,6 +590,40 @@ def pro_get_artifact(
     )
 
 
+@app.get("/api/v1/pro/jobs/{job_id}/bundle", tags=["pro"], response_model=None)
+def pro_get_bundle(
+    job_id: str,
+    s: Annotated[Settings, Depends(get_settings)],
+    _: Annotated[None, Depends(require_pro_jobs_feature)],
+    claims: Annotated[dict[str, object], Depends(require_session_jwt)],
+    store: Annotated[ProJobStore, Depends(get_pro_job_store)],
+) -> Response:
+    """Return an atomic evidence bundle for a completed PRO job.
+
+    The bundle is intentionally a zip containing a canonical JSON manifest plus
+    artifact bytes. This is the local/server-hosted contract that can later map
+    to object-storage signed URLs without changing the status field.
+    """
+    session_id = _session_id_or_401(claims)
+    row = store.get_job(job_id, session_id=session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Unknown job_id")
+    if row.status != "completed":
+        raise HTTPException(status_code=409, detail=f"PRO job bundle is not available while status is {row.status}")
+    body, digest = _build_pro_job_bundle(row, s)
+    filename = f"nutonic-pro-{row.job_id[:12]}.zip"
+    return Response(
+        content=body,
+        media_type="application/zip",
+        headers={
+            "Cache-Control": "private, max-age=3600",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "ETag": f'"{digest}"',
+            "X-Nutonic-Bundle-SHA256": digest,
+        },
+    )
+
+
 def _session_id_or_401(claims: dict[str, object]) -> str:
     session_id = str(claims.get("session_id") or "")
     if not session_id:
@@ -541,7 +642,7 @@ def _parse_status_filter(raw: str | None) -> set[str] | None:
     return statuses or None
 
 
-def _pro_status_out(row: ProJobRecord) -> ProJobStatusOut:
+def _pro_status_out(row: ProJobRecord, settings: Settings) -> ProJobStatusOut:
     artifacts = [_artifact_ref(row.job_id, a) for a in row.artifact_manifest or []]
     analysis_artifacts = [a for a in artifacts if a.profile != "brief_only"]
     brief_artifacts = [a for a in artifacts if a.profile == "brief_only" or a.kind == "brief"]
@@ -562,8 +663,8 @@ def _pro_status_out(row: ProJobRecord) -> ProJobStatusOut:
         analysis_artifacts=analysis_artifacts,
         brief_artifacts=brief_artifacts,
         scene_provenance=row.scene_provenance or None,
-        on_device_payload=_on_device_payload(materialization_summary, analysis_artifacts),
-        bundle_download_url=None,
+        on_device_payload=_on_device_payload(settings, materialization_summary, artifacts, analysis_artifacts),
+        bundle_download_url=_pro_bundle_download_url(row),
         materialization_id=row.materialization_id,
         cache_key=row.cache_key,
         materialization_summary=materialization_summary,
@@ -587,8 +688,160 @@ def _artifact_ref(job_id: str, raw: dict[str, object]) -> ProArtifactRef:
     )
 
 
+def _pro_bundle_download_url(row: ProJobRecord) -> str | None:
+    if row.status != "completed":
+        return None
+    return f"/api/v1/pro/jobs/{row.job_id}/bundle"
+
+
+def _build_pro_job_bundle(row: ProJobRecord, settings: Settings) -> tuple[bytes, str]:
+    artifact_entries: list[dict[str, object]] = []
+    files: list[tuple[str, Path, bytes, dict[str, object]]] = []
+    used_names: set[str] = set()
+
+    for raw in row.artifact_manifest or []:
+        artifact_id = str(raw.get("artifact_id") or "").strip()
+        if not artifact_id:
+            continue
+        path = _artifact_path(settings.pro_artifact_root, row.job_id, artifact_id)
+        if path is None:
+            artifact_entries.append(
+                _bundle_artifact_manifest_entry(raw, path_in_bundle=None, sha256=None, size_bytes=None, missing=True)
+            )
+            continue
+        data = path.read_bytes()
+        zip_name = _unique_bundle_path(artifact_id, path.suffix, used_names)
+        files.append((zip_name, path, data, raw))
+        artifact_entries.append(
+            _bundle_artifact_manifest_entry(
+                raw,
+                path_in_bundle=zip_name,
+                sha256=hashlib.sha256(data).hexdigest(),
+                size_bytes=len(data),
+                missing=False,
+            )
+        )
+
+    status = _pro_status_out(row, settings).model_dump(mode="json")
+    manifest = {
+        "schema": "nutonic.pro.evidence_bundle.v1",
+        "job_id": row.job_id,
+        "status": row.status,
+        "analysis_profile": row.analysis_profile,
+        "created_at": row.created_at,
+        "started_at": row.started_at,
+        "finished_at": row.finished_at,
+        "materialization_id": row.materialization_id,
+        "cache_key": row.cache_key,
+        "scene_provenance": row.scene_provenance,
+        "materialization_summary": row.materialization_summary,
+        "on_device_payload": status.get("on_device_payload"),
+        "artifacts": artifact_entries,
+    }
+    manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_STORED) as zf:
+        zf.writestr("pro_bundle_manifest.json", manifest_bytes)
+        for zip_name, _path, data, _raw in files:
+            zf.writestr(zip_name, data)
+    body = buf.getvalue()
+    return body, hashlib.sha256(body).hexdigest()
+
+
+def _bundle_artifact_manifest_entry(
+    raw: dict[str, object],
+    *,
+    path_in_bundle: str | None,
+    sha256: str | None,
+    size_bytes: int | None,
+    missing: bool,
+) -> dict[str, object]:
+    return {
+        "artifact_id": str(raw.get("artifact_id") or ""),
+        "kind": str(raw.get("kind") or "binary"),
+        "mime_type": str(raw.get("mime_type") or "application/octet-stream"),
+        "profile": str(raw.get("profile") or "") or None,
+        "contract_id": str(raw.get("contract_id") or "") or None,
+        "role": str(raw.get("role") or "") or None,
+        "category": str(raw.get("category") or "") or None,
+        "required_for_profile": bool(raw.get("required_for_profile")),
+        "path": path_in_bundle,
+        "sha256": sha256,
+        "size_bytes": size_bytes,
+        "missing": missing,
+    }
+
+
+def _unique_bundle_path(artifact_id: str, suffix: str, used_names: set[str]) -> str:
+    safe_id = "".join(ch if ch.isalnum() or ch in {"-", "_", "."} else "_" for ch in artifact_id).strip("._")
+    if not safe_id:
+        safe_id = "artifact"
+    ext = suffix if suffix.startswith(".") and len(suffix) <= 12 else ""
+    candidate = f"artifacts/{safe_id}{ext}"
+    if candidate not in used_names:
+        used_names.add(candidate)
+        return candidate
+    idx = 2
+    while True:
+        candidate = f"artifacts/{safe_id}-{idx}{ext}"
+        if candidate not in used_names:
+            used_names.add(candidate)
+            return candidate
+        idx += 1
+
+
+def _local_model_path(settings: Settings) -> Path | None:
+    raw = settings.pro_vlm_model_local_path.strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if not path.is_file():
+        return None
+    return path
+
+
+def _pro_vlm_model_manifest_or_none(settings: Settings) -> ProVlmModelManifest | None:
+    contract_ids = settings.pro_vlm_model_contract_id_list()
+    local_path = _local_model_path(settings)
+    download_url = settings.pro_vlm_model_download_url.strip()
+    sha256 = settings.pro_vlm_model_sha256.strip().lower()
+    size_bytes = settings.pro_vlm_model_size_bytes
+    if local_path is not None:
+        stat = local_path.stat()
+        size_bytes = stat.st_size
+        sha256 = _sha256_file(local_path)
+        if not download_url:
+            download_url = "/api/v1/pro/vlm/model-bundle"
+    model_bundle_id = settings.pro_vlm_model_bundle_id.strip() or (f"nutonic.pro.vlm.{local_path.stem}" if local_path else "")
+    revision = settings.pro_vlm_model_revision.strip() or (str(int(local_path.stat().st_mtime)) if local_path else "")
+    if not (model_bundle_id and revision and download_url and sha256 and size_bytes > 0 and contract_ids):
+        return None
+    return ProVlmModelManifest(
+        model_bundle_id=model_bundle_id,
+        revision=revision,
+        download_url=download_url,
+        sha256=sha256,
+        size_bytes=size_bytes,
+        runtime=settings.pro_vlm_model_runtime.strip() or "leap",
+        contract_ids=contract_ids,
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _on_device_payload(
+    settings: Settings,
     materialization_summary: dict[str, object] | None,
+    artifacts: list[ProArtifactRef],
     analysis_artifacts: list[ProArtifactRef],
 ) -> ProOnDevicePayload | None:
     if not materialization_summary:
@@ -614,13 +867,53 @@ def _on_device_payload(
     if isinstance(recommended_actions, list) and recommended_actions:
         body = "\n".join(f"- {str(item)[:300]}" for item in recommended_actions[:5])
         sections.append(ProBriefSection(title="Recommended actions", body=_bounded_text(body, 2000), confidence=None))
-    if not sections and not analysis_artifacts:
+    image_set = _vlm_image_set(artifacts)
+    if not sections and not analysis_artifacts and not image_set:
         return None
     return ProOnDevicePayload(
         brief_sections=sections[:5],
         overlay_refs=analysis_artifacts[:4],
         confidence_summary=_brief_confidence(brief),
+        vlm_image_set=image_set,
+        vlm_prompt_injection=_vlm_prompt_injection(materialization_summary),
+        on_device_model_hint=settings.pro_vlm_model_runtime.strip() or "leap",
+        model_bundle_id=_pro_vlm_model_bundle_id(settings),
     )
+
+
+def _vlm_image_set(artifacts: list[ProArtifactRef]) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    for artifact in artifacts:
+        if artifact.category != "vlm_image" and not artifact.mime_type.startswith("image/"):
+            continue
+        item: dict[str, object] = {
+            "role": artifact.role or artifact.artifact_id,
+            "artifact_id": artifact.artifact_id,
+            "mime": artifact.mime_type,
+        }
+        if artifact.download_url:
+            item["url"] = artifact.download_url
+        out.append(item)
+    return out[:4]
+
+
+def _vlm_prompt_injection(materialization_summary: dict[str, object]) -> dict[str, object]:
+    run_manifest = materialization_summary.get("run_manifest")
+    tim_summary = materialization_summary.get("tim_summary")
+    return {
+        "product": "NU:TONIC PRO",
+        "task": "Analyze the provided geospatial frame set. Avoid claiming certainty beyond visible evidence.",
+        "run_manifest": run_manifest if isinstance(run_manifest, dict) else {},
+        "tim_summary": tim_summary if isinstance(tim_summary, dict) else {},
+    }
+
+
+def _pro_vlm_model_bundle_id(settings: Settings) -> str | None:
+    explicit = settings.pro_vlm_model_bundle_id.strip()
+    if explicit:
+        return explicit
+    local_path = _local_model_path(settings)
+    return f"nutonic.pro.vlm.{local_path.stem}" if local_path else None
 
 
 def _brief_confidence(brief: dict[str, object]) -> str | None:

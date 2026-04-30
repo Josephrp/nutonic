@@ -12,4 +12,9 @@ actual fun createNutonicHttpClient(): HttpClient =
         }
     }
 
-actual fun defaultNutonicServerOrigin(): String = "http://127.0.0.1:7860"
+actual fun defaultNutonicServerOrigin(): String =
+    (System.getenv("NUTONIC_SERVER_ORIGIN") ?: System.getProperty("nutonic.serverOrigin"))
+        ?.trim()
+        ?.trimEnd('/')
+        ?.takeIf { it.isNotEmpty() }
+        ?: "http://127.0.0.1:7860"

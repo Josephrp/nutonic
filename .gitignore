@@ -1,5 +1,7 @@
 refs
+!refs/leap-finetune-main
 stitch/
+artifacts
 
 # Large/local payloads stay untracked; version tooling under data/scripts only.
 data/*
@@ -8,6 +10,7 @@ data/*
 data/scripts/tests/_scratch_raster/
 !data/catalog/
 !data/catalog/**
+
 # PRO SFT event catalogs (fire/flood POI JSON, etc.) — tracked so cloud clones can run orchestrator defaults.
 !data/events/
 !data/events/**
@@ -16,6 +19,12 @@ data/geo/*
 !data/geo/README.md
 .cache
 .env
+
+# PRO VLM model bundles are staged by CI/deploy from external storage; never commit model bytes.
+server/pro_vlm_bundles/*
+!server/pro_vlm_bundles/.gitkeep
+nutonic/shared/src/androidMain/assets/pro_vlm/*
+!nutonic/shared/src/androidMain/assets/pro_vlm/.gitkeep
 
 # Google Cloud / Earth Engine service account keys (never commit)
 radioshaq-*.json

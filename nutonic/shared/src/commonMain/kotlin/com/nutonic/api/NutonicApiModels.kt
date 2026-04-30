@@ -331,6 +331,22 @@ data class ProVlmModelManifest(
 )
 
 @Serializable
+data class ProReadinessOut(
+    @SerialName("feature_enabled") val featureEnabled: Boolean,
+    val ready: Boolean,
+    @SerialName("materialization_configured") val materializationConfigured: Boolean,
+    @SerialName("materialization_healthy") val materializationHealthy: Boolean? = null,
+    @SerialName("lfm_brief_configured") val lfmBriefConfigured: Boolean,
+    @SerialName("lfm_brief_healthy") val lfmBriefHealthy: Boolean? = null,
+    @SerialName("inference_worker_configured") val inferenceWorkerConfigured: Boolean,
+    @SerialName("inference_worker_healthy") val inferenceWorkerHealthy: Boolean? = null,
+    @SerialName("vlm_model_configured") val vlmModelConfigured: Boolean,
+    @SerialName("vlm_model_available") val vlmModelAvailable: Boolean,
+    @SerialName("vlm_model_bundle_id") val vlmModelBundleId: String? = null,
+    @SerialName("degraded_reasons") val degradedReasons: List<String> = emptyList(),
+)
+
+@Serializable
 data class ProJobStatusOut(
     @SerialName("job_id") val jobId: String,
     val status: String,

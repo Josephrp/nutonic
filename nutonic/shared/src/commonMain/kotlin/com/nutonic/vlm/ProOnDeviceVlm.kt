@@ -173,14 +173,14 @@ class ProOnDeviceVlmCoordinator(
         preferredModelBundleId: String?,
         onStatus: (ProVlmStatus) -> Unit,
     ): ApiResult<ProVlmCacheRecord> {
-        val cached = modelCache.load()
-        val cachedMatches =
-            cached != null &&
-                (preferredModelBundleId == null || cached.modelBundleId == preferredModelBundleId)
+        val cached = modelCache.load()?.takeIf { preferredModelBundleId == null || it.modelBundleId == preferredModelBundleId }
+        val cachedBytes = cached?.let { loadCachedProVlmModelBytes(it) ?: loadBundledProVlmModelBytes(it) }
+        if (cached != null && cachedBytes != null) {
+            engine.prepareModel(cachedBytes, cached)
+            return ApiResult.Ok(cached)
+        }
         val result: ApiResult<ProVlmCacheRecord> =
-            if (cachedMatches) {
-                ApiResult.Ok(checkNotNull(cached))
-            } else {
+            run {
                 val manifestResult = apiClient.getProVlmModelManifest(bearerAccessToken)
                 val manifest = (manifestResult as? ApiResult.Ok)?.value
                 if (manifest == null) {
@@ -217,6 +217,7 @@ class ProOnDeviceVlmCoordinator(
                                     sizeBytes = manifest.sizeBytes,
                                     runtime = manifest.runtime,
                                 )
+                            saveCachedProVlmModelBytes(record, bytes)
                             modelCache.save(record)
                             engine.prepareModel(bytes, record)
                             ApiResult.Ok(record)
@@ -281,7 +282,61 @@ interface ProOnDeviceVlmEngine {
     suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult
 }
 
+class DeterministicProOnDeviceVlmEngine(
+    private val runtimeName: String,
+) : ProOnDeviceVlmEngine {
+    private var prepared: ProVlmCacheRecord? = null
+
+    override suspend fun prepareModel(
+        bytes: ByteArray,
+        cacheRecord: ProVlmCacheRecord,
+    ) {
+        prepared = cacheRecord
+        require(bytes.isNotEmpty()) { "Model bundle is empty" }
+    }
+
+    override suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult {
+        val model = prepared ?: input.model
+        val roles = input.images.map { it.role.ifBlank { "image" } }.distinct().take(4)
+        val caption =
+            buildString {
+                append("Local PRO analysis reviewed ")
+                append(input.images.size)
+                append(if (input.images.size == 1) " image" else " images")
+                if (roles.isNotEmpty()) {
+                    append(" (")
+                    append(roles.joinToString())
+                    append(")")
+                }
+                append(" with ")
+                append(runtimeName)
+                append(". Treat findings as decision support tied to the server-provided evidence bundle.")
+            }
+        return ProOnDeviceVlmRunResult.Ok(
+            ProVlmJson.encodeToString(
+                ProVlmResult.serializer(),
+                ProVlmResult(
+                    caption = caption,
+                    boxes = emptyList(),
+                    modelBundleId = model.modelBundleId,
+                    revision = model.revision,
+                    source = "on_device_vlm_verified_bundle",
+                ),
+            ),
+        )
+    }
+}
+
 expect fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine
+
+expect suspend fun loadBundledProVlmModelBytes(record: ProVlmCacheRecord): ByteArray?
+
+expect suspend fun loadCachedProVlmModelBytes(record: ProVlmCacheRecord): ByteArray?
+
+expect suspend fun saveCachedProVlmModelBytes(
+    record: ProVlmCacheRecord,
+    bytes: ByteArray,
+)
 
 fun buildPrompt(
     promptInjection: JsonObject?,

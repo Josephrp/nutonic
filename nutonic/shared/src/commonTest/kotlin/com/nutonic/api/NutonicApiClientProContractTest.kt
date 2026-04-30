@@ -17,6 +17,51 @@ import kotlin.test.assertTrue
 
 class NutonicApiClientProContractTest {
     @Test
+    fun getProReadiness_decodesProductionReadinessContract() =
+        runTest {
+            val engine =
+                MockEngine { request ->
+                    assertEquals(HttpMethod.Get, request.method)
+                    assertTrue(request.url.toString().endsWith("/api/v1/pro/readiness"))
+                    respond(
+                        """
+                        {
+                          "feature_enabled": true,
+                          "ready": false,
+                          "materialization_configured": true,
+                          "materialization_healthy": true,
+                          "lfm_brief_configured": true,
+                          "lfm_brief_healthy": false,
+                          "inference_worker_configured": false,
+                          "inference_worker_healthy": null,
+                          "vlm_model_configured": true,
+                          "vlm_model_available": true,
+                          "vlm_model_bundle_id": "nutonic.pro.vlm.test",
+                          "degraded_reasons": ["lfm_brief_unhealthy"]
+                        }
+                        """.trimIndent(),
+                        HttpStatusCode.OK,
+                        headersOf(HttpHeaders.ContentType to listOf("application/json")),
+                    )
+                }
+            val http =
+                HttpClient(engine) {
+                    install(ContentNegotiation) {
+                        json(NutonicJson)
+                    }
+                }
+            val client = NutonicApiClient("https://api.test", http)
+
+            val result = client.getProReadiness("sess")
+
+            val ok = assertIs<ApiResult.Ok<ProReadinessOut>>(result)
+            assertEquals(false, ok.value.ready)
+            assertEquals("nutonic.pro.vlm.test", ok.value.vlmModelBundleId)
+            assertEquals(listOf("lfm_brief_unhealthy"), ok.value.degradedReasons)
+            http.close()
+        }
+
+    @Test
     fun pollProJob_retriesTransientFailuresUntilTerminalStatus() =
         runTest {
             var calls = 0

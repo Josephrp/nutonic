@@ -25,7 +25,7 @@ from typing import Any
 # ----------------------------
 
 # Percent-like tokens (e.g. 23.9%, 0.31%, 15.0%).
-_PCT_RE = re.compile(r"(?P<num>\d+(?:\.\d+)?)%")
+_PCT_RE = re.compile(r"(?<![~<\d.])(?P<num>\d+(?:\.\d+)?)%")
 
 # Coordinate-ish tokens (lat/lon fields or "centered near 52.44480°, -8.92879°").
 _COORD_KW_RE = re.compile(r"\b(latitude|longitude|coordinates_wgs84)\b", flags=re.IGNORECASE)
@@ -56,6 +56,40 @@ _TIM_JSON_BLOCK_CAPTURE_RE = re.compile(
 _TECH_TRIGGER_RE = re.compile(
     r"\b(schema_version|class_fractions|tok_lulc@224|tim_modality_outputs|procedural_fraction_delta)\b",
     flags=re.IGNORECASE,
+)
+
+_MARKDOWN_EMPHASIS_RE = re.compile(r"(\*\*|__)(.*?)\1")
+_INLINE_CODE_RE = re.compile(r"`([^`]+)`")
+_BULLET_RE = re.compile(r"(?m)^\s*[-*]\s+")
+_TIM_JSON_ANY_CAPTURE_RE = re.compile(r"(?s)(?P<prefix>.*?)(?P<json>\{\"tim_modality_outputs\".*\})(?P<suffix>\s*(?:Task:.*)?)$")
+
+_LABELS: dict[str, str] = {
+    "bare_ground": "bare ground",
+    "built": "built areas",
+    "crops": "cropland",
+    "flooded_vegetation": "flooded vegetation",
+    "grass": "grassland",
+    "shrub_and_scrub": "shrub and scrub",
+    "snow_and_ice": "snow and ice",
+    "trees": "tree cover",
+    "water": "water",
+}
+
+_MECHANICAL_PHRASES: tuple[str, ...] = (
+    "production-like",
+    "input dataset",
+    "procedural input",
+    "optional overlays",
+    "side-car omitted",
+    "sidecar omitted",
+    "side-car fields omitted",
+    "raw sidecar fields omitted",
+    "tim-style",
+    "tim shaped",
+    "tim-shaped",
+    "model-shaped",
+    "training supervision",
+    "sft",
 )
 
 
@@ -170,6 +204,181 @@ def trim_assistant_text(text: str, *, max_chars: int) -> tuple[str, int]:
     return cut.rstrip() + "\n\n[trimmed]", 1
 
 
+def _humanize_labels(text: str) -> tuple[str, int]:
+    changed = 0
+    out = text
+    for raw, pretty in _LABELS.items():
+        out2 = re.sub(rf"\b{re.escape(raw)}\b", pretty, out)
+        if out2 != out:
+            changed += 1
+            out = out2
+    return out, changed
+
+
+def _strip_markdown(text: str) -> tuple[str, int]:
+    out = text
+    out2 = _MARKDOWN_EMPHASIS_RE.sub(lambda m: m.group(2), out)
+    out2 = _INLINE_CODE_RE.sub(lambda m: m.group(1), out2)
+    out2 = _BULLET_RE.sub("", out2)
+    return out2, int(out2 != text)
+
+
+def _first_json_object(text: str) -> tuple[str | None, str | None, str | None]:
+    start = text.find('{"tim_modality_outputs"')
+    if start < 0:
+        return None, None, None
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[:start], text[start : i + 1], text[i + 1 :]
+    return None, None, None
+
+
+def _finalize_user_text(text: str) -> tuple[str, dict[str, int]]:
+    stats: dict[str, int] = {}
+    out = text
+
+    json_parts = _first_json_object(out)
+    if json_parts[1] is not None:
+        _, js, _ = json_parts
+        out = (
+            "Review the provided satellite imagery and the provided analytics JSON. "
+            "Use the JSON as auxiliary context, and put any comparisons or change interpretation in your response.\n\n"
+            f"Provided analytics JSON:\n{js}\n\n"
+            "Describe the visible land-cover pattern and summarize any relevant change or risk indicated by the provided analytics."
+        )
+        stats["final_user_analytics_prompt_rewritten"] = 1
+        return out.strip(), stats
+    else:
+        out2 = re.sub(
+            r"The input is satellite imagery with an aligned per-pixel land-cover label\.\s*",
+            "Review the satellite image and its aligned land-cover label. ",
+            out,
+            flags=re.IGNORECASE,
+        )
+        out2 = re.sub(r"Describe only\s+(.+?)\s+in the imagery:", r"Describe only \1 in the imagery:", out2)
+        if out2 != out:
+            stats["final_user_simple_prompt_rewritten"] = 1
+            out = out2
+
+    out2, n = _strip_markdown(out)
+    if n:
+        stats["final_user_markdown_removed"] = n
+    out = out2
+
+    out2, n = _humanize_labels(out)
+    if n:
+        stats["final_user_labels_humanized"] = n
+    out = out2
+
+    for phrase in _MECHANICAL_PHRASES:
+        if phrase.lower() in out.lower():
+            stats["final_user_mechanical_phrase_removed"] = stats.get("final_user_mechanical_phrase_removed", 0) + 1
+    out = re.sub(r"\bTiM[- ]style\b", "provided", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bTiM[- ]shaped\b", "provided", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bmodel[- ]shaped\b", "provided", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bproduction-like\s*", "", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bfrom the input dataset\b", "as auxiliary context", out, flags=re.IGNORECASE)
+    out = re.sub(r"\boptional geometry-guided overlays\b", "supporting overlays", out, flags=re.IGNORECASE)
+    out = re.sub(r"\b(?:STAC\s*/\s*)?raw side-?car fields omitted\b", "", out, flags=re.IGNORECASE)
+    out = re.sub(r"\s+\n", "\n", out).strip()
+    return out, stats
+
+
+def _finalize_system_text(text: str) -> tuple[str, dict[str, int]]:
+    stats: dict[str, int] = {}
+    out = text
+    replacements = {
+        "TiM-style": "provided",
+        "TiM-shaped": "provided",
+        "model-shaped": "provided",
+        "TiM-predicted": "provided",
+        "training supervision": "auxiliary estimate",
+        "SFT": "fine-tuning",
+    }
+    for old, new in replacements.items():
+        if old in out:
+            stats["final_system_mechanical_phrase_removed"] = stats.get(
+                "final_system_mechanical_phrase_removed", 0
+            ) + 1
+            out = out.replace(old, new)
+    return out, stats
+
+
+def _finalize_assistant_text(text: str) -> tuple[str, dict[str, int]]:
+    stats: dict[str, int] = {}
+    out = text
+
+    out2, n = _strip_markdown(out)
+    if n:
+        stats["final_assistant_markdown_removed"] = n
+    out = out2
+
+    out2, n = _humanize_labels(out)
+    if n:
+        stats["final_assistant_labels_humanized"] = n
+    out = out2
+
+    replacements = {
+        "Application profile:": "Analysis focus:",
+        "TiM comparison:": "Provided analytics comparison:",
+        "TiM deltas": "provided change estimates",
+        "TiM-predicted": "provided",
+        "procedural training supervision": "auxiliary estimate",
+        "procedural supervision": "auxiliary estimate",
+        "training supervision": "auxiliary estimate",
+        "not live field truth": "not field-verified",
+        "procedural": "provided",
+        "brief_only": "brief overview",
+        "land_use_change": "land-use change",
+        "wildfire": "wildfire context",
+        "auxiliary model evidence": "auxiliary context",
+    }
+    for old, new in replacements.items():
+        if old in out:
+            stats["final_assistant_mechanical_phrase_removed"] = stats.get(
+                "final_assistant_mechanical_phrase_removed", 0
+            ) + 1
+            out = out.replace(old, new)
+
+    out = re.sub(r"(?im)^Confidence:\s*moderate for auxiliary estimate; validate with temporal imagery before action\.\s*", "", out)
+    out = re.sub(r"(?im)^Limitations:\s*auxiliary estimate only; not field-verified\.\s*", "", out)
+    out = re.sub(r"(?im)^Limitations:\s*.*(?:training|sft|data).*?$", "", out)
+    out = re.sub(r"(?im)^Confidence:\s*.*(?:training|sft|data).*?$", "", out)
+    out = re.sub(r"\b(built areas|cropland|tree cover|grassland|bare ground|flooded vegetation|shrub and scrub) area\b", r"\1", out)
+    out = re.sub(r"\b(built areas|cropland|tree cover|grassland|bare ground|flooded vegetation|shrub and scrub) is\b", r"\1 are", out)
+    out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    return out, stats
+
+
+def finalize_training_text(text: str, *, role: str) -> tuple[str, dict[str, int]]:
+    """Final dataset-quality pass: remove mechanical prompt/answer artifacts while preserving provided JSON."""
+    if role == "system":
+        return _finalize_system_text(text)
+    if role == "user":
+        return _finalize_user_text(text)
+    if role == "assistant":
+        return _finalize_assistant_text(text)
+    return text, {}
+
+
 def normalize_text(
     text: str,
     *,
@@ -262,6 +471,7 @@ def _rewrite_row_in_place(row: dict[str, Any], *, max_assistant_chars: int) -> d
     pp = row.get("_postprocess")
     redact_tim_json = bool(pp.get("redact_tim_json")) if isinstance(pp, dict) else False
     minify_tim_json = bool(pp.get("minify_tim_json")) if isinstance(pp, dict) else False
+    final_pass = bool(pp.get("final_training_pass")) if isinstance(pp, dict) else False
     counts: dict[str, int] = {}
 
     parts = _iter_message_text_parts(row)
@@ -292,6 +502,11 @@ def _rewrite_row_in_place(row: dict[str, Any], *, max_assistant_chars: int) -> d
                 "Write a brief, evidence-grounded analytical summary and clearly distinguish what you see "
                 "in the imagery from what is suggested by the auxiliary analytics."
             )
+
+        if final_pass:
+            new, final_st = finalize_training_text(new, role=role)
+            for k, v in final_st.items():
+                counts[k] = counts.get(k, 0) + int(v)
 
         if new != old:
             part[key] = new
@@ -326,6 +541,7 @@ def _rewrite_message_in_place(
     max_assistant_chars: int,
     redact_tim_json: bool,
     minify_tim_json: bool,
+    final_training_pass: bool = False,
 ) -> dict[str, int]:
     """Rewrite a single message dict in-place; returns change counters."""
     counts: dict[str, int] = {}
@@ -351,6 +567,11 @@ def _rewrite_message_in_place(
                 "Write a brief, evidence-grounded analytical summary and clearly distinguish what you see "
                 "in the imagery from what is suggested by the auxiliary analytics."
             )
+
+        if final_training_pass:
+            new, final_st = finalize_training_text(new, role=role)
+            for k, v in final_st.items():
+                counts[k] = counts.get(k, 0) + int(v)
 
         if new != old:
             part["text"] = new
@@ -458,6 +679,7 @@ def postprocess_message_list(
     max_assistant_chars: int,
     redact_tim_json: bool,
     minify_tim_json: bool,
+    final_training_pass: bool,
 ) -> tuple[list[dict[str, Any]], RunStats]:
     """
     Post-process a standalone list of {role, content} messages.
@@ -473,6 +695,7 @@ def postprocess_message_list(
             max_assistant_chars=max_assistant_chars,
             redact_tim_json=redact_tim_json,
             minify_tim_json=minify_tim_json,
+            final_training_pass=final_training_pass,
         )
         stats.add(counts)
         out.append(msg)
@@ -519,6 +742,11 @@ def main() -> int:
         help="If >0: drop examples whose combined (user+assistant) text exceeds this many characters (after processing).",
     )
     ap.add_argument(
+        "--final-training-pass",
+        action="store_true",
+        help="Rewrite mechanical prompt/answer artifacts into natural training-ready language while preserving TiM JSON.",
+    )
+    ap.add_argument(
         "--report",
         type=Path,
         default=None,
@@ -540,6 +768,8 @@ def main() -> int:
                     r["_postprocess"]["redact_tim_json"] = True
                 if args.minify_tim_json:
                     r["_postprocess"]["minify_tim_json"] = True
+                if args.final_training_pass:
+                    r["_postprocess"]["final_training_pass"] = True
         out_rows, st = postprocess_rows(rows, max_assistant_chars=int(args.max_assistant_chars))
         out_rows = filter_overlong_rows(
             out_rows,
@@ -559,6 +789,7 @@ def main() -> int:
                 max_assistant_chars=int(args.max_assistant_chars),
                 redact_tim_json=bool(args.redact_tim_json),
                 minify_tim_json=bool(args.minify_tim_json),
+                final_training_pass=bool(args.final_training_pass),
             )
             _write_json(out_path, out_rows)
         else:
@@ -572,6 +803,8 @@ def main() -> int:
                         r["_postprocess"]["redact_tim_json"] = True
                     if args.minify_tim_json:
                         r["_postprocess"]["minify_tim_json"] = True
+                if args.final_training_pass:
+                    r["_postprocess"]["final_training_pass"] = True
             out_rows, st = postprocess_rows(
                 [r for r in data if isinstance(r, dict)],
                 max_assistant_chars=int(args.max_assistant_chars),
@@ -594,10 +827,6 @@ def main() -> int:
     else:
         print(json.dumps(report_obj, indent=2, ensure_ascii=False))
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
 
 
 def _row_text_lengths(row: dict[str, Any]) -> tuple[int, int]:
@@ -665,4 +894,8 @@ def filter_overlong_rows(
             stats.by_change["dropped_total_too_long"] = stats.by_change.get("dropped_total_too_long", 0) + dropped_total
         stats.rows_out = len(out)
     return out
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 

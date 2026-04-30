@@ -155,6 +155,7 @@ def _postprocess_dataset_tree(
     max_assistant_chars: int,
     redact_tim_json: bool,
     minify_tim_json: bool,
+    final_training_pass: bool,
     max_user_chars: int,
     max_total_chars: int,
 ) -> dict[str, Any]:
@@ -191,6 +192,12 @@ def _postprocess_dataset_tree(
                         r.setdefault("_postprocess", {})
                         if isinstance(r["_postprocess"], dict):
                             r["_postprocess"]["minify_tim_json"] = True
+            if final_training_pass:
+                for r in rows:
+                    if isinstance(r, dict):
+                        r.setdefault("_postprocess", {})
+                        if isinstance(r["_postprocess"], dict):
+                            r["_postprocess"]["final_training_pass"] = True
             processed, st = postprocess_rows(rows, max_assistant_chars=max_assistant_chars)
             processed = filter_overlong_rows(
                 processed,
@@ -804,6 +811,11 @@ def main() -> int:
         help="Opt-in: keep TiM JSON but minify it (compact JSON, no indentation).",
     )
     ap.add_argument(
+        "--final-training-pass",
+        action="store_true",
+        help="Rewrite mechanical prompt/answer artifacts into natural training-ready language while preserving TiM JSON.",
+    )
+    ap.add_argument(
         "--max-user-chars",
         type=int,
         default=0,
@@ -890,6 +902,7 @@ def main() -> int:
             max_assistant_chars=int(args.max_assistant_chars),
             redact_tim_json=bool(args.redact_tim_json),
             minify_tim_json=bool(args.minify_tim_json),
+            final_training_pass=bool(args.final_training_pass),
             max_user_chars=int(args.max_user_chars),
             max_total_chars=int(args.max_total_chars),
         )

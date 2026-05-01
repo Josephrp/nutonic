@@ -1,7 +1,10 @@
 package com.nutonic.vlm
 
 /** Streams a PRO VLM bundle to platform sandbox cache (temp file → atomic rename). */
-expect class ProVlmModelCacheWriter(modelBundleId: String, revision: String) {
+expect class ProVlmModelCacheWriter(
+    modelBundleId: String,
+    revision: String,
+) {
     suspend fun open(): Boolean
 
     fun write(

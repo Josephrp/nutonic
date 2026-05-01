@@ -223,9 +223,10 @@ fun ProCoordinateDashboardDetail(
                                                         else -> mergeCompletedProJobs(completedSoFar)
                                                     }
                                                 recentJobs =
-                                                    listOf(polledJob) + recentJobs.filterNot {
-                                                        it.jobId == polledJob.jobId
-                                                    }.take(4)
+                                                    listOf(polledJob) +
+                                                    recentJobs
+                                                        .filterNot { it.jobId == polledJob.jobId }
+                                                        .take(4)
                                                 statusText = "${profileLabel(profile)} · ${polledJob.status}"
                                                 val mergedRefs = mergeArtifactRefs(finishedStatuses)
                                                 if (polledJob.status == "completed") {

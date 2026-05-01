@@ -31,7 +31,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nutonic.MainTab
 import com.nutonic.api.ApiResult
-import com.nutonic.api.FeatureFlags
 import com.nutonic.api.MapSummary
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.RankedRoundStartIn
@@ -53,7 +52,6 @@ fun ScanHubScreen(
     onNavigateToRank: () -> Unit,
     operatorDisplayName: String,
     nutonicApiClient: NutonicApiClient?,
-    serverFeatureFlags: FeatureFlags?,
     mapContextId: String,
     onMapContextSelect: (String, String?) -> Unit,
     contentCacheRepository: ContentCacheRepository?,

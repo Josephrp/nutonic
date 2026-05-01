@@ -237,7 +237,6 @@ fun NutonicMainShell(
                             onNavigateToRank = { selectTab(MainTab.Rank) },
                             operatorDisplayName = settingsRepository.settings.displayName,
                             nutonicApiClient = nutonicApiClient,
-                            serverFeatureFlags = serverFeatureFlags,
                             mapContextId = mapContextId,
                             onMapContextSelect = ::setMapContext,
                             contentCacheRepository = contentCacheRepository,
@@ -261,9 +260,12 @@ fun NutonicMainShell(
                                     onChangeShell(shell.copy(rankFocusMapId = null))
                                 }
                             },
-                            settingsRepository = settingsRepository,
-                            localNonRankedLeaderboardRepository = localNonRankedLeaderboardRepository,
-                            playerProgressRepository = playerProgressRepository,
+                            rankRepos =
+                                RankTabRepositories(
+                                    settingsRepository = settingsRepository,
+                                    localNonRankedLeaderboardRepository = localNonRankedLeaderboardRepository,
+                                    playerProgressRepository = playerProgressRepository,
+                                ),
                         )
                     MainTab.Setup ->
                         SetupTabRoot(
@@ -369,6 +371,12 @@ private fun BoxMax(
     }
 }
 
+private data class RankTabRepositories(
+    val settingsRepository: SettingsRepository,
+    val localNonRankedLeaderboardRepository: LocalNonRankedLeaderboardRepository?,
+    val playerProgressRepository: PlayerProgressRepository?,
+)
+
 @Composable
 private fun RankTabRoot(
     onOpenDetail: (ShellDetail) -> Unit,
@@ -380,12 +388,10 @@ private fun RankTabRoot(
     mapContextTitle: String?,
     onMapContextIdChange: (String) -> Unit,
     onConsumeRankFocus: () -> Unit,
-    settingsRepository: SettingsRepository,
-    localNonRankedLeaderboardRepository: LocalNonRankedLeaderboardRepository?,
-    playerProgressRepository: PlayerProgressRepository?,
+    rankRepos: RankTabRepositories,
 ) {
-    val settings = settingsRepository.settings
-    val progress = playerProgressRepository?.progress
+    val settings = rankRepos.settingsRepository.settings
+    val progress = rankRepos.playerProgressRepository?.progress
     var localRows by remember { mutableStateOf<List<LocalNonRankedLeaderboardRow>>(emptyList()) }
 
     LaunchedEffect(shell.rankFocusMapId) {
@@ -394,8 +400,8 @@ private fun RankTabRoot(
         onConsumeRankFocus()
     }
 
-    LaunchedEffect(mapContextId, localNonRankedLeaderboardRepository) {
-        val repo = localNonRankedLeaderboardRepository
+    LaunchedEffect(mapContextId, rankRepos.localNonRankedLeaderboardRepository) {
+        val repo = rankRepos.localNonRankedLeaderboardRepository
         localRows =
             if (repo == null) {
                 emptyList()

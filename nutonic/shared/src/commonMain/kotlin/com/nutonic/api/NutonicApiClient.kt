@@ -444,37 +444,42 @@ class NutonicApiClient(
                 http.get(url) {
                     nutonicAuthHeaders(url, bearerAccessToken)
                 }
-            when {
-                response.status.isSuccess() -> {
-                    val channel = response.bodyAsChannel()
-                    val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
-                    val buffer = ByteArray(STREAM_BUFFER_BYTES)
-                    var received = 0L
-                    onProgress(0L, total)
-                    while (true) {
-                        val read = channel.readAvailable(buffer, 0, buffer.size)
-                        if (read == -1) break
-                        if (read > 0) {
-                            onChunk(buffer, 0, read)
-                            received += read.toLong()
-                            onProgress(received, total)
-                        }
-                    }
-                    ApiResult.Ok(received)
-                }
-
-                else ->
-                    ApiResult.HttpFailure(
-                        response.status.value,
-                        stubUserMessageForStatus(response.status.value, null),
-                        null,
-                    )
+            if (response.status.isSuccess()) {
+                consumeAuthenticatedStreamingBody(response, onProgress, onChunk)
+            } else {
+                ApiResult.HttpFailure(
+                    response.status.value,
+                    stubUserMessageForStatus(response.status.value, null),
+                    null,
+                )
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
         }
+    }
+
+    private suspend fun consumeAuthenticatedStreamingBody(
+        response: HttpResponse,
+        onProgress: (receivedBytes: Long, totalBytes: Long?) -> Unit,
+        onChunk: suspend (ByteArray, Int, Int) -> Unit,
+    ): ApiResult<Long> {
+        val channel = response.bodyAsChannel()
+        val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        val buffer = ByteArray(STREAM_BUFFER_BYTES)
+        var received = 0L
+        onProgress(0L, total)
+        while (true) {
+            val read = channel.readAvailable(buffer, 0, buffer.size)
+            if (read == -1) break
+            if (read > 0) {
+                onChunk(buffer, 0, read)
+                received += read.toLong()
+                onProgress(received, total)
+            }
+        }
+        return ApiResult.Ok(received)
     }
 
     internal fun nutonicAbsoluteAssetUrl(assetPathOrUrl: String): String? {

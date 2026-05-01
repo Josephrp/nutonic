@@ -11,6 +11,10 @@ per-file ``hf_hub_download`` threads. Also install ``hf_transfer`` and set
 e2e/materialize path) so you only need media for a subset of rows—or point training at
 the Hub id with ``--limit`` for LEAP smoke tests without mirroring the whole tree.
 
+**Small missing tails:** When only a few paths are left (default: up to 5000), this script
+uses parallel per-file downloads instead of ``snapshot_download``, which otherwise
+re-scans the whole repo and can appear stuck for a long time.
+
 **HF CLI:** You can pull the same blobs with ``hf download <repo_id> --repo-type dataset
 --local-dir ...`` (install ``huggingface_hub[cli]``). It uses the same Hub stack as
 ``snapshot_download``; enable ``HF_HUB_ENABLE_HF_TRANSFER=1`` and ``hf_transfer`` for speed.
@@ -228,6 +232,16 @@ def parse_args() -> argparse.Namespace:
             "files: one hf_hub_download per missing path (legacy; slower for many small files)."
         ),
     )
+    p.add_argument(
+        "--snapshot-if-missing-gt",
+        type=int,
+        default=5000,
+        help=(
+            "With strategy=snapshot: use snapshot_download only when more than this many paths "
+            "are missing; otherwise download just those paths in parallel (avoids full-repo "
+            "reconcile hangs when finishing a nearly-complete tree, e.g. last dozen files)."
+        ),
+    )
     p.add_argument("--max-workers", type=int, default=32)
     p.add_argument("--max-retries", type=int, default=12)
     p.add_argument("--progress-every", type=int, default=250)
@@ -274,7 +288,11 @@ def main() -> int:
         return 0
 
     if missing:
-        if args.download_strategy == "snapshot":
+        use_bulk_snapshot = (
+            args.download_strategy == "snapshot"
+            and len(missing) > int(args.snapshot_if_missing_gt)
+        )
+        if use_bulk_snapshot:
             print(
                 f"Downloading {len(missing):,} missing path(s) via snapshot_download "
                 f"(max_workers={args.max_workers})...",
@@ -290,6 +308,13 @@ def main() -> int:
                 max_workers=args.max_workers,
             )
         else:
+            if args.download_strategy == "snapshot":
+                print(
+                    f"Downloading {len(missing):,} missing path(s) via parallel hf_hub_download "
+                    f"(snapshot skipped: ≤{args.snapshot_if_missing_gt} missing; full snapshot "
+                    f"would rescan the whole repo and often appears hung on small tails).",
+                    flush=True,
+                )
             started = time.monotonic()
             done = 0
             with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:

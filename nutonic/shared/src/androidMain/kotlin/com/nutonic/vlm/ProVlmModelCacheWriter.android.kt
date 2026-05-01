@@ -46,7 +46,8 @@ actual class ProVlmModelCacheWriter actual constructor(
             stream?.close()
             stream = null
             val t = tmp ?: return@withContext
-            val target = finalFile() ?: run {
+            val target = finalFile()
+            if (target == null) {
                 tmp = null
                 return@withContext
             }

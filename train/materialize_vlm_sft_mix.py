@@ -14,8 +14,12 @@ directory of ``*.parquet`` shards. This script concatenates:
 Effective mix is still **main-heavy**; tune repeats using rough counts:
 ``task_share ≈ (task_rows × task_repeat) / (main_rows + tasks_effective + small_effective)``.
 
-All rows are written as Parquet under ``--out-dir``. Training will shuffle globally
-inside LEAP, so append order is not critical.
+All rows are written as Parquet under ``--out-dir``. Each row is normalized to the
+same ``messages`` / ``metadata`` / ``_postprocess`` shape as the main training-ready
+hub (legacy Firewatch fields like ``event_id`` / ``profile`` and extra columns like
+``regions`` are mapped or dropped) so all shards share one Arrow schema for Ray/LEAP.
+
+Training will shuffle globally inside LEAP, so append order is not critical.
 
 **Images:** Parquet still stores relative paths only. For LEAP to load pixels you must
 download the Hugging Face dataset file trees locally and pass ``--image-root`` to the
@@ -34,6 +38,13 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from datasets import Dataset, load_dataset
+
+from vlm_mix_row_normalize import normalize_vlm_sft_parquet_row
+
+
+def _repo_slug_default_task(repo_id: str) -> str:
+    """Stable default ``metadata.task`` when a hub row omits it (e.g. ``firewatch_sft_v1``)."""
+    return repo_id.split("/")[-1].replace("-", "_")
 
 
 def _rows_from_hf(
@@ -74,7 +85,7 @@ def _stream_main_to_shards(
     shard_idx = 0
     total = 0
     for row in _rows_from_hf(repo_id, subset=subset, split=split, streaming=True):
-        rows.append(row)
+        rows.append(normalize_vlm_sft_parquet_row(dict(row), default_task=None))
         total += 1
         if len(rows) >= chunk_rows:
             shard_idx = _flush_shard(out_dir, prefix, shard_idx, rows)
@@ -93,6 +104,7 @@ def _materialize_whole_split(
     chunk_rows: int,
     prefix: str,
     repeat: int = 1,
+    default_task: str | None = None,
 ) -> int:
     if subset:
         ds = load_dataset(repo_id, subset, split=split, streaming=False)
@@ -103,7 +115,9 @@ def _materialize_whole_split(
     total = 0
     for _ in range(max(1, repeat)):
         for row in ds:
-            rows.append(dict(row))
+            rows.append(
+                normalize_vlm_sft_parquet_row(dict(row), default_task=default_task),
+            )
             total += 1
             if len(rows) >= chunk_rows:
                 shard_idx = _flush_shard(out_dir, prefix, shard_idx, rows)
@@ -187,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
             chunk_rows=args.chunk_rows,
             prefix=f"task__{safe}",
             repeat=max(1, args.task_repeat),
+            default_task=_repo_slug_default_task(repo_id),
         )
         print(f"  wrote {n_task:,} rows", flush=True)
 
@@ -203,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
         chunk_rows=args.chunk_rows,
         prefix=f"small__{safe_small}",
         repeat=max(1, args.small_repeat),
+        default_task=_repo_slug_default_task(args.small_repo_id),
     )
     print(f"  wrote {n_small:,} rows (including repeats)", flush=True)
 

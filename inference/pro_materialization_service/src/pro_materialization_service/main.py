@@ -105,7 +105,10 @@ def _materialize_http_errors(e: ValueError) -> NoReturn:
             status_code=503,
             detail={
                 "code": code,
-                "message": "Install optional deps: pip install nutonic-pro-materialization-service[s2]",
+                "message": (
+                    "Sentinel/STAC imports failed (need pystac-client and rasterio). "
+                    "They are package dependencies; check the container/runtime environment."
+                ),
             },
         ) from e
     if code == "SENTINEL_PIPELINE_NOT_AVAILABLE":

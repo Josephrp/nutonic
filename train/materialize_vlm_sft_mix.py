@@ -17,6 +17,12 @@ Effective mix is still **main-heavy**; tune repeats using rough counts:
 All rows are written as Parquet under ``--out-dir``. Training will shuffle globally
 inside LEAP, so append order is not critical.
 
+**Images:** Parquet still stores relative paths only. For LEAP to load pixels you must
+download the Hugging Face dataset file trees locally and pass ``--image-root`` to the
+trainer pointing at the **dataset root** (folder that contains ``images/``, etc.). If
+several hubs contribute different paths, merge their files under one tree or use one
+root that contains every referenced prefix.
+
 Requires: ``datasets``, ``pyarrow`` (installed with typical HF stacks).
 """
 

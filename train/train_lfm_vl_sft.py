@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +25,41 @@ DEFAULT_LEAP_ROOT = REPO_ROOT / "refs" / "leap-finetune-main"
 DEFAULT_DATASET = "NuTonic/sat-vl-sft-training-ready-v1"
 # LEAP's loader prepends "LiquidAI/" for non-local names, so keep this short.
 DEFAULT_MODEL = "LFM2.5-VL-450M"
+
+
+def _resolve_uv_executable(uv_arg: str) -> str | None:
+    """Return a usable uv path, or None if uv is not installed."""
+    candidate = Path(uv_arg).expanduser()
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate.resolve())
+    w = shutil.which(uv_arg)
+    return str(Path(w).resolve()) if w else None
+
+
+def _leap_launch_without_uv(leap_root: Path, config_path: Path) -> tuple[list[str], dict[str, str]]:
+    """
+    Run leap-finetune entrypoint with the current interpreter when uv is missing.
+
+    Requires LEAP dependencies (torch, ray, etc.) in the active environment, e.g.:
+    ``pip install -e refs/leap-finetune-main``
+    """
+    leap_src = (leap_root.resolve() / "src").resolve()
+    if not leap_src.is_dir():
+        raise SystemExit(f"LEAP src layout missing: {leap_src}")
+
+    env = os.environ.copy()
+    sep = os.pathsep
+    prev = env.get("PYTHONPATH", "").strip()
+    env["PYTHONPATH"] = str(leap_src) if not prev else f"{leap_src}{sep}{prev}"
+
+    cfg = str(config_path.resolve())
+    code = (
+        "import sys;"
+        f"sys.argv = ['leap-finetune', {cfg!r}];"
+        "from leap_finetune import main;"
+        "main()"
+    )
+    return [sys.executable, "-c", code], env
 
 
 def _quote_yaml_scalar(value: Any) -> str:
@@ -159,7 +195,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--split", default="train")
     p.add_argument("--limit", type=int, default=None, help="Optional row cap for smoke tests.")
     p.add_argument("--test-size", type=float, default=0.02, help="Held-out split created by LEAP loader.")
-    p.add_argument("--image-root", default=None, help="Prepended to relative image paths for local datasets.")
+    p.add_argument(
+        "--image-root",
+        default=None,
+        help=(
+            "Prepended to relative image paths in messages (local Parquet/JSONL). "
+            "Use the HF dataset checkout root—the directory that contains images/, "
+            "mapbox_stills/, etc."
+        ),
+    )
     p.add_argument("--cache-dataset", action="store_true")
 
     p.add_argument("--epochs", type=float, default=1.0)
@@ -205,8 +249,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--leap-root", default=str(DEFAULT_LEAP_ROOT))
     p.add_argument("--config-out", default=str(REPO_ROOT / "train" / "configs" / "lfm_vl_satellite_sft.yaml"))
     p.add_argument("--dry-run", action="store_true", help="Only write the config.")
-    p.add_argument("--launch", action="store_true", help="Run `uv run leap-finetune <config>` after writing config.")
-    p.add_argument("--uv", default=os.environ.get("UV", "uv"), help="uv executable.")
+    p.add_argument(
+        "--launch",
+        action="store_true",
+        help=(
+            "Run leap-finetune after writing config (prefers ``uv run``; falls back to "
+            "current Python + PYTHONPATH if uv is not installed)."
+        ),
+    )
+    p.add_argument("--uv", default=os.environ.get("UV", "uv"), help="uv executable (full path allowed).")
     return p.parse_args(argv)
 
 
@@ -223,9 +274,21 @@ def main(argv: list[str] | None = None) -> int:
         print("Dry run complete. Add --launch to start training.")
         return 0
 
-    cmd = [args.uv, "run", "--directory", str(Path(args.leap_root).resolve()), "leap-finetune", str(config_path)]
-    print("+ " + " ".join(cmd), flush=True)
-    return subprocess.run(cmd, check=False).returncode
+    leap_root = Path(args.leap_root).resolve()
+    uv_bin = _resolve_uv_executable(args.uv)
+    if uv_bin:
+        cmd = [uv_bin, "run", "--directory", str(leap_root), "leap-finetune", str(config_path)]
+        print("+ " + " ".join(cmd), flush=True)
+        return subprocess.run(cmd, check=False).returncode
+
+    print(
+        "uv not found on PATH; launching leap-finetune with this Python and PYTHONPATH "
+        f"(install uv from https://docs.astral.sh/uv/ or use: pip install -e {leap_root}).",
+        file=sys.stderr,
+    )
+    cmd, env = _leap_launch_without_uv(leap_root, config_path)
+    print(f"+ {sys.executable} -c '... leap-finetune {config_path}'", flush=True)
+    return subprocess.run(cmd, check=False, env=env).returncode
 
 
 if __name__ == "__main__":

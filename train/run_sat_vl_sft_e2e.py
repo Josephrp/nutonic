@@ -384,7 +384,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--private-repo", action="store_true", help="Create HF model repo as private.")
 
-    p.add_argument("--image-root", default=None)
+    p.add_argument(
+        "--image-root",
+        default=None,
+        help=(
+            "Required for local Parquet training when rows use repo-relative paths (images/, "
+            "mapbox_stills/, …). Must be the dataset root directory that contains those folders "
+            "(see train/download_lfm_vl_training_dataset.py). Union extra hub files here if needed."
+        ),
+    )
     p.add_argument("--per-device-train-batch-size", type=int, default=1)
     p.add_argument("--gradient-accumulation-steps", type=int, default=16)
     p.add_argument("--test-size", type=float, default=0.02)
@@ -484,6 +492,20 @@ def main(argv: list[str] | None = None) -> int:
 
     dataset_path = str(mix_dir)
     config_path = REPO_ROOT / "train" / "configs" / "sat_vl_sft_single.yaml"
+
+    mix_dir_resolved = mix_dir.expanduser().resolve()
+    if (
+        not args.dry_run
+        and mix_dir_resolved.is_dir()
+        and any(mix_dir_resolved.glob("*.parquet"))
+        and not args.image_root
+    ):
+        print(
+            "Warning: local Parquet mix without --image-root. LEAP will resolve paths like "
+            "images/... against image_root; without it, validation fails (image not loadable). "
+            "Download hub assets and pass --image-root /path/to/dataset/root.",
+            file=sys.stderr,
+        )
 
     cmd = _train_command(dataset=dataset_path, args=args)
     print("+ " + " ".join(cmd), flush=True)

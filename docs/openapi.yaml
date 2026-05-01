@@ -1079,14 +1079,17 @@ components:
         tim_branch:
           type: string
           enum: [S2L2A_full, RGB_mapbox]
-          default: RGB_mapbox
+          default: S2L2A_full
+          description: Server coerces legacy RGB_mapbox to S2L2A_full for PRO materialization.
         vlm_contract_id:
           type: string
-          default: nutonic.pro.vlm.v1_512
+          default: nutonic.pro.vlm.v1_512_s2_only
+          description: Sentinel-2 VLM contract only; Mapbox-backed ids are rejected at the API.
         sentinel_fetch_mode:
           type: string
           enum: [MINIMAL_RGB, TERRAMIND_SPECTRAL, FULL_STAC]
-          default: MINIMAL_RGB
+          default: TERRAMIND_SPECTRAL
+          description: MINIMAL_RGB is rejected for PRO jobs (Sentinel-2 imagery only).
         datetime_interval:
           type: string
           nullable: true

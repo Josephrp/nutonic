@@ -47,7 +47,7 @@ def test_verify_rejects_wrong_size_or_hash() -> None:
         sha256=sha_ab,
         size_bytes=2,
         runtime="test",
-        contract_ids=("nutonic.pro.vlm.v1_512",),
+        contract_ids=("nutonic.pro.vlm.v1_512_s2_only",),
     )
     assert verify_model_bytes_like_on_device_kotlin(manifest, b"ab") is None
     assert verify_model_bytes_like_on_device_kotlin(manifest, b"a") is not None
@@ -59,7 +59,7 @@ def test_verify_rejects_wrong_size_or_hash() -> None:
         sha256="b" * 64,
         size_bytes=1,
         runtime="test",
-        contract_ids=("nutonic.pro.vlm.v1_512",),
+        contract_ids=("nutonic.pro.vlm.v1_512_s2_only",),
     )
     assert verify_model_bytes_like_on_device_kotlin(bad, b"a") is not None
     good_one_byte = replace(bad, sha256=sha_a)
@@ -111,7 +111,7 @@ def test_live_download_small_lfm_artifact_from_huggingface() -> None:
         sha256=sha,
         size_bytes=size_i,
         runtime="hf_resolve_get",
-        contract_ids=("nutonic.pro.vlm.v1_512",),
+        contract_ids=("nutonic.pro.vlm.v1_512_s2_only",),
     )
     err = verify_model_bytes_like_on_device_kotlin(manifest, body)
     assert err is None, err

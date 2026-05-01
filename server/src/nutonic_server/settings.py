@@ -235,7 +235,7 @@ class Settings(BaseSettings):
     )
 
     pro_vlm_model_contract_ids: str = Field(
-        default="nutonic.pro.vlm.v1_512",
+        default="nutonic.pro.vlm.v1_512_s2_only",
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS", "PRO_VLM_MODEL_CONTRACT_IDS"),
         description="Comma-separated VLM image contract ids supported by the advertised model bundle.",
     )

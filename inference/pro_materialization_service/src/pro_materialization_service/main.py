@@ -52,15 +52,24 @@ def internal_healthz() -> dict[str, object]:
     }
 
 
-def _map_stub_tim_branch(raw: str) -> str:
-    u = raw.strip().lower().replace("-", "_")
-    if u in ("s2l2a_full", "s2l2a"):
-        return "S2L2A_full"
-    return "RGB_mapbox"
-
-
 def _materialize_http_errors(e: ValueError) -> NoReturn:
     code = str(e)
+    if code == "VLM_CONTRACT_INCLUDES_MAPBOX_RGB":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": code,
+                "message": "vlm_contract_id must not include mapbox_rgb; use nutonic.pro.vlm.v1_512_s2_only.",
+            },
+        ) from e
+    if code == "MINIMAL_RGB_UNSUPPORTED_USE_TERRAMIND_SPECTRAL":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": code,
+                "message": "sentinel_fetch_mode MINIMAL_RGB is not supported; use TERRAMIND_SPECTRAL or FULL_STAC.",
+            },
+        ) from e
     if code.startswith("MAPBOX_HTTP_") or code == "MAPBOX_TRANSPORT_ERROR":
         raise HTTPException(status_code=502, detail={"code": code}) from e
     if code == "MAPBOX_TOKEN_MISSING":
@@ -113,7 +122,7 @@ def _materialize_http_errors(e: ValueError) -> NoReturn:
 @app.post("/internal/v1/materialize", response_model=MaterializeResult)
 def internal_materialize(body: MaterializeRequest) -> MaterializeResult:
     """
-    Mapbox-centered materialization + optional Sentinel-2 (``MINIMAL_RGB`` / ``TERRAMIND_SPECTRAL`` / ``FULL_STAC``).
+    Sentinel-2–backed materialization (``TERRAMIND_SPECTRAL`` / ``FULL_STAC``); Mapbox VLM contracts are rejected.
     """
     try:
         return materialize(body)
@@ -131,9 +140,10 @@ def materialize_stub(body: MaterializeStubIn) -> MaterializeStubOut:
     req = MaterializeRequest(
         latitude=body.latitude,
         longitude=body.longitude,
-        tim_branch=_map_stub_tim_branch(body.tim_input_branch),  # type: ignore[arg-type]
-        sentinel_fetch_mode="MINIMAL_RGB",
+        tim_branch="S2L2A_full",
+        sentinel_fetch_mode="TERRAMIND_SPECTRAL",
         enable_tim=False,
+        vlm_contract_id="nutonic.pro.vlm.v1_512_s2_only",
     )
     try:
         out = materialize(req)

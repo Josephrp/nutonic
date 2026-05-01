@@ -125,8 +125,9 @@ fun ProCoordinateDashboardDetail(
                                     mapboxZoom = mapboxZoom,
                                     analysisProfile = profile,
                                     enableTim = profile != ProJobProfile.BRIEF_ONLY,
-                                    sentinelFetchMode = if (profile == ProJobProfile.BRIEF_ONLY) "MINIMAL_RGB" else "TERRAMIND_SPECTRAL",
-                                    timBranch = if (profile == ProJobProfile.BRIEF_ONLY) "RGB_mapbox" else "S2L2A_full",
+                                    sentinelFetchMode = "TERRAMIND_SPECTRAL",
+                                    timBranch = "S2L2A_full",
+                                    vlmContractId = "nutonic.pro.vlm.v1_512_s2_only",
                                 )
                             statusText = "Enqueueing PRO job..."
                             when (val created = client.postProJob(body, token.value.accessToken)) {

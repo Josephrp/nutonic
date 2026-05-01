@@ -546,8 +546,8 @@ def main(argv: list[str] | None = None) -> int:
                         "latitude": args.lat,
                         "longitude": args.lon,
                         "bbox_half_km": 5.0,
-                        "sentinel_fetch_mode": "MINIMAL_RGB",
-                        "vlm_contract_id": "nutonic.pro.vlm.v1_512",
+                        "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+                        "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
                         "enable_tim": False,
                         "tim_branch": "RGB_mapbox",
                         "mapbox_zoom": 12,
@@ -647,8 +647,8 @@ def main(argv: list[str] | None = None) -> int:
                                 "mapbox_zoom": 12,
                                 "enable_tim": False,
                                 "tim_branch": "RGB_mapbox",
-                                "vlm_contract_id": "nutonic.pro.vlm.v1_512",
-                                "sentinel_fetch_mode": "MINIMAL_RGB",
+                                "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+                                "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
                             },
                         )
                         results.append(create_check)

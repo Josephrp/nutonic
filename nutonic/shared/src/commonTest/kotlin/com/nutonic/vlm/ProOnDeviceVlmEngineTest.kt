@@ -27,7 +27,7 @@ class ProOnDeviceVlmEngineTest {
                         images =
                             listOf(
                                 ProVlmPreparedImage(
-                                    role = "mapbox_rgb",
+                                    role = "sentinel_fc",
                                     bytes = byteArrayOf(1),
                                     mimeType = "image/png",
                                     width = 1,
@@ -40,6 +40,6 @@ class ProOnDeviceVlmEngineTest {
 
             val ok = assertIs<ProOnDeviceVlmRunResult.Ok>(result)
             assertTrue(ok.text.contains("nutonic.pro.vlm.test"))
-            assertTrue(ok.text.contains("mapbox_rgb"))
+            assertTrue(ok.text.contains("sentinel_fc"))
         }
 }

@@ -22,7 +22,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 private const val DEFAULT_MODEL_BUNDLE_ID = "nutonic.pro.vlm.remote.v1"
-private const val DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512"
+private const val DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512_s2_only"
 private const val MAX_PROMPT_CHARS = 500
 
 private val ProVlmJson =

@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Sequence
 
-DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512"
+DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512_s2_only"
 
 
 @dataclass(frozen=True)

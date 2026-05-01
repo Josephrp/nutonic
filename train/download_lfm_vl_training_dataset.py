@@ -10,6 +10,10 @@ per-file ``hf_hub_download`` threads. Also install ``hf_transfer`` and set
 **Iterative / smoke training:** Use a small Parquet mix (``--mix-main-max-rows`` on the
 e2e/materialize path) so you only need media for a subset of rows—or point training at
 the Hub id with ``--limit`` for LEAP smoke tests without mirroring the whole tree.
+
+**HF CLI:** You can pull the same blobs with ``hf download <repo_id> --repo-type dataset
+--local-dir ...`` (install ``huggingface_hub[cli]``). It uses the same Hub stack as
+``snapshot_download``; enable ``HF_HUB_ENABLE_HF_TRANSFER=1`` and ``hf_transfer`` for speed.
 """
 
 from __future__ import annotations

@@ -492,12 +492,16 @@ jobs:
           --service pro_materialization
           --repo-id NuTonic/nutonic-pro-materialization
           --token-env HF_TOKEN
+      - name: Wait for PRO Space Docker build (Hub runtime)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_NUTONIC || secrets.HF_TOKEN || secrets.HF_API_WRITE }}
+        run: python tools/hf_deploy/wait_for_space_runtime.py --repo-id NuTonic/nutonic-pro-materialization
       - name: Smoke test deployed PRO materialization Space
         env:
           NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET || secrets.INFERENCE_HMAC_SECRET }}
         run: |
           pip install -r tools/requirements.txt
-          python tools/live_inference_smoke.py --preset pro-deploy --timeout 45 --strict --json-report-path artifacts/hf-smoke-pro.json
+          python tools/live_inference_smoke.py --preset pro-deploy --timeout 45 --strict --json-report-path artifacts/hf-smoke-pro.json --pro-materialize-max-attempts 4 --pro-materialize-wait-interval 5
       - name: Upload PRO smoke report
         if: always()
         uses: actions/upload-artifact@v4

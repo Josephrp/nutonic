@@ -380,17 +380,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--pro-materialize-max-attempts",
         type=int,
-        default=40,
+        default=6,
         help=(
-            "POST /internal/v1/materialize: max attempts when the Space returns "
-            "503 S2_DEPENDENCIES_MISSING (Docker image not rebuilt yet). Default 40."
+            "POST /internal/v1/materialize: max attempts on 503 S2_DEPENDENCIES_MISSING only "
+            "(fallback when Hub build wait is not used). Default 6."
         ),
     )
     p.add_argument(
         "--pro-materialize-wait-interval",
         type=float,
-        default=15.0,
-        help="Seconds between retries for 503 S2_DEPENDENCIES_MISSING only (default: 15).",
+        default=8.0,
+        help="Seconds between those retries (default: 8).",
     )
     p.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
     p.add_argument(

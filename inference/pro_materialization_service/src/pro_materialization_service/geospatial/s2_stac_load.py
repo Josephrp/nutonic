@@ -3,7 +3,7 @@
 Aligned with ``nutonic_terramind_tim_local.s2_stac`` (same asset keys and
 ``resolve_href``) so NPZ stacks match TiM expectations — **no torch** here.
 
-Requires ``pystac-client`` and ``rasterio`` (core package dependencies since **0.3.1**).
+Requires ``pystac-client`` and ``rasterio`` (core deps); container images should install GDAL (see service ``Dockerfile``).
 """
 
 from __future__ import annotations

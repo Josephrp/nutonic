@@ -22,6 +22,27 @@ import json
 import sys
 from pathlib import Path
 
+# Same conversational aliases as LEAP ``normalize_vlm_sft`` (validate_loader).
+_CONVERSATION_COLUMNS = ("messages", "conversation", "conversations", "chat", "dialogue")
+
+
+def _top_level_parquet_columns(path: Path, pf: object) -> list[str]:
+    """Top-level field names (not flattened leaf names). ``ParquetFile.schema.names`` can list leaves."""
+    sa = getattr(pf, "schema_arrow", None)
+    if sa is not None:
+        return list(sa.names)
+    import pyarrow.parquet as pq
+
+    return list(pq.read_schema(path).names)
+
+
+def _pick_conversation_column(column_names: list[str]) -> str | None:
+    name_set = set(column_names)
+    for cand in _CONVERSATION_COLUMNS:
+        if cand in name_set:
+            return cand
+    return None
+
 
 def _message_image_rel_paths(row: dict) -> list[str]:
     out: list[str] = []
@@ -110,11 +131,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Warning: cannot open {path.name}: {e}", file=sys.stderr)
             continue
 
-        if "messages" not in pf.schema.names:
-            print(f"Warning: no 'messages' column in {path.name}; skipping.", file=sys.stderr)
+        column_names = _top_level_parquet_columns(path, pf)
+        msg_col = _pick_conversation_column(column_names)
+        if msg_col is None:
+            print(
+                f"Warning: no conversational column {list(_CONVERSATION_COLUMNS)} in {path.name}; "
+                f"have {column_names[:12]}{'...' if len(column_names) > 12 else ''}; skipping.",
+                file=sys.stderr,
+            )
             continue
 
-        for batch in pf.iter_batches(columns=["messages"], batch_size=2048):
+        for batch in pf.iter_batches(columns=[msg_col], batch_size=2048):
             if rows_scanned >= max_rows:
                 break
             col = batch.column(0)

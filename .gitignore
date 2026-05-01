@@ -68,3 +68,19 @@ build/
 *.egg
 pip-wheel-metadata/
 .hatch/
+
+# Apple signing & App Store Connect API material (never commit; use GitHub Actions secrets)
+*.p12
+*.p8
+*.mobileprovision
+nutonic/dist.key
+nutonic/dist.csr
+nutonic/distribution.cer
+nutonic/distribution.pem
+# If generated elsewhere, still catch common names
+**/AppleDistribution.p12
+**/AuthKey_*.p8
+
+# JVM crash / replay logs (local HotSpot dumps)
+hs_err_pid*.log
+replay_pid*.log

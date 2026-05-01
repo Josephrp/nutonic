@@ -7,6 +7,7 @@ import com.nutonic.api.ProJobStatusOut
 import com.nutonic.api.ProVlmImageRef
 import com.nutonic.api.ProVlmModelManifest
 import com.nutonic.persistence.Utf8BlobStore
+import com.nutonic.pro.allProArtifactRefsForJob
 import com.nutonic.persistence.createProVlmModelBlobStore
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers

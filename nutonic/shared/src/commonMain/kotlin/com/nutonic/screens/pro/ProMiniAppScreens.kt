@@ -29,6 +29,7 @@ import com.nutonic.api.ApiResult
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.ProArtifactRef
 import com.nutonic.api.ProJobStatusOut
+import com.nutonic.pro.allProArtifactRefsForJob
 import com.nutonic.filter.getPlatformContext
 import com.nutonic.share.shareNutonicScorecard
 import com.nutonic.style.NutonicGhostButton
@@ -816,16 +817,7 @@ private fun expectedRequiredArtifactIds(profile: String?): List<String> =
         else -> emptyList()
     }
 
-private fun proArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> =
-    if (job == null) {
-        emptyList()
-    } else {
-        (
-            job.artifacts.orEmpty() +
-                job.analysisArtifacts.orEmpty() +
-                job.onDevicePayload?.overlayRefs.orEmpty()
-        ).distinctBy { it.artifactId }
-    }
+private fun proArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> = allProArtifactRefsForJob(job)
 
 private sealed interface BriefShareState {
     data object Idle : BriefShareState

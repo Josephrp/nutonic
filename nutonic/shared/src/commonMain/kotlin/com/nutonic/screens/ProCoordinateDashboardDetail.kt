@@ -39,6 +39,9 @@ import com.nutonic.map.LatLon
 import com.nutonic.navigation.ShellDetail
 import com.nutonic.pro.ProEvidenceBundleItem
 import com.nutonic.pro.ProEvidenceBundleManifest
+import com.nutonic.pro.allProArtifactRefsForJob
+import com.nutonic.pro.dedupeProArtifactRefs
+import com.nutonic.pro.mergeCompletedProJobs
 import com.nutonic.pro.parseProEvidenceBundle
 import com.nutonic.screens.pro.ProAnalysisLocationPicker
 import com.nutonic.style.NutonicGhostButton
@@ -210,21 +213,29 @@ fun ProCoordinateDashboardDetail(
                                         ) {
                                             is ApiResult.Ok -> {
                                                 finishedStatuses.add(polled.value)
-                                                currentJob = polled.value
+                                                val polledJob = polled.value
+                                                val completedSoFar =
+                                                    finishedStatuses.filter { it.status == "completed" }
+                                                currentJob =
+                                                    when {
+                                                        polledJob.status != "completed" -> polledJob
+                                                        completedSoFar.size == 1 -> completedSoFar.single()
+                                                        else -> mergeCompletedProJobs(completedSoFar)
+                                                    }
                                                 recentJobs =
-                                                    listOf(polled.value) + recentJobs.filterNot {
-                                                        it.jobId == polled.value.jobId
+                                                    listOf(polledJob) + recentJobs.filterNot {
+                                                        it.jobId == polledJob.jobId
                                                     }.take(4)
-                                                statusText = "${profileLabel(profile)} · ${polled.value.status}"
+                                                statusText = "${profileLabel(profile)} · ${polledJob.status}"
                                                 val mergedRefs = mergeArtifactRefs(finishedStatuses)
-                                                if (polled.value.status == "completed") {
+                                                if (polledJob.status == "completed") {
                                                     lastOverlayCandidate =
                                                         ProGameplayOverlayCandidate(
                                                             mapId = currentMapId,
-                                                            jobId = polled.value.jobId,
+                                                            jobId = polledJob.jobId,
                                                             profile =
-                                                                polled.value.analysisProfile
-                                                                    ?: polled.value.profile
+                                                                polledJob.analysisProfile
+                                                                    ?: polledJob.profile
                                                                     ?: profile.wireToken(),
                                                             center = LatLon(centerLat, centerLon).normalized(),
                                                             artifactId = preferredOverlayArtifact(mergedRefs),
@@ -252,9 +263,6 @@ fun ProCoordinateDashboardDetail(
                                         failed = true
                                     }
                                 }
-                            }
-                            if (!failed && finishedStatuses.isNotEmpty()) {
-                                currentJob = finishedStatuses.last()
                             }
                         }
 
@@ -288,6 +296,7 @@ fun ProCoordinateDashboardDetail(
             )
         }
         JobStatusCard(currentJob = currentJob, statusText = statusText)
+        UnifiedArtifactsInventory(currentJob = currentJob)
         ProEvidenceBundleCard(
             currentJob = currentJob,
             nutonicApiClient = nutonicApiClient,
@@ -482,6 +491,42 @@ private fun MultiProfileSelector(
                 text = if (on) "$label ✓" else label,
                 onClick = { onToggle(candidate) },
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnifiedArtifactsInventory(currentJob: ProJobStatusOut?) {
+    NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+        Text("Merged artifact inventory", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        val job = currentJob?.takeIf { it.status == "completed" }
+        if (job == null) {
+            Text(
+                "When the queue finishes, every artifact ref from all selected mini-app profiles is listed here (unique by id and download path).",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+            return@NutonicGlassCard
+        }
+        val refs = allProArtifactRefsForJob(job)
+        Text(
+            "${refs.size} artifact ref(s) · profiles: ${job.analysisProfile ?: job.profile ?: "—"}",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onBackground,
+        )
+        refs.take(48).forEach { ref ->
+            Text(
+                "· ${ref.artifactId} (${ref.kind}) · ${ref.profile ?: "—"}",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+        }
+        if (refs.size > 48) {
+            Text(
+                "+ ${refs.size - 48} more…",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.primary,
             )
         }
     }
@@ -814,18 +859,8 @@ private fun RecentJobs(recentJobs: List<ProJobStatusOut>) {
     }
 }
 
-private fun mergedArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> {
-    if (job == null) return emptyList()
-    return (
-        job.artifacts.orEmpty() +
-            job.analysisArtifacts.orEmpty() +
-            job.briefArtifacts.orEmpty() +
-            job.onDevicePayload?.overlayRefs.orEmpty()
-    ).distinctBy { artifact -> artifact.artifactId }
-}
-
 private fun mergeArtifactRefs(jobs: List<ProJobStatusOut>): List<ProArtifactRef> =
-    jobs.flatMap { mergedArtifacts(it) }.distinctBy { artifact -> artifact.artifactId }
+    dedupeProArtifactRefs(jobs.flatMap { allProArtifactRefsForJob(it) })
 
 private fun profileLabel(profile: ProJobProfile): String =
     when (profile) {

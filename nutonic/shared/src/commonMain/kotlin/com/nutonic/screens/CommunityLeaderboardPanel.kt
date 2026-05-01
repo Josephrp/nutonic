@@ -3,11 +3,11 @@ package com.nutonic.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,6 +21,8 @@ import com.nutonic.api.CommunityLeaderboardPostBody
 import com.nutonic.api.CommunityLeaderboardRow
 import com.nutonic.api.FeatureFlags
 import com.nutonic.api.NutonicApiClient
+import com.nutonic.style.NutonicGhostButton
+import com.nutonic.style.NutonicPrimaryButton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -28,7 +30,7 @@ import kotlinx.datetime.Instant
 
 /**
  * Shared community / lab leaderboard surface for map-scoped fetch and optional demo posts.
- * Reused from RANK and SCAN so map hub and global tab stay aligned on dimensions and copy.
+ * Reused from RANK so map hub and global tab stay aligned on dimensions and copy.
  */
 @Composable
 fun CommunityLeaderboardPanel(
@@ -37,8 +39,14 @@ fun CommunityLeaderboardPanel(
     onMapIdChange: ((String) -> Unit)?,
     featureFlags: FeatureFlags?,
     sectionTitle: String,
-    /** When server `features.ranked` is on, show **GET …?tier=ranked** (RANK / SCAN follow-up). */
+    /** When server `features.ranked` is on, show **GET …?tier=ranked** (RANK follow-up). */
     showRankedVerifiedFetch: Boolean = false,
+    /** Shown on optional POST (`display_handle`). */
+    displayHandle: String = "Operative",
+    /** Defaults to HUMAN when unset. */
+    playerRole: String? = null,
+    /** When true and settings allow GET, refetch when [mapId] is shown (e.g. tab focus). */
+    autoRefetchOnOpen: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -52,6 +60,28 @@ fun CommunityLeaderboardPanel(
     val getEnabled = featureFlags?.communityLbGet != false
     val postEnabled = featureFlags?.communityLbPost != false
     val rankedFetchEnabled = showRankedVerifiedFetch && featureFlags?.ranked == true
+
+    fun applyCommunityFetch(result: GetLeaderboardUiResult) {
+        rows = result.rows
+        lastFetched = result.lastFetched
+        status = result.status
+    }
+
+    LaunchedEffect(mapId, autoRefetchOnOpen, getEnabled) {
+        if (!autoRefetchOnOpen || !getEnabled) return@LaunchedEffect
+        when (val r = nutonicApiClient.getLeaderboard(mapId)) {
+            is ApiResult.Ok ->
+                applyCommunityFetch(GetLeaderboardUiResult(r.value, Clock.System.now(), null))
+
+            is ApiResult.HttpFailure ->
+                applyCommunityFetch(GetLeaderboardUiResult(emptyList(), null, r.userMessage))
+
+            is ApiResult.NetworkFailure ->
+                applyCommunityFetch(
+                    GetLeaderboardUiResult(emptyList(), null, "Network unavailable. Try again when online."),
+                )
+        }
+    }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CommunityLeaderboardPanelIntro(
@@ -67,11 +97,7 @@ fun CommunityLeaderboardPanel(
             nutonicApiClient = nutonicApiClient,
             mapId = mapId,
             getEnabled = getEnabled,
-            onResult = {
-                rows = it.rows
-                lastFetched = it.lastFetched
-                status = it.status
-            },
+            onResult = ::applyCommunityFetch,
         )
         if (showRankedVerifiedFetch) {
             CommunityLeaderboardRankedTierFetchButton(
@@ -91,6 +117,8 @@ fun CommunityLeaderboardPanel(
             nutonicApiClient = nutonicApiClient,
             mapId = mapId,
             postEnabled = postEnabled,
+            displayHandle = displayHandle,
+            playerRole = playerRole,
             onResult = { status = it },
         )
         CommunityLeaderboardPanelFooter(
@@ -145,7 +173,7 @@ private fun CommunityLeaderboardPanelIntro(
         OutlinedTextField(
             value = mapId,
             onValueChange = onMapIdChange,
-            label = { Text("Map id") },
+            label = { Text("Map id", color = MaterialTheme.colors.onBackground) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -172,7 +200,9 @@ private fun CommunityLeaderboardGetButton(
     getEnabled: Boolean,
     onResult: (GetLeaderboardUiResult) -> Unit,
 ) {
-    Button(
+    NutonicPrimaryButton(
+        text = "Refresh community scores",
+        enabled = getEnabled,
         onClick = {
             scope.launch {
                 onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching community leaderboard..."))
@@ -188,14 +218,11 @@ private fun CommunityLeaderboardGetButton(
                 }
             }
         },
-        enabled = getEnabled,
         modifier =
             Modifier
                 .fillMaxWidth()
                 .testTag("communityLeaderboardFetchButton"),
-    ) {
-        Text("Refresh community scores")
-    }
+    )
 }
 
 @Composable
@@ -206,7 +233,9 @@ private fun CommunityLeaderboardRankedTierFetchButton(
     rankedFetchEnabled: Boolean,
     onResult: (GetLeaderboardUiResult) -> Unit,
 ) {
-    Button(
+    NutonicPrimaryButton(
+        text = "Refresh ranked leaderboard",
+        enabled = rankedFetchEnabled,
         onClick = {
             scope.launch {
                 onResult(GetLeaderboardUiResult(emptyList(), null, "Fetching server-verified ranked leaderboard..."))
@@ -222,14 +251,11 @@ private fun CommunityLeaderboardRankedTierFetchButton(
                 }
             }
         },
-        enabled = rankedFetchEnabled,
         modifier =
             Modifier
                 .fillMaxWidth()
                 .testTag("rankedLeaderboardTierFetchButton"),
-    ) {
-        Text("Refresh ranked leaderboard")
-    }
+    )
 }
 
 @Composable
@@ -238,9 +264,15 @@ private fun CommunityLeaderboardPostButton(
     nutonicApiClient: NutonicApiClient,
     mapId: String,
     postEnabled: Boolean,
+    displayHandle: String,
+    playerRole: String?,
     onResult: (String?) -> Unit,
 ) {
-    Button(
+    val handle = displayHandle.trim().ifBlank { "Operative" }
+    val roleWire = (playerRole ?: "HUMAN").uppercase()
+    NutonicGhostButton(
+        text = "Post demo score",
+        enabled = postEnabled,
         onClick = {
             scope.launch {
                 onResult("Sending demo score...")
@@ -249,8 +281,8 @@ private fun CommunityLeaderboardPostButton(
                         val key = "kmp-${Clock.System.now()}"
                         val body =
                             CommunityLeaderboardPostBody(
-                                displayHandle = "kmp_client",
-                                playerRole = "HUMAN",
+                                displayHandle = handle.take(48),
+                                playerRole = roleWire,
                                 scorePoints = 42,
                                 distanceKm = 1.25,
                             )
@@ -272,15 +304,12 @@ private fun CommunityLeaderboardPostButton(
                     }
 
                     is ApiResult.HttpFailure -> onResult(t.userMessage)
-                    is ApiResult.NetworkFailure -> onResult("Network unavailable. Sign-in token request failed.")
+                    is ApiResult.NetworkFailure -> onResult("Network unavailable. Session token request failed.")
                 }
             }
         },
-        enabled = postEnabled,
         modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text("Post demo score (signed in)")
-    }
+    )
 }
 
 @Composable
@@ -303,7 +332,8 @@ private fun CommunityLeaderboardPanelFooter(
             color = MaterialTheme.colors.error,
         )
     }
-    rows.forEach { row ->
+    val sorted = rows.sortedByDescending { it.scorePoints }
+    sorted.forEachIndexed { index, row ->
         val distance =
             if (row.distanceKm != null) {
                 " · ${row.distanceKm} km"
@@ -311,7 +341,7 @@ private fun CommunityLeaderboardPanelFooter(
                 ""
             }
         Text(
-            "${row.displayHandle} · ${row.playerRole} · ${row.scorePoints} pts$distance",
+            "#${index + 1}  ${row.displayHandle} · ${row.playerRole} · ${row.scorePoints} pts$distance",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )

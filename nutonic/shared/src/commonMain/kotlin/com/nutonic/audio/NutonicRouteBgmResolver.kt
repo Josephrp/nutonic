@@ -13,7 +13,6 @@ fun resolveNutonicBgmTrack(route: NutonicRoute): NutonicBgmTrack =
     when (route) {
         NutonicRoute.Splash -> NutonicBgmTrack.MusicSplash
         NutonicRoute.RoleSelection -> NutonicBgmTrack.MusicRole
-        NutonicRoute.Authentication -> NutonicBgmTrack.MusicAuth
         is NutonicRoute.Shell -> resolveShellBgm(route)
     }
 
@@ -22,7 +21,7 @@ private fun resolveShellBgm(shell: NutonicRoute.Shell): NutonicBgmTrack =
         ShellDetail.WorldMapGameplay -> NutonicBgmTrack.MusicGameplay
         ShellDetail.FinalResults -> NutonicBgmTrack.MusicResults
         null -> tabDefault(shell.tab)
-        ShellDetail.IntelDashboard -> NutonicBgmTrack.MusicIntel
+        ShellDetail.IntelDashboard -> NutonicBgmTrack.MusicRank
         ShellDetail.RankGlobal -> NutonicBgmTrack.MusicRank
         ShellDetail.SetupProtocol -> NutonicBgmTrack.MusicSetup
         ShellDetail.ProCoordinateDashboard,
@@ -37,7 +36,6 @@ private fun resolveShellBgm(shell: NutonicRoute.Shell): NutonicBgmTrack =
 private fun tabDefault(tab: MainTab): NutonicBgmTrack =
     when (tab) {
         MainTab.ScanHub -> NutonicBgmTrack.MusicScanHub
-        MainTab.Intel -> NutonicBgmTrack.MusicIntel
         MainTab.Rank -> NutonicBgmTrack.MusicRank
         MainTab.Setup -> NutonicBgmTrack.MusicSetup
         MainTab.Pro -> NutonicBgmTrack.MusicPro

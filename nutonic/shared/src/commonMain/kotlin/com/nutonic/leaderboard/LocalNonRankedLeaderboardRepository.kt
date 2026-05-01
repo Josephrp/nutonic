@@ -11,6 +11,8 @@ data class LocalNonRankedLeaderboardRow(
     @SerialName("map_id") val mapId: String,
     @SerialName("location_id") val locationId: String,
     @SerialName("player_role") val playerRole: String,
+    /** Display handle used when posting community boards / sharing scorecards. */
+    @SerialName("display_handle") val displayHandle: String = "",
     /** e.g. `HUMAN_VS_AI` for filters (`rules/05`). */
     @SerialName("matchup_type") val matchupType: String,
     @SerialName("human_distance_km") val humanDistanceKm: Double,

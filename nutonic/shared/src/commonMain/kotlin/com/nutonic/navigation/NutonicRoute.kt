@@ -12,8 +12,6 @@ sealed class NutonicRoute {
 
     data object RoleSelection : NutonicRoute()
 
-    data object Authentication : NutonicRoute()
-
     data class Shell(
         val tab: MainTab,
         val detail: ShellDetail? = null,
@@ -55,7 +53,6 @@ fun NutonicRoute.encode(): String =
     when (this) {
         NutonicRoute.Splash -> "splash"
         NutonicRoute.RoleSelection -> "role"
-        NutonicRoute.Authentication -> "auth"
         is NutonicRoute.Shell -> {
             val base = PREFIX_SHELL + tab.id
             val withDetail =
@@ -78,7 +75,7 @@ fun decodeNutonicRoute(token: String): NutonicRoute {
     return when {
         t == "splash" -> NutonicRoute.Splash
         t == "role" -> NutonicRoute.RoleSelection
-        t == "auth" -> NutonicRoute.Authentication
+        t == "auth" -> NutonicRoute.RoleSelection
         t.startsWith(PREFIX_SHELL) -> {
             val withoutPrefix = t.removePrefix(PREFIX_SHELL)
             val hash = withoutPrefix.indexOf('#')

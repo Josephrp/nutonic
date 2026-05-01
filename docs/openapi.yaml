@@ -933,6 +933,15 @@ components:
         ruleset_version:
           type: string
           nullable: true
+        display_handle:
+          type: string
+          nullable: true
+        score_points:
+          type: integer
+          nullable: true
+        player_role:
+          type: string
+          nullable: true
 
     GuessRecordOut:
       type: object
@@ -942,6 +951,16 @@ components:
           type: integer
         recorded:
           type: boolean
+        distance_km:
+          type: number
+          format: double
+          nullable: true
+        score_points:
+          type: integer
+          nullable: true
+        display_handle:
+          type: string
+          nullable: true
 
     RankedRoundStartIn:
       type: object

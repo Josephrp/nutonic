@@ -2,6 +2,7 @@ package com.nutonic.leaderboard
 
 import com.nutonic.api.ApiResult
 import com.nutonic.api.GuessRecordIn
+import com.nutonic.api.GuessRecordOut
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.NutonicJson
 import com.nutonic.persistence.Utf8BlobStore
@@ -13,6 +14,13 @@ import kotlinx.serialization.Serializable
 import kotlin.random.Random
 
 private const val MAX_OUTBOX_ROWS = 120
+
+/** Result of draining the guess-record outbox (single flush pass). */
+data class GuessFlushSummary(
+    val message: String?,
+    /** Telemetry acknowledgement for the matching round, when flushed in this pass. */
+    val acknowledgedRecord: GuessRecordOut? = null,
+)
 
 private val backoffMs =
     longArrayOf(
@@ -83,10 +91,16 @@ class GuessRecordOutboxRepository(
 
     /**
      * Sends due rows until none remain or auth/network blocks progress.
+     * When [matchRoundInstanceId] is set, [GuessFlushSummary.acknowledgedRecord] is populated
+     * only if that round was acknowledged during this pass.
      */
-    suspend fun flushPending(nutonicApiClient: NutonicApiClient): String? =
+    suspend fun flushPending(
+        nutonicApiClient: NutonicApiClient,
+        matchRoundInstanceId: String? = null,
+    ): GuessFlushSummary =
         mutex.withLock {
             var lastMessage: String? = null
+            var matchedAck: GuessRecordOut? = null
             repeat(32) {
                 val now = Clock.System.now().toEpochMilliseconds()
                 val row =
@@ -94,18 +108,18 @@ class GuessRecordOutboxRepository(
                         .rows
                         .filter { it.nextAttemptAtEpochMs <= now }
                         .minByOrNull { it.createdAtEpochMs }
-                        ?: return@withLock lastMessage
+                        ?: return@withLock GuessFlushSummary(lastMessage, matchedAck)
 
                 val token =
                     when (val t = nutonicApiClient.postAuthToken()) {
                         is ApiResult.Ok -> t.value.accessToken
                         is ApiResult.HttpFailure -> {
                             rescheduleLocked(row, "Sign-in failed: ${t.userMessage}")
-                            return@withLock "Saved locally; will retry sign-in."
+                            return@withLock GuessFlushSummary("Saved locally; will retry sign-in.", matchedAck)
                         }
                         is ApiResult.NetworkFailure -> {
                             rescheduleLocked(row, t.debugMessage)
-                            return@withLock "Saved locally; offline — will retry."
+                            return@withLock GuessFlushSummary("Saved locally; offline — will retry.", matchedAck)
                         }
                     }
 
@@ -121,6 +135,11 @@ class GuessRecordOutboxRepository(
                     is ApiResult.Ok -> {
                         removeRowLocked(row.idempotencyKey)
                         lastMessage = "Score synced with server."
+                        if (matchRoundInstanceId == null ||
+                            row.payload.roundInstanceId == matchRoundInstanceId
+                        ) {
+                            matchedAck = result.value
+                        }
                     }
                     is ApiResult.HttpFailure ->
                         when (result.statusCode) {
@@ -147,7 +166,7 @@ class GuessRecordOutboxRepository(
                     }
                 }
             }
-            lastMessage
+            GuessFlushSummary(lastMessage, matchedAck)
         }
 
     private suspend fun loadEnvelope(): GuessRecordOutboxEnvelope {

@@ -285,10 +285,12 @@ def post_guess_record(
         client_distance_km=body.client_distance_km,
         ruleset_version=body.ruleset_version.strip()[:128] if body.ruleset_version else None,
         session_id=sid or None,
+        display_handle=body.display_handle.strip()[:64] if body.display_handle else None,
+        score_points=body.score_points,
+        player_role=body.player_role.strip()[:32] if body.player_role else None,
     )
     key = idempotency_key.strip() if idempotency_key and idempotency_key.strip() else None
-    rid = _guess_telemetry_store.record(row, idempotency_key=key)
-    return GuessRecordOut(id=rid, recorded=True)
+    return _guess_telemetry_store.record(row, idempotency_key=key)
 
 
 @app.post("/api/v1/ranked/rounds/start", tags=["ranked"], response_model=RankedRoundStartOut)

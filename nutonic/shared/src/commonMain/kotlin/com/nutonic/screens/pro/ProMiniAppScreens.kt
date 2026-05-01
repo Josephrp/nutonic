@@ -344,7 +344,11 @@ fun ProBriefComposerScreen(
             Text("Brief sections", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             val sections = job?.onDevicePayload?.briefSections.orEmpty()
             if (sections.isEmpty()) {
-                Text("No brief sections are attached yet.", style = MaterialTheme.typography.caption)
+                Text(
+                    "No brief sections are attached yet.",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                )
             } else {
                 sections.forEach { section ->
                     Text(section.title, style = MaterialTheme.typography.body1, color = MaterialTheme.colors.primary)

@@ -91,11 +91,17 @@ class GuessRecordIn(BaseModel):
     guess_lon: float = Field(ge=-180.0, le=180.0)
     client_distance_km: float | None = Field(default=None, ge=0.0, le=40_000.0)
     ruleset_version: str | None = Field(default=None, max_length=128)
+    display_handle: str | None = Field(default=None, max_length=64)
+    score_points: int | None = Field(default=None, ge=0, le=2_000_000_000)
+    player_role: str | None = Field(default=None, max_length=32)
 
 
 class GuessRecordOut(BaseModel):
     id: int
     recorded: bool = True
+    distance_km: float | None = None
+    score_points: int | None = None
+    display_handle: str | None = None
 
 
 class RankedRoundStartIn(BaseModel):

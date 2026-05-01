@@ -341,10 +341,17 @@ def test_guess_record_when_enabled(tmp_path, monkeypatch: pytest.MonkeyPatch) ->
             "guess_lon": float(loc.truth_lon) + 0.01,
             "client_distance_km": 12.3,
             "ruleset_version": "v1",
+            "display_handle": "test-op",
+            "score_points": 420,
+            "player_role": "HUMAN",
         },
     )
     assert r.status_code == 200, r.text
-    assert r.json()["id"] >= 1
+    body = r.json()
+    assert body["id"] >= 1
+    assert body["distance_km"] == 12.3
+    assert body["score_points"] == 420
+    assert body["display_handle"] == "test-op"
 
 
 def test_pro_job_stub_when_enabled(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

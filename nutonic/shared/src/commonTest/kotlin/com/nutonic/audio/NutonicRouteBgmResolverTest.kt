@@ -11,7 +11,6 @@ class NutonicRouteBgmResolverTest {
     fun preShellRoutes() {
         assertEquals(NutonicBgmTrack.MusicSplash, resolveNutonicBgmTrack(NutonicRoute.Splash))
         assertEquals(NutonicBgmTrack.MusicRole, resolveNutonicBgmTrack(NutonicRoute.RoleSelection))
-        assertEquals(NutonicBgmTrack.MusicAuth, resolveNutonicBgmTrack(NutonicRoute.Authentication))
     }
 
     @Test
@@ -19,10 +18,6 @@ class NutonicRouteBgmResolverTest {
         assertEquals(
             NutonicBgmTrack.MusicScanHub,
             resolveNutonicBgmTrack(NutonicRoute.Shell(MainTab.ScanHub)),
-        )
-        assertEquals(
-            NutonicBgmTrack.MusicIntel,
-            resolveNutonicBgmTrack(NutonicRoute.Shell(MainTab.Intel)),
         )
         assertEquals(
             NutonicBgmTrack.MusicRank,

@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.LinearProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,7 +74,7 @@ fun ProCoordinateDashboardDetail(
     var centerLon by rememberSaveable { mutableStateOf(-118.24) }
     var bboxHalfKm by rememberSaveable { mutableStateOf(5.0) }
     var mapboxZoom by rememberSaveable { mutableStateOf(12) }
-    var profile by rememberSaveable { mutableStateOf(ProJobProfile.BRIEF_ONLY) }
+    var selectedProfiles by remember { mutableStateOf(setOf(ProJobProfile.BRIEF_ONLY)) }
     var statusText by remember { mutableStateOf<String?>(null) }
     var currentJob by remember { mutableStateOf<ProJobStatusOut?>(null) }
     var recentJobs by remember { mutableStateOf<List<ProJobStatusOut>>(emptyList()) }
@@ -79,6 +82,56 @@ fun ProCoordinateDashboardDetail(
     var proAccessToken by remember { mutableStateOf<String?>(null) }
     var vlmStatus by remember { mutableStateOf<ProVlmStatus>(ProVlmStatus.Idle) }
     var bundleState by remember { mutableStateOf<ProBundleUiState>(ProBundleUiState.Idle) }
+    var lastAutoBundledJobId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(
+        currentJob?.jobId,
+        currentJob?.status,
+        currentJob?.bundleDownloadUrl,
+        proAccessToken,
+        nutonicApiClient,
+    ) {
+        val job = currentJob
+        val url = job?.bundleDownloadUrl?.takeIf { it.isNotBlank() }
+        val client = nutonicApiClient
+        val token = proAccessToken
+        if (job == null || job.status != "completed" || url == null || client == null || token == null) {
+            return@LaunchedEffect
+        }
+        if (lastAutoBundledJobId == job.jobId) {
+            return@LaunchedEffect
+        }
+        bundleState = ProBundleUiState.Loading
+        when (val bytes = client.getProBundleByUrl(url, token)) {
+            is ApiResult.Ok -> {
+                val preview = parseProEvidenceBundle(bytes.value)
+                bundleState =
+                    ProBundleUiState.Ready(
+                        sizeBytes = preview.sizeBytes,
+                        manifest = preview.manifest,
+                        items = renderBundleItems(preview.items),
+                        warning = preview.error,
+                    )
+                lastAutoBundledJobId = job.jobId
+            }
+            is ApiResult.HttpFailure -> bundleState = ProBundleUiState.Failed(bytes.userMessage)
+            is ApiResult.NetworkFailure ->
+                bundleState = ProBundleUiState.Failed("Bundle fetch failed: ${bytes.debugMessage}")
+        }
+    }
+
+    fun toggleProfile(p: ProJobProfile) {
+        selectedProfiles =
+            buildSet {
+                addAll(selectedProfiles)
+                if (p in this) {
+                    remove(p)
+                    if (isEmpty()) add(ProJobProfile.BRIEF_ONLY)
+                } else {
+                    add(p)
+                }
+            }
+    }
 
     Column(
         modifier =
@@ -91,8 +144,9 @@ fun ProCoordinateDashboardDetail(
         NutonicGhostButton(text = "Back", onClick = onBack, modifier = Modifier.fillMaxWidth())
         Text("PRO coordinate dashboard", style = MaterialTheme.typography.h5, color = MaterialTheme.colors.primary)
         Text(
-            "Pick an AOI on the map, choose a mini-app profile, then enqueue a server-side PRO analysis job.",
+            "Pick an AOI on the map, select one or more mini-app profiles, then run a queued PRO analysis (one server job per profile).",
             style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onBackground,
         )
         ProAnalysisLocationPicker(
             centerLat = centerLat,
@@ -106,10 +160,11 @@ fun ProCoordinateDashboardDetail(
             onBboxHalfKmChange = { bboxHalfKm = it },
             onMapboxZoomChange = { mapboxZoom = it },
         )
-        ProfileSelector(profile = profile, onProfileChange = { profile = it })
+        BundleImageCarouselRow(bundleState = bundleState)
+        MultiProfileSelector(selected = selectedProfiles, onToggle = { toggleProfile(it) })
         NutonicPrimaryButton(
-            text = "Run PRO analysis",
-            enabled = proEnabled && nutonicApiClient != null,
+            text = "Run PRO analysis queue",
+            enabled = proEnabled && nutonicApiClient != null && selectedProfiles.isNotEmpty(),
             onClick = {
                 val client = nutonicApiClient ?: return@NutonicPrimaryButton
                 scope.launch {
@@ -117,60 +172,89 @@ fun ProCoordinateDashboardDetail(
                     when (val token = client.postAuthToken()) {
                         is ApiResult.Ok -> {
                             proAccessToken = token.value.accessToken
-                            val body =
-                                ProJobCreateIn(
-                                    centerLat = centerLat,
-                                    centerLon = centerLon,
-                                    bboxHalfKm = bboxHalfKm,
-                                    mapboxZoom = mapboxZoom,
-                                    analysisProfile = profile,
-                                    enableTim = profile != ProJobProfile.BRIEF_ONLY,
-                                    sentinelFetchMode = "TERRAMIND_SPECTRAL",
-                                    timBranch = "S2L2A_full",
-                                    vlmContractId = "nutonic.pro.vlm.v1_512_s2_only",
-                                )
-                            statusText = "Enqueueing PRO job..."
-                            when (val created = client.postProJob(body, token.value.accessToken)) {
-                                is ApiResult.Ok -> {
-                                    statusText = "Job ${created.value.jobId} queued"
-                                    when (
-                                        val polled =
-                                            client.pollProJob(
-                                                created.value.jobId,
-                                                token.value.accessToken,
-                                                onProgress = {
-                                                    currentJob = it
-                                                    statusText = "Job ${it.status} · ${it.progressPct ?: 0}%"
-                                                },
-                                            )
-                                    ) {
-                                        is ApiResult.Ok -> {
-                                            currentJob = polled.value
-                                            bundleState = ProBundleUiState.Idle
-                                            recentJobs = listOf(polled.value) + recentJobs.take(4)
-                                            statusText = "Job ${polled.value.status}"
-                                            if (polled.value.status == "completed") {
-                                                lastOverlayCandidate =
-                                                    ProGameplayOverlayCandidate(
-                                                        mapId = currentMapId,
-                                                        jobId = polled.value.jobId,
-                                                        profile =
-                                                            polled.value.analysisProfile
-                                                                ?: polled.value.profile
-                                                                ?: profile.wireToken(),
-                                                        center = LatLon(centerLat, centerLon).normalized(),
-                                                        artifactId = preferredOverlayArtifact(mergedArtifacts(polled.value)),
-                                                    )
+                            bundleState = ProBundleUiState.Idle
+                            lastAutoBundledJobId = null
+                            val profilesOrdered =
+                                selectedProfiles.toList().sortedBy { it.ordinal }
+                            val finishedStatuses = mutableListOf<ProJobStatusOut>()
+                            var failed = false
+                            for (profile in profilesOrdered) {
+                                if (failed) break
+                                val body =
+                                    ProJobCreateIn(
+                                        centerLat = centerLat,
+                                        centerLon = centerLon,
+                                        bboxHalfKm = bboxHalfKm,
+                                        mapboxZoom = mapboxZoom,
+                                        analysisProfile = profile,
+                                        enableTim = profile != ProJobProfile.BRIEF_ONLY,
+                                        sentinelFetchMode = "TERRAMIND_SPECTRAL",
+                                        timBranch = "S2L2A_full",
+                                        vlmContractId = "nutonic.pro.vlm.v1_512_s2_only",
+                                    )
+                                statusText = "Enqueueing ${profileLabel(profile)}…"
+                                when (val created = client.postProJob(body, token.value.accessToken)) {
+                                    is ApiResult.Ok -> {
+                                        statusText = "Job ${created.value.jobId} queued (${profileLabel(profile)})"
+                                        when (
+                                            val polled =
+                                                client.pollProJob(
+                                                    created.value.jobId,
+                                                    token.value.accessToken,
+                                                    onProgress = {
+                                                        currentJob = it
+                                                        statusText =
+                                                            "${profileLabel(profile)} · ${it.status} · ${it.progressPct ?: 0}%"
+                                                    },
+                                                )
+                                        ) {
+                                            is ApiResult.Ok -> {
+                                                finishedStatuses.add(polled.value)
+                                                currentJob = polled.value
+                                                recentJobs =
+                                                    listOf(polled.value) + recentJobs.filterNot {
+                                                        it.jobId == polled.value.jobId
+                                                    }.take(4)
+                                                statusText = "${profileLabel(profile)} · ${polled.value.status}"
+                                                val mergedRefs = mergeArtifactRefs(finishedStatuses)
+                                                if (polled.value.status == "completed") {
+                                                    lastOverlayCandidate =
+                                                        ProGameplayOverlayCandidate(
+                                                            mapId = currentMapId,
+                                                            jobId = polled.value.jobId,
+                                                            profile =
+                                                                polled.value.analysisProfile
+                                                                    ?: polled.value.profile
+                                                                    ?: profile.wireToken(),
+                                                            center = LatLon(centerLat, centerLon).normalized(),
+                                                            artifactId = preferredOverlayArtifact(mergedRefs),
+                                                        )
+                                                }
+                                            }
+
+                                            is ApiResult.HttpFailure -> {
+                                                statusText = polled.userMessage
+                                                failed = true
+                                            }
+                                            is ApiResult.NetworkFailure -> {
+                                                statusText = "Network unavailable while polling job status."
+                                                failed = true
                                             }
                                         }
+                                    }
 
-                                        is ApiResult.HttpFailure -> statusText = polled.userMessage
-                                        is ApiResult.NetworkFailure -> statusText = "Network unavailable while polling job status."
+                                    is ApiResult.HttpFailure -> {
+                                        statusText = created.userMessage
+                                        failed = true
+                                    }
+                                    is ApiResult.NetworkFailure -> {
+                                        statusText = "Network unavailable while creating PRO job."
+                                        failed = true
                                     }
                                 }
-
-                                is ApiResult.HttpFailure -> statusText = created.userMessage
-                                is ApiResult.NetworkFailure -> statusText = "Network unavailable while creating PRO job."
+                            }
+                            if (!failed && finishedStatuses.isNotEmpty()) {
+                                currentJob = finishedStatuses.last()
                             }
                         }
 
@@ -210,8 +294,8 @@ fun ProCoordinateDashboardDetail(
             accessToken = proAccessToken,
             state = bundleState,
             onState = { bundleState = it },
+            showManualFetchButton = false,
         )
-        ArtifactGallery(mergedArtifacts(currentJob))
         OnDeviceVlmCard(
             currentJob = currentJob,
             nutonicApiClient = nutonicApiClient,
@@ -228,7 +312,11 @@ fun ProCoordinateDashboardDetail(
             },
             onOpenGameplay = onOpenGameplay,
         )
-        MiniAppHandoff(currentJob = currentJob, onOpenMiniApp = onOpenMiniApp)
+        MiniAppHandoff(
+            selectedProfiles = selectedProfiles,
+            currentJob = currentJob,
+            onOpenMiniApp = onOpenMiniApp,
+        )
         RecentJobs(recentJobs)
     }
 }
@@ -245,7 +333,7 @@ private fun OnDeviceVlmCard(
     val completedJob = currentJob?.takeIf { it.status == "completed" }
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
         Text("On-device VLM", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-        Text(vlmStatus.copy(), style = MaterialTheme.typography.body2)
+        Text(vlmStatus.copy(), style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onBackground)
         if (vlmStatus is ProVlmStatus.DownloadingModel) {
             val total = vlmStatus.totalBytes
             val progress =
@@ -278,16 +366,25 @@ private fun OnDeviceVlmCard(
         Text(
             "Model binaries are downloaded from the game server/CDN, verified by sha256, and cached outside the repository.",
             style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
         )
     }
 }
 
 @Composable
 private fun VlmResultSummary(result: ProVlmResult) {
-    Text("Caption: ${result.caption}", style = MaterialTheme.typography.body2)
-    Text("Boxes: ${result.boxes.size} · model ${result.modelBundleId.orEmpty()} ${result.revision.orEmpty()}", style = MaterialTheme.typography.caption)
+    Text("Caption: ${result.caption}", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onBackground)
+    Text(
+        "Boxes: ${result.boxes.size} · model ${result.modelBundleId.orEmpty()} ${result.revision.orEmpty()}",
+        style = MaterialTheme.typography.caption,
+        color = MaterialTheme.colors.onBackground,
+    )
     result.boxes.take(4).forEach { box ->
-        Text("${box.label} · ${box.bbox.joinToString(prefix = "[", postfix = "]")}", style = MaterialTheme.typography.caption)
+        Text(
+            "${box.label} · ${box.bbox.joinToString(prefix = "[", postfix = "]")}",
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
+        )
     }
 }
 
@@ -309,12 +406,70 @@ private data class ProGameplayOverlayCandidate(
 }
 
 @Composable
-private fun ProfileSelector(
-    profile: ProJobProfile,
-    onProfileChange: (ProJobProfile) -> Unit,
+private fun BundleImageCarouselRow(bundleState: ProBundleUiState) {
+    when (bundleState) {
+        ProBundleUiState.Loading -> {
+            NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+                Text("Evidence imagery", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                Text(
+                    "Loading bundle preview…",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                )
+            }
+        }
+        is ProBundleUiState.Ready -> {
+            val images = bundleState.items.filter { it.image != null }
+            if (images.isEmpty()) return
+            val pagerState =
+                rememberPagerState(
+                    pageCount = { images.size },
+                )
+            NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
+                Text("Evidence imagery", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+                HorizontalPager(
+                    state = pagerState,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                ) { page ->
+                    val rendered = images[page]
+                    Column {
+                        Text(
+                            rendered.item.artifact.artifactId,
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onBackground,
+                        )
+                        rendered.image?.let { bitmap ->
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "PRO bundle image ${rendered.item.artifact.artifactId}",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        else -> Unit
+    }
+}
+
+@Composable
+private fun MultiProfileSelector(
+    selected: Set<ProJobProfile>,
+    onToggle: (ProJobProfile) -> Unit,
 ) {
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-        Text("Mini-app profile", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text("Mini-app profiles", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text(
+            "Toggle profiles for the analysis queue and to enable matching mini-app shortcuts below.",
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
+        )
         listOf(
             ProJobProfile.WILDFIRE to "FireWatch",
             ProJobProfile.OCEANSCOUT_SHIP_DETECTION to "OceanScout",
@@ -322,9 +477,10 @@ private fun ProfileSelector(
             ProJobProfile.FLOOD_PULSE to "FloodPulse",
             ProJobProfile.BRIEF_ONLY to "Brief Composer",
         ).forEach { (candidate, label) ->
+            val on = candidate in selected
             NutonicGhostButton(
-                text = if (candidate == profile) "$label selected" else label,
-                onClick = { onProfileChange(candidate) },
+                text = if (on) "$label ✓" else label,
+                onClick = { onToggle(candidate) },
                 modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
             )
         }
@@ -338,7 +494,11 @@ private fun JobStatusCard(
 ) {
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
         Text("Job status", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-        Text(statusText ?: "No job submitted yet.", style = MaterialTheme.typography.body2)
+        Text(
+            statusText ?: "No job submitted yet.",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onBackground,
+        )
         val progress = ((currentJob?.progressPct ?: 0).coerceIn(0, 100)) / 100f
         LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         currentJob?.errorClass?.let {
@@ -371,6 +531,7 @@ private fun ProEvidenceBundleCard(
     accessToken: String?,
     state: ProBundleUiState,
     onState: (ProBundleUiState) -> Unit,
+    showManualFetchButton: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     val bundleUrl = currentJob?.bundleDownloadUrl?.takeIf { it.isNotBlank() }
@@ -384,48 +545,57 @@ private fun ProEvidenceBundleCard(
                 "Bundle ready: $bundleUrl"
             },
             style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
         )
         Text(
             "Mini-apps render the manifest/artifacts above; the zip is the atomic cache/export unit for the same evidence.",
             style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
         )
         when (state) {
             ProBundleUiState.Idle -> Unit
             ProBundleUiState.Loading -> {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                Text("Fetching bundle...", style = MaterialTheme.typography.caption)
+                Text(
+                    "Fetching bundle...",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                )
             }
             is ProBundleUiState.Ready -> ProEvidenceBundlePreview(state)
             is ProBundleUiState.Failed -> Text(state.message, color = MaterialTheme.colors.error)
         }
-        NutonicGhostButton(
-            text = "Fetch evidence bundle",
-            enabled = canFetch && state !is ProBundleUiState.Loading,
-            onClick = {
-                val client = nutonicApiClient ?: return@NutonicGhostButton
-                val token = accessToken ?: return@NutonicGhostButton
-                val url = bundleUrl ?: return@NutonicGhostButton
-                scope.launch {
-                    onState(ProBundleUiState.Loading)
-                    when (val bytes = client.getProBundleByUrl(url, token)) {
-                        is ApiResult.Ok -> {
-                            val preview = parseProEvidenceBundle(bytes.value)
-                            onState(
-                                ProBundleUiState.Ready(
-                                    sizeBytes = preview.sizeBytes,
-                                    manifest = preview.manifest,
-                                    items = renderBundleItems(preview.items),
-                                    warning = preview.error,
-                                ),
-                            )
+        if (showManualFetchButton) {
+            NutonicGhostButton(
+                text = "Fetch evidence bundle",
+                enabled = canFetch && state !is ProBundleUiState.Loading,
+                onClick = {
+                    val client = nutonicApiClient ?: return@NutonicGhostButton
+                    val token = accessToken ?: return@NutonicGhostButton
+                    val url = bundleUrl ?: return@NutonicGhostButton
+                    scope.launch {
+                        onState(ProBundleUiState.Loading)
+                        when (val bytes = client.getProBundleByUrl(url, token)) {
+                            is ApiResult.Ok -> {
+                                val preview = parseProEvidenceBundle(bytes.value)
+                                onState(
+                                    ProBundleUiState.Ready(
+                                        sizeBytes = preview.sizeBytes,
+                                        manifest = preview.manifest,
+                                        items = renderBundleItems(preview.items),
+                                        warning = preview.error,
+                                    ),
+                                )
+                            }
+                            is ApiResult.HttpFailure -> onState(ProBundleUiState.Failed(bytes.userMessage))
+                            is ApiResult.NetworkFailure ->
+                                onState(ProBundleUiState.Failed("Bundle fetch failed: ${bytes.debugMessage}"))
                         }
-                        is ApiResult.HttpFailure -> onState(ProBundleUiState.Failed(bytes.userMessage))
-                        is ApiResult.NetworkFailure -> onState(ProBundleUiState.Failed("Bundle fetch failed: ${bytes.debugMessage}"))
                     }
-                }
-            },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
+                },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+        }
     }
 }
 
@@ -445,27 +615,16 @@ private fun ProEvidenceBundlePreview(state: ProBundleUiState.Ready) {
             "Fetched ${state.sizeBytes} bytes · ${manifest.artifacts.size} artifact(s) · ${manifest.onDevicePayload?.vlmImageSet.orEmpty().size} VLM image(s)"
         },
         style = MaterialTheme.typography.body2,
+        color = MaterialTheme.colors.onBackground,
     )
     state.warning?.let { Text(it, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption) }
     manifest?.let {
         val missing = it.artifacts.count { artifact -> artifact.missing }
-        Text("Bundle ${it.schema} · profile ${it.analysisProfile} · missing $missing", style = MaterialTheme.typography.caption)
-    }
-    val images = state.items.filter { it.image != null }.take(6)
-    if (images.isNotEmpty()) {
-        Text("Image evidence", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
-        images.forEach { rendered ->
-            val artifact = rendered.item.artifact
-            Text("${artifact.artifactId} · ${artifact.mimeType} · ${artifact.sizeBytes ?: rendered.item.bytes.size} bytes", style = MaterialTheme.typography.caption)
-            rendered.image?.let { bitmap ->
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = "PRO bundle image ${artifact.artifactId}",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(180.dp).padding(top = 6.dp, bottom = 8.dp),
-                )
-            }
-        }
+        Text(
+            "Bundle ${it.schema} · profile ${it.analysisProfile} · missing $missing",
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
+        )
     }
     val summaries = state.items.filter { it.summaryRows.isNotEmpty() }.take(6)
     if (summaries.isNotEmpty()) {
@@ -473,7 +632,7 @@ private fun ProEvidenceBundlePreview(state: ProBundleUiState.Ready) {
         summaries.forEach { rendered ->
             Text(rendered.item.artifact.artifactId, style = MaterialTheme.typography.caption, color = MaterialTheme.colors.primary)
             rendered.summaryRows.take(6).forEach { row ->
-                Text(row, style = MaterialTheme.typography.caption)
+                Text(row, style = MaterialTheme.typography.caption, color = MaterialTheme.colors.onBackground)
             }
         }
     }
@@ -550,21 +709,6 @@ private fun summarizePrimitive(value: JsonElement): String =
     }
 
 @Composable
-private fun ArtifactGallery(artifacts: List<ProArtifactRef>) {
-    NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-        Text("Artifacts", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
-        if (artifacts.isEmpty()) {
-            Text("Completed jobs will list map-ready frames and JSON artifacts here.", style = MaterialTheme.typography.caption)
-        }
-        artifacts.forEach { artifact ->
-            val contract = artifact.contractId ?: "uncontracted"
-            val required = if (artifact.requiredForProfile) " · required" else ""
-            Text("${artifact.category ?: artifact.kind} · $contract · ${artifact.artifactId}$required")
-        }
-    }
-}
-
-@Composable
 private fun GameplayOverlayHandoff(
     candidate: ProGameplayOverlayCandidate?,
     currentMapId: String,
@@ -577,16 +721,19 @@ private fun GameplayOverlayHandoff(
             Text(
                 "Run a PRO job to publish its center as an explicit gameplay AI overlay. This never changes manifest truth or shipped AI guesses.",
                 style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
             )
             return@NutonicGlassCard
         }
         Text(
             "Ready for map $currentMapId · ${candidate.profile} · job ${candidate.jobId.take(8)}",
             style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.onBackground,
         )
         Text(
             "Overlay coordinate ${candidate.center.latitude.format()} / ${candidate.center.longitude.format()} is kept separate from manifest data.",
             style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
             NutonicGhostButton("Publish overlay", { onPublish(candidate) }, Modifier.weight(1f))
@@ -597,19 +744,51 @@ private fun GameplayOverlayHandoff(
 
 @Composable
 private fun MiniAppHandoff(
+    selectedProfiles: Set<ProJobProfile>,
     currentJob: ProJobStatusOut?,
     onOpenMiniApp: (ShellDetail, ProJobStatusOut?) -> Unit,
 ) {
+    val completed = currentJob?.status == "completed"
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-        Text("Open mini-app", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text("Mini-apps", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text(
+            "Shortcuts respect profiles toggled above. Requires a completed PRO job.",
+            style = MaterialTheme.typography.caption,
+            color = MaterialTheme.colors.onBackground,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            NutonicGhostButton("Fire", { onOpenMiniApp(ShellDetail.ProFireWatch, currentJob) }, Modifier.weight(1f))
-            NutonicGhostButton("Ocean", { onOpenMiniApp(ShellDetail.ProOceanScout, currentJob) }, Modifier.weight(1f))
-            NutonicGhostButton("Land", { onOpenMiniApp(ShellDetail.ProLandShift, currentJob) }, Modifier.weight(1f))
+            NutonicGhostButton(
+                text = "Fire",
+                enabled = completed && ProJobProfile.WILDFIRE in selectedProfiles,
+                onClick = { onOpenMiniApp(ShellDetail.ProFireWatch, currentJob) },
+                modifier = Modifier.weight(1f),
+            )
+            NutonicGhostButton(
+                text = "Ocean",
+                enabled = completed && ProJobProfile.OCEANSCOUT_SHIP_DETECTION in selectedProfiles,
+                onClick = { onOpenMiniApp(ShellDetail.ProOceanScout, currentJob) },
+                modifier = Modifier.weight(1f),
+            )
+            NutonicGhostButton(
+                text = "Land",
+                enabled = completed && ProJobProfile.LAND_USE_CHANGE in selectedProfiles,
+                onClick = { onOpenMiniApp(ShellDetail.ProLandShift, currentJob) },
+                modifier = Modifier.weight(1f),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            NutonicGhostButton("Flood", { onOpenMiniApp(ShellDetail.ProFloodPulse, currentJob) }, Modifier.weight(1f))
-            NutonicGhostButton("Brief Composer", { onOpenMiniApp(ShellDetail.ProBriefComposer, currentJob) }, Modifier.weight(1f))
+            NutonicGhostButton(
+                text = "Flood",
+                enabled = completed && ProJobProfile.FLOOD_PULSE in selectedProfiles,
+                onClick = { onOpenMiniApp(ShellDetail.ProFloodPulse, currentJob) },
+                modifier = Modifier.weight(1f),
+            )
+            NutonicPrimaryButton(
+                text = "Brief Composer",
+                enabled = completed && ProJobProfile.BRIEF_ONLY in selectedProfiles,
+                onClick = { onOpenMiniApp(ShellDetail.ProBriefComposer, currentJob) },
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -619,10 +798,18 @@ private fun RecentJobs(recentJobs: List<ProJobStatusOut>) {
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
         Text("Recent jobs", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
         if (recentJobs.isEmpty()) {
-            Text("No recent jobs in this session.", style = MaterialTheme.typography.caption)
+            Text(
+                "No recent jobs in this session.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
         }
         recentJobs.forEach { job ->
-            Text("${job.jobId.take(8)} · ${job.analysisProfile ?: job.profile.orEmpty()} · ${job.status}")
+            Text(
+                "${job.jobId.take(8)} · ${job.analysisProfile ?: job.profile.orEmpty()} · ${job.status}",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onBackground,
+            )
         }
     }
 }
@@ -636,6 +823,18 @@ private fun mergedArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> {
             job.onDevicePayload?.overlayRefs.orEmpty()
     ).distinctBy { artifact -> artifact.artifactId }
 }
+
+private fun mergeArtifactRefs(jobs: List<ProJobStatusOut>): List<ProArtifactRef> =
+    jobs.flatMap { mergedArtifacts(it) }.distinctBy { artifact -> artifact.artifactId }
+
+private fun profileLabel(profile: ProJobProfile): String =
+    when (profile) {
+        ProJobProfile.WILDFIRE -> "FireWatch"
+        ProJobProfile.OCEANSCOUT_SHIP_DETECTION -> "OceanScout"
+        ProJobProfile.LAND_USE_CHANGE -> "LandShift"
+        ProJobProfile.FLOOD_PULSE -> "FloodPulse"
+        ProJobProfile.BRIEF_ONLY -> "Brief Composer"
+    }
 
 private fun preferredOverlayArtifact(artifacts: List<ProArtifactRef>): String? =
     artifacts

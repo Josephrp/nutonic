@@ -393,6 +393,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "(see train/download_lfm_vl_training_dataset.py). Union extra hub files here if needed."
         ),
     )
+    p.add_argument(
+        "--verify-mix-assets",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Before LEAP, run train/verify_vlm_mix_assets.py on a sample of rows (needs files on disk).",
+    )
     p.add_argument("--per-device-train-batch-size", type=int, default=1)
     p.add_argument("--gradient-accumulation-steps", type=int, default=16)
     p.add_argument("--test-size", type=float, default=0.02)
@@ -506,6 +512,28 @@ def main(argv: list[str] | None = None) -> int:
             "Download hub assets and pass --image-root /path/to/dataset/root.",
             file=sys.stderr,
         )
+
+    if (
+        not args.dry_run
+        and args.verify_mix_assets
+        and args.image_root
+        and mix_dir_resolved.is_dir()
+        and any(mix_dir_resolved.glob("*.parquet"))
+    ):
+        verify_cmd = [
+            sys.executable,
+            str(REPO_ROOT / "train" / "verify_vlm_mix_assets.py"),
+            "--mix-dir",
+            str(mix_dir_resolved),
+            "--image-root",
+            str(Path(args.image_root).expanduser().resolve()),
+            "--max-rows",
+            "500",
+        ]
+        print("+ " + " ".join(verify_cmd), flush=True)
+        rv = subprocess.run(verify_cmd, cwd=str(REPO_ROOT)).returncode
+        if rv != 0:
+            return rv
 
     cmd = _train_command(dataset=dataset_path, args=args)
     print("+ " + " ".join(cmd), flush=True)

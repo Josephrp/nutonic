@@ -2,9 +2,14 @@
 """
 Download and verify the final NU:TONIC LFM-VL training dataset.
 
-This is optimized for remote GPU machines where the repo is freshly cloned and
-the dataset must live on local/NVMe storage before training. It uses a file-list
-download path so interrupted runs resume by downloading only missing files.
+**Speed:** For very large file counts (100k+ PNGs), prefer ``--download-strategy snapshot``
+(default), which uses ``huggingface_hub.snapshot_download`` and is usually much faster than
+per-file ``hf_hub_download`` threads. Also install ``hf_transfer`` and set
+``HF_HUB_ENABLE_HF_TRANSFER=1`` for faster transfers.
+
+**Iterative / smoke training:** Use a small Parquet mix (``--mix-main-max-rows`` on the
+e2e/materialize path) so you only need media for a subset of rows—or point training at
+the Hub id with ``--limit`` for LEAP smoke tests without mirroring the whole tree.
 """
 
 from __future__ import annotations
@@ -179,6 +184,30 @@ def _verify_training_tree(local_dir: Path, *, verify_media_refs: bool, media_sam
     return report
 
 
+def _download_via_snapshot(
+    *,
+    repo_id: str,
+    revision: str,
+    local_dir: Path,
+    allow_patterns: list[str],
+    ignore_patterns: list[str],
+    token: str | None,
+    max_workers: int,
+) -> None:
+    from huggingface_hub import snapshot_download
+
+    snapshot_download(
+        repo_id=repo_id,
+        repo_type="dataset",
+        revision=revision,
+        local_dir=str(local_dir),
+        allow_patterns=allow_patterns,
+        ignore_patterns=ignore_patterns if ignore_patterns else None,
+        token=token,
+        max_workers=max(1, int(max_workers)),
+    )
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument("--repo-id", default=DEFAULT_REPO_ID)
@@ -186,7 +215,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out-dir", type=Path, default=Path(DEFAULT_OUT_DIR))
     p.add_argument("--allow-pattern", action="append", default=list(DEFAULT_ALLOW_PATTERNS))
     p.add_argument("--ignore-pattern", action="append", default=[])
-    p.add_argument("--max-workers", type=int, default=16)
+    p.add_argument(
+        "--download-strategy",
+        choices=("snapshot", "files"),
+        default="snapshot",
+        help=(
+            "snapshot: huggingface_hub.snapshot_download (recommended for huge file counts). "
+            "files: one hf_hub_download per missing path (legacy; slower for many small files)."
+        ),
+    )
+    p.add_argument("--max-workers", type=int, default=32)
     p.add_argument("--max-retries", type=int, default=12)
     p.add_argument("--progress-every", type=int, default=250)
     p.add_argument("--hf-token", default=None, help="Override HF_TOKEN / HUGGING_FACE_HUB_TOKEN.")
@@ -232,33 +270,49 @@ def main() -> int:
         return 0
 
     if missing:
-        started = time.monotonic()
-        done = 0
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
-            futures = {
-                ex.submit(
-                    _download_one,
-                    repo_id=args.repo_id,
-                    revision=args.revision,
-                    token=token,
-                    local_dir=local_dir,
-                    path_in_repo=p,
-                    max_retries=max(1, int(args.max_retries)),
-                ): p
-                for p in missing
-            }
-            for fut in concurrent.futures.as_completed(futures):
-                fut.result()
-                done += 1
-                if done == 1 or done % max(1, int(args.progress_every)) == 0 or done == len(missing):
-                    elapsed = max(1e-6, time.monotonic() - started)
-                    size = _du_bytes(local_dir)
-                    suffix = f", local_size~{size / (1024**3):.1f} GiB" if size is not None else ""
-                    print(
-                        f"  progress: {done:,}/{len(missing):,} missing files downloaded "
-                        f"({done / elapsed:.1f} files/s){suffix}",
-                        flush=True,
-                    )
+        if args.download_strategy == "snapshot":
+            print(
+                f"Downloading {len(missing):,} missing path(s) via snapshot_download "
+                f"(max_workers={args.max_workers})...",
+                flush=True,
+            )
+            _download_via_snapshot(
+                repo_id=args.repo_id,
+                revision=args.revision,
+                local_dir=local_dir,
+                allow_patterns=allow_patterns,
+                ignore_patterns=ignore_patterns,
+                token=token,
+                max_workers=args.max_workers,
+            )
+        else:
+            started = time.monotonic()
+            done = 0
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
+                futures = {
+                    ex.submit(
+                        _download_one,
+                        repo_id=args.repo_id,
+                        revision=args.revision,
+                        token=token,
+                        local_dir=local_dir,
+                        path_in_repo=p,
+                        max_retries=max(1, int(args.max_retries)),
+                    ): p
+                    for p in missing
+                }
+                for fut in concurrent.futures.as_completed(futures):
+                    fut.result()
+                    done += 1
+                    if done == 1 or done % max(1, int(args.progress_every)) == 0 or done == len(missing):
+                        elapsed = max(1e-6, time.monotonic() - started)
+                        size = _du_bytes(local_dir)
+                        suffix = f", local_size~{size / (1024**3):.1f} GiB" if size is not None else ""
+                        print(
+                            f"  progress: {done:,}/{len(missing):,} missing files downloaded "
+                            f"({done / elapsed:.1f} files/s){suffix}",
+                            flush=True,
+                        )
 
     still_missing = [p for p in files if not (local_dir / p).is_file()]
     if still_missing:

@@ -49,4 +49,4 @@ From the monorepo root, tests should pick up this package’s `src` first (or us
 docker build -t nutonic-pro-materialization inference/pro_materialization_service
 ```
 
-For Sentinel in container images, extend the image to `pip install .[s2]` (adds GDAL/rasterio stack).
+The packaged **Dockerfile** installs **`nutonic-pro-materialization-service[s2]`** (`pystac-client`, **rasterio**) so Hugging Face Spaces and **`live_inference_smoke`** spectral checks work without extra layers.

@@ -67,7 +67,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--include-metadata-paths",
         action="store_true",
-        help="Also require metadata.image_paths and metadata.analysis_image_path (same as verify).",
+        help=(
+            "Also require metadata.image_paths and metadata.analysis_image_path. "
+            "Training-ready rows often list *every* analysis variant there; with a partial disk mirror "
+            "this drops **all** rows. Omit this flag to filter only on paths inside ``messages`` "
+            "(what LEAP loads for VLM SFT)."
+        ),
     )
     return p.parse_args(argv)
 
@@ -157,6 +162,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Filtered mix: {out_dir}", flush=True)
     if total_out == 0:
         print("Warning: no rows kept; check --image-root and downloads.", file=sys.stderr)
+        if args.include_metadata_paths:
+            print(
+                "\nYou used --include-metadata-paths: every path in metadata.image_paths / "
+                "analysis_image_path must exist. Those lists are large (many profile-specific "
+                "analysis PNGs); incomplete Hub mirrors almost always fail here.\n"
+                "Retry **without** --include-metadata-paths so only ``messages`` image parts are "
+                "required (aligned with LEAP image loading).\n",
+                file=sys.stderr,
+            )
         return 1
     return 0
 

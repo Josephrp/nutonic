@@ -53,6 +53,8 @@ kotlin {
             implementation("io.ktor:ktor-client-core:$ktorVersion")
             implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+            // Incremental SHA-256 for streaming PRO VLM bundle verification without heap-sized ByteArrays.
+            implementation("org.kotlincrypto.hash:sha2:0.5.3")
         }
 
         commonTest.dependencies {

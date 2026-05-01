@@ -31,7 +31,9 @@ variables:
   NUTONIC_PRO_VLM_MODEL_SHA256: "2f6deb5dd43707de5cfe3c59470d3bccf4c3112a810a74570499f4728d412eea"
   NUTONIC_PRO_VLM_MODEL_SIZE_BYTES: "897484568"
   NUTONIC_PRO_VLM_MODEL_RUNTIME: "leap"
-  NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS: "nutonic.pro.vlm.v1_512"
+  # Reference client + PRO dashboard submit sentinel-only jobs (`nutonic.pro.vlm.v1_512_s2_only`).
+  # Include `v1_512` too when Mapbox-backed materialization is enabled on this deployment.
+  NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS: "nutonic.pro.vlm.v1_512_s2_only,nutonic.pro.vlm.v1_512"
 
 secrets:
   JWT_SECRET: NUTONIC_JWT_SECRET

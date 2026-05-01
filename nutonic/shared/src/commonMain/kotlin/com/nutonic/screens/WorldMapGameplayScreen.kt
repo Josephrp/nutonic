@@ -295,6 +295,7 @@ fun WorldMapGameplayDetail(
     var hudExpanded by remember { mutableStateOf(false) }
     var referenceStillExpanded by remember { mutableStateOf(true) }
     var narrativeOverlayOpen by remember { mutableStateOf(false) }
+    var assistDockExpanded by remember { mutableStateOf(false) }
     var streetAssistExpanded by remember { mutableStateOf(false) }
     var usefulHintsExpanded by remember { mutableStateOf(false) }
     var revealAssistExpanded by remember { mutableStateOf(false) }
@@ -839,6 +840,8 @@ fun WorldMapGameplayDetail(
                 )
 
                 AssistDock(
+                    dockExpanded = assistDockExpanded,
+                    onDockExpandedChange = { assistDockExpanded = it },
                     streetviewPack = stillLocation?.streetviewHintPack,
                     streetviewNarrative = stillLocation?.streetviewAssistNarrative,
                     streetAssistExpanded = streetAssistExpanded,
@@ -1212,6 +1215,8 @@ private fun ReferenceStillCard(
 
 @Composable
 private fun AssistDock(
+    dockExpanded: Boolean,
+    onDockExpandedChange: (Boolean) -> Unit,
     streetviewPack: List<StreetviewHintItem>?,
     streetviewNarrative: String?,
     streetAssistExpanded: Boolean,
@@ -1228,14 +1233,58 @@ private fun AssistDock(
     onPeerRevealToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (!dockExpanded) {
+        OutlinedButton(
+            onClick = { onDockExpandedChange(true) },
+            modifier =
+                modifier
+                    .width(260.dp)
+                    .testTag("worldMapAssistExpandButton"),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Assists", color = MaterialTheme.colors.onBackground)
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Expand assists",
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        return
+    }
+
     Card(
-        modifier = modifier.width(260.dp).testTag("worldMapAssistDock"),
+        modifier =
+            modifier
+                .width(260.dp)
+                .testTag("worldMapAssistDock"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.9f),
         shape = RoundedCornerShape(12.dp),
         elevation = 4.dp,
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Assist panels", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Assist panels", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+                IconButton(
+                    onClick = { onDockExpandedChange(false) },
+                    modifier = Modifier.testTag("worldMapAssistDockCollapseButton"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "Collapse assist dock",
+                        tint = MaterialTheme.colors.primary,
+                    )
+                }
+            }
             if (nonRankedBlocked) {
                 Text(
                     "Assists are hidden until catalog data is available for this map.",

@@ -10,6 +10,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _SERVER_DIR = Path(__file__).resolve().parent.parent.parent
 _REPO_ROOT = _SERVER_DIR.parent
 
+# Default PRO on-device VLM weights: smallest published Liquid VL stack (`LiquidAI/LFM2.5-VL-450M`).
+# Revision is pinned so SHA256/size stay stable; production should override via `NUTONIC_PRO_VLM_*` for first-party CDN.
+_DEFAULT_PRO_VLM_MODEL_DOWNLOAD_URL = (
+    "https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/"
+    "fc6221ca597f3315e4f82fc2df606783267b34ba/model.safetensors"
+)
+_DEFAULT_PRO_VLM_MODEL_SHA256 = (
+    "2f6deb5dd43707de5cfe3c59470d3bccf4c3112a810a74570499f4728d412eea"
+)
+_DEFAULT_PRO_VLM_MODEL_SIZE_BYTES = 897_484_568
+_DEFAULT_PRO_VLM_MODEL_REVISION = "fc6221ca597f3315e4f82fc2df606783267b34ba"
+_DEFAULT_PRO_VLM_MODEL_BUNDLE_ID = "nutonic.pro.vlm.LiquidAI.LFM2.5-VL-450M"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -41,7 +54,8 @@ class Settings(BaseSettings):
     """Comma-separated allowed origins for browser clients; empty disables CORS middleware."""
 
     # Runtime feature toggles (IMP-001); map to GET /api/v1/config → features.*
-    # Safer internet-facing defaults: ranked/pro until routes ship; POST off unless explicitly enabled.
+    # Safer internet-facing defaults: ranked/pro off until routes ship. Community LB POST defaults on so local
+    # `uvicorn` matches `.env.example`; production profiles set FEATURE_COMMUNITY_LB_POST=false explicitly.
     feature_ranked: bool = Field(
         default=False,
         validation_alias=AliasChoices(
@@ -50,8 +64,25 @@ class Settings(BaseSettings):
         ),
         description="When true, ranked round start/submit/forfeit routes are active (`IMP-090` / `IMP-091`).",
     )
-    feature_community_lb_get: bool = True
-    feature_community_lb_post: bool = False
+    feature_community_lb_get: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "FEATURE_COMMUNITY_LB_GET",
+            "NUTONIC_FEATURE_COMMUNITY_LB_GET",
+        ),
+        description="When false, community leaderboard GET returns 403 (`features.community_lb_get`).",
+    )
+    feature_community_lb_post: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "FEATURE_COMMUNITY_LB_POST",
+            "NUTONIC_FEATURE_COMMUNITY_LB_POST",
+        ),
+        description=(
+            "When false, community leaderboard POST returns 403 (`features.community_lb_post`). "
+            "Set false on internet-facing hosts that should not accept lab aggregate writes."
+        ),
+    )
     feature_pro_jobs: bool = False
 
     feature_guesses_record: bool = Field(
@@ -190,21 +221,24 @@ class Settings(BaseSettings):
     )
 
     pro_vlm_model_bundle_id: str = Field(
-        default="",
+        default=_DEFAULT_PRO_VLM_MODEL_BUNDLE_ID,
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_BUNDLE_ID", "PRO_VLM_MODEL_BUNDLE_ID"),
         description="Published on-device PRO VLM model bundle id advertised to clients.",
     )
 
     pro_vlm_model_revision: str = Field(
-        default="",
+        default=_DEFAULT_PRO_VLM_MODEL_REVISION,
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_REVISION", "PRO_VLM_MODEL_REVISION"),
         description="Revision/version for the published on-device PRO VLM model.",
     )
 
     pro_vlm_model_download_url: str = Field(
-        default="",
+        default=_DEFAULT_PRO_VLM_MODEL_DOWNLOAD_URL,
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL", "PRO_VLM_MODEL_DOWNLOAD_URL"),
-        description="First-party or signed CDN URL for the VLM model artifact. Never point clients at Hub tokens.",
+        description=(
+            "HTTPS URL for the VLM artifact (game CDN or Hugging Face `/resolve/…` for dev). "
+            "Clients omit Nutonic auth when the host differs from the game server."
+        ),
     )
 
     pro_vlm_model_local_path: str = Field(
@@ -217,13 +251,13 @@ class Settings(BaseSettings):
     )
 
     pro_vlm_model_sha256: str = Field(
-        default="",
+        default=_DEFAULT_PRO_VLM_MODEL_SHA256,
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SHA256", "PRO_VLM_MODEL_SHA256"),
         description="Lowercase hex sha256 for the model artifact; clients verify before use.",
     )
 
     pro_vlm_model_size_bytes: int = Field(
-        default=0,
+        default=_DEFAULT_PRO_VLM_MODEL_SIZE_BYTES,
         validation_alias=AliasChoices("NUTONIC_PRO_VLM_MODEL_SIZE_BYTES", "PRO_VLM_MODEL_SIZE_BYTES"),
         description="Expected model artifact size in bytes.",
     )

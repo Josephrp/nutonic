@@ -18,7 +18,7 @@ class ProOnDeviceVlmEngineTest {
                     sizeBytes = 4,
                     runtime = "test",
                 )
-            engine.prepareModel(byteArrayOf(1, 2, 3, 4), model)
+            engine.prepareModel(model, byteArrayOf(1, 2, 3, 4))
 
             val result =
                 engine.run(

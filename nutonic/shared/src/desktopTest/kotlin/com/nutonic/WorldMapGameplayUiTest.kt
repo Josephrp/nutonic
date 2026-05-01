@@ -28,6 +28,7 @@ class WorldMapGameplayUiTest {
         rule.onNodeWithTag("worldMapHudExpandButton").performClick()
         rule.onNodeWithTag("worldMapHudCard").assertIsDisplayed()
         rule.onNodeWithTag("worldMapReferenceStillCard").assertIsDisplayed()
+        rule.onNodeWithTag("worldMapAssistExpandButton").assertIsDisplayed().performClick()
         rule.onNodeWithTag("worldMapAssistDock").assertIsDisplayed()
         rule.onNodeWithTag("worldMapGuessHandleButton").assertIsDisplayed().performClick()
         rule.onNodeWithTag("worldMapGuessModal").assertIsDisplayed()

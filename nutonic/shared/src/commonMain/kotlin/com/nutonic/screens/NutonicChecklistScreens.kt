@@ -23,6 +23,7 @@ import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
 import com.nutonic.style.nutonicOnSurfaceMuted
+import com.nutonic.style.nutonicOutlinedTextFieldColors
 
 @Composable
 fun ChecklistScreenChrome(
@@ -120,6 +121,7 @@ fun RoleSelectionScreen(
                 placeholder = { Text("Operative") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
+                colors = nutonicOutlinedTextFieldColors(),
             )
             Spacer(modifier = Modifier.height(12.dp))
             roles.forEach { (id, title, perk) ->

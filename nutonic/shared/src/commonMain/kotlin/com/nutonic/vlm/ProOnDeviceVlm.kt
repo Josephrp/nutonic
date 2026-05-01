@@ -8,6 +8,9 @@ import com.nutonic.api.ProVlmImageRef
 import com.nutonic.api.ProVlmModelManifest
 import com.nutonic.persistence.Utf8BlobStore
 import com.nutonic.persistence.createProVlmModelBlobStore
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -20,6 +23,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.kotlincrypto.hash.sha2.SHA256
 
 private const val DEFAULT_MODEL_BUNDLE_ID = "nutonic.pro.vlm.remote.v1"
 private const val DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512_s2_only"
@@ -174,10 +178,16 @@ class ProOnDeviceVlmCoordinator(
         onStatus: (ProVlmStatus) -> Unit,
     ): ApiResult<ProVlmCacheRecord> {
         val cached = modelCache.load()?.takeIf { preferredModelBundleId == null || it.modelBundleId == preferredModelBundleId }
-        val cachedBytes = cached?.let { loadCachedProVlmModelBytes(it) ?: loadBundledProVlmModelBytes(it) }
-        if (cached != null && cachedBytes != null) {
-            engine.prepareModel(cachedBytes, cached)
-            return ApiResult.Ok(cached)
+        if (cached != null) {
+            val bundledBytes = loadBundledProVlmModelBytes(cached)
+            if (bundledBytes != null) {
+                engine.prepareModel(cached, bundledBytes)
+                return ApiResult.Ok(cached)
+            }
+            if (proVlmVerifiedBundleExists(cached)) {
+                engine.prepareModel(cached, null)
+                return ApiResult.Ok(cached)
+            }
         }
         val result: ApiResult<ProVlmCacheRecord> =
             run {
@@ -194,35 +204,71 @@ class ProOnDeviceVlmCoordinator(
                         "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
                     )
                 } else {
-                    val bytesResult =
-                        apiClient.getProVlmModelBytes(
-                            manifest.downloadUrl,
-                            bearerAccessToken,
-                        ) { received, total -> onStatus(ProVlmStatus.DownloadingModel(received, total)) }
-                    val bytes = (bytesResult as? ApiResult.Ok)?.value
-                    if (bytes == null) {
-                        when (bytesResult) {
-                            is ApiResult.HttpFailure -> bytesResult
-                            is ApiResult.NetworkFailure -> bytesResult
-                            is ApiResult.Ok -> ApiResult.NetworkFailure("Model bytes were empty")
+                    withContext(Dispatchers.Default) {
+                        val digest = SHA256()
+                        val writer =
+                            ProVlmModelCacheWriter(
+                                manifest.modelBundleId,
+                                manifest.revision,
+                            )
+                        if (!writer.open()) {
+                            return@withContext ApiResult.NetworkFailure(
+                                "Cannot prepare on-device model cache on this platform.",
+                            )
                         }
-                    } else {
-                        val verification = verifyModelBytes(manifest, bytes)
-                        if (verification == null) {
-                            val record =
-                                ProVlmCacheRecord(
-                                    modelBundleId = manifest.modelBundleId,
-                                    revision = manifest.revision,
-                                    sha256 = manifest.sha256.lowercase(),
-                                    sizeBytes = manifest.sizeBytes,
-                                    runtime = manifest.runtime,
+                        try {
+                            val dl =
+                                apiClient.downloadAuthenticatedStreaming(
+                                    manifest.downloadUrl,
+                                    bearerAccessToken,
+                                    onProgress = { received, total ->
+                                        onStatus(ProVlmStatus.DownloadingModel(received, total))
+                                    },
+                                    onChunk = { buf, off, len ->
+                                        digest.update(buf, off, len)
+                                        writer.write(buf, off, len)
+                                    },
                                 )
-                            saveCachedProVlmModelBytes(record, bytes)
-                            modelCache.save(record)
-                            engine.prepareModel(bytes, record)
-                            ApiResult.Ok(record)
-                        } else {
-                            ApiResult.NetworkFailure(verification)
+                            when (dl) {
+                                is ApiResult.Ok -> {
+                                    val shaHex = digestToHexLowercase(digest.digest())
+                                    val verification =
+                                        verifyDownloadedModel(manifest, dl.value, shaHex)
+                                    if (verification != null) {
+                                        writer.abort()
+                                        ApiResult.NetworkFailure(verification)
+                                    } else {
+                                        writer.commit()
+                                        val record =
+                                            ProVlmCacheRecord(
+                                                modelBundleId = manifest.modelBundleId,
+                                                revision = manifest.revision,
+                                                sha256 = manifest.sha256.lowercase(),
+                                                sizeBytes = manifest.sizeBytes,
+                                                runtime = manifest.runtime,
+                                            )
+                                        modelCache.save(record)
+                                        engine.prepareModel(record, null)
+                                        ApiResult.Ok(record)
+                                    }
+                                }
+
+                                is ApiResult.HttpFailure -> {
+                                    writer.abort()
+                                    dl
+                                }
+
+                                is ApiResult.NetworkFailure -> {
+                                    writer.abort()
+                                    dl
+                                }
+                            }
+                        } catch (e: CancellationException) {
+                            writer.abort()
+                            throw e
+                        } catch (e: Exception) {
+                            writer.abort()
+                            ApiResult.NetworkFailure(e.message ?: "model download failed")
                         }
                     }
                 }
@@ -274,9 +320,13 @@ sealed class ProOnDeviceVlmRunResult {
 }
 
 interface ProOnDeviceVlmEngine {
+    /**
+     * @param bundleBytes when non-null, bundle payload held in memory (bundled assets only).
+     * When null, [proVlmVerifiedBundleExists] must be true (disk cache after streaming download).
+     */
     suspend fun prepareModel(
-        bytes: ByteArray,
         cacheRecord: ProVlmCacheRecord,
+        bundleBytes: ByteArray? = null,
     )
 
     suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult
@@ -288,11 +338,17 @@ class DeterministicProOnDeviceVlmEngine(
     private var prepared: ProVlmCacheRecord? = null
 
     override suspend fun prepareModel(
-        bytes: ByteArray,
         cacheRecord: ProVlmCacheRecord,
+        bundleBytes: ByteArray?,
     ) {
         prepared = cacheRecord
-        require(bytes.isNotEmpty()) { "Model bundle is empty" }
+        when {
+            bundleBytes != null -> require(bundleBytes.isNotEmpty()) { "Model bundle is empty" }
+            else ->
+                require(proVlmVerifiedBundleExists(cacheRecord)) {
+                    "Model bundle is missing or empty"
+                }
+        }
     }
 
     override suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult {
@@ -383,22 +439,32 @@ fun parseVlmOutput(
     )
 }
 
-fun verifyModelBytes(
+private fun digestToHexLowercase(digestBytes: ByteArray): String =
+    digestBytes.joinToString("") { b -> (b.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+fun verifyDownloadedModel(
     manifest: ProVlmModelManifest,
-    bytes: ByteArray,
+    downloadedByteCount: Long,
+    sha256HexLowercase: String,
 ): String? {
     val expected = manifest.sha256.trim().lowercase()
-    val actual = sha256Hex(bytes)
     return when {
-        manifest.sizeBytes >= 0 && bytes.size.toLong() != manifest.sizeBytes ->
+        manifest.sizeBytes >= 0 && downloadedByteCount != manifest.sizeBytes ->
             "Downloaded model size mismatch for ${manifest.modelBundleId}"
         expected.isBlank() -> "Model manifest is missing sha256"
-        actual != expected -> "Downloaded model sha256 mismatch for ${manifest.modelBundleId}"
+        sha256HexLowercase != expected ->
+            "Downloaded model sha256 mismatch for ${manifest.modelBundleId}"
         manifest.contractIds.isEmpty() -> "Model manifest is missing supported contract ids"
-        DEFAULT_CONTRACT_ID !in manifest.contractIds -> "Model manifest does not support $DEFAULT_CONTRACT_ID"
+        DEFAULT_CONTRACT_ID !in manifest.contractIds ->
+            "Model manifest does not support $DEFAULT_CONTRACT_ID"
         else -> null
     }
 }
+
+fun verifyModelBytes(
+    manifest: ProVlmModelManifest,
+    bytes: ByteArray,
+): String? = verifyDownloadedModel(manifest, bytes.size.toLong(), sha256Hex(bytes))
 
 expect fun sha256Hex(bytes: ByteArray): String
 

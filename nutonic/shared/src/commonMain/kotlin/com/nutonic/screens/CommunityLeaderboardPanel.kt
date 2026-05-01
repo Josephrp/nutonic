@@ -23,6 +23,7 @@ import com.nutonic.api.FeatureFlags
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicPrimaryButton
+import com.nutonic.style.nutonicOnSurfaceMuted
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -60,6 +61,7 @@ fun CommunityLeaderboardPanel(
     val getEnabled = featureFlags?.communityLbGet != false
     val postEnabled = featureFlags?.communityLbPost != false
     val rankedFetchEnabled = showRankedVerifiedFetch && featureFlags?.ranked == true
+    val mapIdForApi = mapId.trim()
 
     fun applyCommunityFetch(result: GetLeaderboardUiResult) {
         rows = result.rows
@@ -67,9 +69,9 @@ fun CommunityLeaderboardPanel(
         status = result.status
     }
 
-    LaunchedEffect(mapId, autoRefetchOnOpen, getEnabled) {
-        if (!autoRefetchOnOpen || !getEnabled) return@LaunchedEffect
-        when (val r = nutonicApiClient.getLeaderboard(mapId)) {
+    LaunchedEffect(mapIdForApi, autoRefetchOnOpen, getEnabled) {
+        if (!autoRefetchOnOpen || !getEnabled || mapIdForApi.isEmpty()) return@LaunchedEffect
+        when (val r = nutonicApiClient.getLeaderboard(mapIdForApi)) {
             is ApiResult.Ok ->
                 applyCommunityFetch(GetLeaderboardUiResult(r.value, Clock.System.now(), null))
 
@@ -95,16 +97,16 @@ fun CommunityLeaderboardPanel(
         CommunityLeaderboardGetButton(
             scope = scope,
             nutonicApiClient = nutonicApiClient,
-            mapId = mapId,
-            getEnabled = getEnabled,
+            mapId = mapIdForApi,
+            getEnabled = getEnabled && mapIdForApi.isNotEmpty(),
             onResult = ::applyCommunityFetch,
         )
         if (showRankedVerifiedFetch) {
             CommunityLeaderboardRankedTierFetchButton(
                 scope = scope,
                 nutonicApiClient = nutonicApiClient,
-                mapId = mapId,
-                rankedFetchEnabled = rankedFetchEnabled,
+                mapId = mapIdForApi,
+                rankedFetchEnabled = rankedFetchEnabled && mapIdForApi.isNotEmpty(),
                 onResult = {
                     rankedRows = it.rows
                     rankedFetched = it.lastFetched
@@ -115,8 +117,8 @@ fun CommunityLeaderboardPanel(
         CommunityLeaderboardPostButton(
             scope = scope,
             nutonicApiClient = nutonicApiClient,
-            mapId = mapId,
-            postEnabled = postEnabled,
+            mapId = mapIdForApi,
+            postEnabled = postEnabled && mapIdForApi.isNotEmpty(),
             displayHandle = displayHandle,
             playerRole = playerRole,
             onResult = { status = it },
@@ -168,6 +170,24 @@ private fun CommunityLeaderboardPanelIntro(
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onBackground,
         )
+        if (!getEnabled) {
+            Text(
+                text =
+                    "Reads are off (features.community_lb_get). Enable FEATURE_COMMUNITY_LB_GET on the host " +
+                        "or use a server that exposes the community board.",
+                style = MaterialTheme.typography.caption,
+                color = nutonicOnSurfaceMuted(),
+            )
+        }
+        if (!postEnabled) {
+            Text(
+                text =
+                    "Writes are off (features.community_lb_post). For local dev set FEATURE_COMMUNITY_LB_POST=true " +
+                        "(see server/.env.example).",
+                style = MaterialTheme.typography.caption,
+                color = nutonicOnSurfaceMuted(),
+            )
+        }
     }
     if (onMapIdChange != null) {
         OutlinedTextField(
@@ -177,6 +197,13 @@ private fun CommunityLeaderboardPanelIntro(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (mapId.trim().isEmpty()) {
+            Text(
+                text = "Enter a map id (for example poi_0010) or choose a map in SCAN so refresh and post target the right board.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.error,
+            )
+        }
     } else {
         Text(
             text = "Map: $mapId",
@@ -326,13 +353,26 @@ private fun CommunityLeaderboardPanelFooter(
         )
     }
     status?.let {
+        val looksLikeError =
+            it.startsWith("HTTP ") ||
+                it.contains("403", ignoreCase = true) ||
+                it.contains("401", ignoreCase = true) ||
+                it.contains("feature_disabled", ignoreCase = true) ||
+                it.contains("Network unavailable", ignoreCase = true)
         Text(
             it,
             style = MaterialTheme.typography.body2,
-            color = MaterialTheme.colors.error,
+            color = if (looksLikeError) MaterialTheme.colors.error else MaterialTheme.colors.onBackground,
         )
     }
     val sorted = rows.sortedByDescending { it.scorePoints }
+    if (sorted.isEmpty() && lastFetched != null && status == null) {
+        Text(
+            "No community rows for this map yet. Post a demo score or finish a round with optional community sync enabled in Setup.",
+            style = MaterialTheme.typography.body2,
+            color = nutonicOnSurfaceMuted(),
+        )
+    }
     sorted.forEachIndexed { index, row ->
         val distance =
             if (row.distanceKm != null) {

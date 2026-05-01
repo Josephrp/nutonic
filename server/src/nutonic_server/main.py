@@ -815,8 +815,8 @@ def _pro_vlm_model_manifest_or_none(settings: Settings) -> ProVlmModelManifest |
         stat = local_path.stat()
         size_bytes = stat.st_size
         sha256 = _sha256_file(local_path)
-        if not download_url:
-            download_url = "/api/v1/pro/vlm/model-bundle"
+        # Always serve baked bundles from this server; ignore any configured CDN/HF URL defaults.
+        download_url = "/api/v1/pro/vlm/model-bundle"
     model_bundle_id = settings.pro_vlm_model_bundle_id.strip() or (f"nutonic.pro.vlm.{local_path.stem}" if local_path else "")
     revision = settings.pro_vlm_model_revision.strip() or (str(int(local_path.stat().st_mtime)) if local_path else "")
     if not (model_bundle_id and revision and download_url and sha256 and size_bytes > 0 and contract_ids):

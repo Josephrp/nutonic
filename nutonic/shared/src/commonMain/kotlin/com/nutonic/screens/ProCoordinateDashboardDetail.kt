@@ -364,7 +364,7 @@ private fun OnDeviceVlmCard(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Text(
-            "Model binaries are downloaded from the game server/CDN, verified by sha256, and cached outside the repository.",
+            "Model weights download from the manifest URL (default: Hugging Face `LiquidAI/LFM2.5-VL-450M`), verified by sha256, and cached outside the repository.",
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onBackground,
         )

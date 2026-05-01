@@ -61,6 +61,7 @@ import com.nutonic.settings.SettingsRepository
 import com.nutonic.shell.ScanHubScreen
 import com.nutonic.style.NutonicColors
 import com.nutonic.style.nutonicOnSurfaceMuted
+import com.nutonic.style.nutonicOutlinedTextFieldColors
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
@@ -614,6 +615,7 @@ private fun SetupTabRoot(
                 label = { Text("Display name") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                colors = nutonicOutlinedTextFieldColors(),
             )
             Text(
                 "Choose a role for your current play style. You can change it anytime.",
@@ -708,6 +710,7 @@ private fun SetupProtocolDetail(
                 label = { Text("Display name") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                colors = nutonicOutlinedTextFieldColors(),
             )
             Text("Current role: ${s.playerRole}", style = MaterialTheme.typography.body2)
             RowToggle(

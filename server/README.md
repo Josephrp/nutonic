@@ -28,7 +28,7 @@ Optional: copy **`.env.example`** to **`server/.env`** so local runs pick up **`
 | `CORS_ORIGINS` | No | Comma-separated browser origins allowed for CORS (e.g. `http://localhost:8080`). Empty = CORS middleware not registered. |
 | `FEATURE_RANKED` | No | Default **`false`**. When **`true`**, enables **`POST /api/v1/ranked/rounds/start`**, **`.../submit`**, **`.../forfeit-ranked-integrity`** (**IMP-090** / **IMP-091**), and read **`GET /api/v1/maps/{map_id}/leaderboard/ranked`** (server-verified aggregate). `features.ranked` on **`GET /api/v1/config`**. |
 | `FEATURE_COMMUNITY_LB_GET` | No | Default `true`. `features.community_lb_get`. |
-| `FEATURE_COMMUNITY_LB_POST` | No | Default **`false`** (enable explicitly for lab/community writes). `features.community_lb_post`. |
+| `FEATURE_COMMUNITY_LB_POST` | No | Default **`true`** so local `uvicorn` matches **`server/.env.example`**. Set **`false`** on internet-facing hosts that must not accept aggregate writes. `features.community_lb_post`. |
 | `FEATURE_PRO_JOBS` | No | Default **`false`**. `features.pro_jobs`. |
 | `FEATURE_GUESSES_RECORD` / `NUTONIC_FEATURE_GUESSES_RECORD` | No | Default **`false`**. When **`true`**, enables **`POST /api/v1/maps/{map_id}/guesses/record`** and sets `features.guesses_record` on **`GET /api/v1/config`**. Use **`true`** in local dev when exercising telemetry (`rules/05`, `docs/GAME-ENGINE.md` §12.3). |
 | `NUTONIC_GUESS_TELEMETRY_DATABASE_URL` | No | Default `sqlite:///data/nutonic_guess_telemetry.db`. SQLite file for optional guess rows (created under `data/` like the leaderboard DB). |

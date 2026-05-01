@@ -2,6 +2,10 @@
 """
 Fail-fast check that image paths referenced in a Parquet mix exist under ``image_root``.
 
+Shards may have **different Parquet schemas** (e.g. main corpus vs Firewatch ``regions`` /
+different ``metadata``). This tool reads each file separately so Hugging Face does not try
+to cast everything to one union schema.
+
 Use **before** ``run_sat_vl_sft_e2e.py`` / LEAP so missing Hub downloads surface immediately.
 
 Example::
@@ -75,33 +79,60 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        from datasets import load_dataset
-    except ImportError as e:
-        print("Install datasets: pip install datasets", file=sys.stderr)
+        import pyarrow.parquet as pq
+    except ImportError:
+        print("Install pyarrow: pip install pyarrow", file=sys.stderr)
         return 2
 
-    data_files = [str(p) for p in parquets]
-    ds = load_dataset("parquet", data_files=data_files, split="train")
-    n = min(max(0, int(args.max_rows)), len(ds))
-
+    max_rows = max(0, int(args.max_rows))
     missing: list[str] = []
-    checked_files: set[str] = set()
-    for i in range(n):
-        row = ds[i]
-        for rel in _message_image_rel_paths(row):
+    checked_paths: set[str] = set()
+    rows_scanned = 0
+
+    def _consume_row(row_dict: dict) -> None:
+        nonlocal missing, rows_scanned
+        for rel in _message_image_rel_paths(row_dict):
             abs_path = root / rel
             key = str(abs_path)
-            if key in checked_files:
+            if key in checked_paths:
                 continue
-            checked_files.add(key)
+            checked_paths.add(key)
             if not abs_path.is_file():
                 missing.append(key)
+        rows_scanned += 1
+
+    for path in parquets:
+        if rows_scanned >= max_rows:
+            break
+        try:
+            pf = pq.ParquetFile(path)
+        except Exception as e:
+            print(f"Warning: cannot open {path.name}: {e}", file=sys.stderr)
+            continue
+
+        if "messages" not in pf.schema.names:
+            print(f"Warning: no 'messages' column in {path.name}; skipping.", file=sys.stderr)
+            continue
+
+        for batch in pf.iter_batches(columns=["messages"], batch_size=2048):
+            if rows_scanned >= max_rows:
+                break
+            col = batch.column(0)
+            for i in range(batch.num_rows):
+                if rows_scanned >= max_rows:
+                    break
+                messages_val = col[i].as_py()
+                _consume_row({"messages": messages_val})
                 if len(missing) >= 12:
                     break
-        if len(missing) >= 12:
-            break
+            if len(missing) >= 12:
+                break
 
-    print(f"Scanned {n:,} row(s) from {len(parquets)} shard(s); {len(checked_files):,} unique relative image path(s) checked.", flush=True)
+    print(
+        f"Scanned {rows_scanned:,} row(s) from {len(parquets)} shard(s); "
+        f"{len(checked_paths):,} unique relative image path(s) checked.",
+        flush=True,
+    )
 
     if not missing:
         print("All checked image paths exist under image_root.", flush=True)

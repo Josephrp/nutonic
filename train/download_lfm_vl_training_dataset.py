@@ -315,33 +315,51 @@ def main() -> int:
                     f"would rescan the whole repo and often appears hung on small tails).",
                     flush=True,
                 )
-            started = time.monotonic()
-            done = 0
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
-                futures = {
-                    ex.submit(
-                        _download_one,
+            # Small tails: sequential + per-file logs. Parallel as_completed prints nothing until
+            # the first file finishes; one slow/hung hf_hub_download then looks like a total stall.
+            small_tail = len(missing) <= 64
+            if small_tail:
+                for i, p in enumerate(missing, 1):
+                    print(f"  [{i}/{len(missing)}] hf_hub_download: {p}", flush=True)
+                    t0 = time.monotonic()
+                    _download_one(
                         repo_id=args.repo_id,
                         revision=args.revision,
                         token=token,
                         local_dir=local_dir,
                         path_in_repo=p,
                         max_retries=max(1, int(args.max_retries)),
-                    ): p
-                    for p in missing
-                }
-                for fut in concurrent.futures.as_completed(futures):
-                    fut.result()
-                    done += 1
-                    if done == 1 or done % max(1, int(args.progress_every)) == 0 or done == len(missing):
-                        elapsed = max(1e-6, time.monotonic() - started)
-                        size = _du_bytes(local_dir)
-                        suffix = f", local_size~{size / (1024**3):.1f} GiB" if size is not None else ""
-                        print(
-                            f"  progress: {done:,}/{len(missing):,} missing files downloaded "
-                            f"({done / elapsed:.1f} files/s){suffix}",
-                            flush=True,
-                        )
+                    )
+                    dt = time.monotonic() - t0
+                    print(f"  [{i}/{len(missing)}] ok ({dt:.1f}s)", flush=True)
+            else:
+                started = time.monotonic()
+                done = 0
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
+                    futures = {
+                        ex.submit(
+                            _download_one,
+                            repo_id=args.repo_id,
+                            revision=args.revision,
+                            token=token,
+                            local_dir=local_dir,
+                            path_in_repo=p,
+                            max_retries=max(1, int(args.max_retries)),
+                        ): p
+                        for p in missing
+                    }
+                    for fut in concurrent.futures.as_completed(futures):
+                        fut.result()
+                        done += 1
+                        if done == 1 or done % max(1, int(args.progress_every)) == 0 or done == len(missing):
+                            elapsed = max(1e-6, time.monotonic() - started)
+                            size = _du_bytes(local_dir)
+                            suffix = f", local_size~{size / (1024**3):.1f} GiB" if size is not None else ""
+                            print(
+                                f"  progress: {done:,}/{len(missing):,} missing files downloaded "
+                                f"({done / elapsed:.1f} files/s){suffix}",
+                                flush=True,
+                            )
 
     still_missing = [p for p in files if not (local_dir / p).is_file()]
     if still_missing:

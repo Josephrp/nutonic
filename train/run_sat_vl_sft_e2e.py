@@ -402,6 +402,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--per-device-train-batch-size", type=int, default=1)
     p.add_argument("--gradient-accumulation-steps", type=int, default=16)
     p.add_argument("--test-size", type=float, default=0.02)
+    p.add_argument("--eval-strategy", default="epoch")
+    p.add_argument("--save-strategy", default="epoch")
+    p.add_argument("--no-eval-on-start", dest="eval_on_start", action="store_false")
+    p.set_defaults(eval_on_start=True)
+    p.add_argument("--max-image-tokens", type=int, default=None)
+    p.add_argument("--no-image-splitting", dest="do_image_splitting", action="store_false")
+    p.set_defaults(do_image_splitting=True)
     p.add_argument("--tracker", default="none", choices=("none", "wandb", "trackio"))
     p.add_argument("--trackio-space-id", default=None, help="HF Space id for Trackio sync, e.g. NuTonic/lspace-trackio.")
     p.add_argument("--dry-run", action="store_true", help="Print steps without executing training/upload.")
@@ -439,7 +446,17 @@ def _train_command(*, dataset: str, args: argparse.Namespace) -> list[str]:
         str(args.gradient_accumulation_steps),
         "--test-size",
         str(args.test_size),
+        "--eval-strategy",
+        args.eval_strategy,
+        "--save-strategy",
+        args.save_strategy,
     ]
+    if not args.eval_on_start:
+        cmd.append("--no-eval-on-start")
+    if args.max_image_tokens is not None:
+        cmd.extend(["--max-image-tokens", str(args.max_image_tokens)])
+    if not args.do_image_splitting:
+        cmd.append("--no-image-splitting")
     if args.image_root:
         cmd.extend(["--image-root", args.image_root])
     if args.tracker:

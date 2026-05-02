@@ -327,7 +327,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--project-name", default="nutonic_sat_vl_sft_single")
     p.add_argument("--leap-root", default=str(REPO_ROOT / "refs" / "leap-finetune-main"))
 
-    p.add_argument("--epochs", type=float, default=1.0, help="Training epochs on the mixed Parquet corpus.")
+    p.add_argument("--epochs", type=int, default=1, help="Training epochs on the mixed Parquet corpus.")
     p.add_argument("--learning-rate", type=float, default=1e-5)
 
     p.add_argument("--materialize", action=argparse.BooleanOptionalAction, default=True)
@@ -402,6 +402,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--per-device-train-batch-size", type=int, default=1)
     p.add_argument("--gradient-accumulation-steps", type=int, default=16)
     p.add_argument("--test-size", type=float, default=0.02)
+    p.add_argument("--tracker", default="none", choices=("none", "wandb", "trackio"))
+    p.add_argument("--trackio-space-id", default=None, help="HF Space id for Trackio sync, e.g. NuTonic/lspace-trackio.")
     p.add_argument("--dry-run", action="store_true", help="Print steps without executing training/upload.")
 
     p.add_argument(
@@ -440,6 +442,10 @@ def _train_command(*, dataset: str, args: argparse.Namespace) -> list[str]:
     ]
     if args.image_root:
         cmd.extend(["--image-root", args.image_root])
+    if args.tracker:
+        cmd.extend(["--tracker", args.tracker])
+    if args.trackio_space_id:
+        cmd.extend(["--trackio-space-id", args.trackio_space_id])
     if args.launch:
         cmd.append("--launch")
     return cmd

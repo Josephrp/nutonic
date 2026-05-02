@@ -103,10 +103,18 @@ def _write_yaml(path: Path, obj: dict[str, Any]) -> None:
     path.write_text("\n".join(_emit_yaml(obj)) + "\n", encoding="utf-8")
 
 
+def _normalize_epoch_value(value: float) -> int | float:
+    """Older LEAP/Transformers stacks expect integer epochs in ``range(...)``."""
+    f = float(value)
+    if f.is_integer():
+        return int(f)
+    return f
+
+
 def _build_config(args: argparse.Namespace) -> dict[str, Any]:
     training_config: dict[str, Any] = {
         "extends": "DEFAULT_VLM_SFT",
-        "num_train_epochs": args.epochs,
+        "num_train_epochs": _normalize_epoch_value(args.epochs),
         "per_device_train_batch_size": args.per_device_train_batch_size,
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
         "learning_rate": args.learning_rate,
@@ -206,7 +214,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument("--cache-dataset", action="store_true")
 
-    p.add_argument("--epochs", type=float, default=1.0)
+    p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--per-device-train-batch-size", type=int, default=1)
     p.add_argument("--gradient-accumulation-steps", type=int, default=16)
     p.add_argument("--learning-rate", type=float, default=1e-5)

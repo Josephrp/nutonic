@@ -36,6 +36,9 @@ logs/
 # Raw Music Folder
 music/
 
+# Parquet files
+*.parquet
+
 # Root npm tooling (pm2, scripts)
 node_modules/
 

@@ -6,7 +6,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
 
-actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = DeterministicProOnDeviceVlmEngine("Android verified-bundle runtime")
+actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = LeapProOnDeviceVlmEngine()
 
 actual fun sha256Hex(bytes: ByteArray): String = bytes.sha256HexJvm()
 

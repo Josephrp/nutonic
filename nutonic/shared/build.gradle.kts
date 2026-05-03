@@ -18,8 +18,8 @@ kotlin {
         useEsModules()
     }
 
+    // iosX64 omitted: Liquid Leap ships iosArm64 + iosSimulatorArm64 only (no legacy Intel simulator klib).
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
@@ -54,6 +54,8 @@ kotlin {
             implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
             // Incremental SHA-256 for streaming PRO VLM bundle verification without heap-sized ByteArrays.
+            implementation("org.kotlincrypto.core:common:0.5.3")
+            implementation("org.kotlincrypto.core:digest:0.5.3")
             implementation("org.kotlincrypto.hash:sha2:0.5.3")
         }
 
@@ -64,6 +66,9 @@ kotlin {
         }
 
         androidMain.dependencies {
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+            implementation("ai.liquid.leap:leap-sdk:0.10.2")
+            implementation("ai.liquid.leap:leap-model-downloader:0.10.2")
             implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
             api("androidx.activity:activity-compose:1.13.0")
             api("androidx.appcompat:appcompat:1.7.1")
@@ -82,6 +87,7 @@ kotlin {
         val iosMain by getting {
             dependencies {
                 implementation("io.ktor:ktor-client-darwin:$ktorVersion")
+                implementation("ai.liquid.leap:leap-sdk:0.10.2")
             }
         }
 
@@ -94,6 +100,7 @@ kotlin {
 
         val desktopMain by getting
         desktopMain.dependencies {
+            implementation("ai.liquid.leap:leap-sdk-jvm:0.10.2")
             implementation("io.ktor:ktor-client-cio:$ktorVersion")
             implementation(compose.desktop.common)
             implementation(project(":mapview-desktop"))

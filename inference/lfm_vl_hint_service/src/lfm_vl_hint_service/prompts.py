@@ -6,7 +6,19 @@ from typing import Any, Mapping
 
 from lfm_vl_hint_service.models import SuggestionsFromFramesRequest
 
-PRO_BRIEF_PROMPT_VERSION = "pro-brief-v1"
+PRO_BRIEF_PROMPT_VERSION = "pro-brief-v2"
+
+# Keep aligned with ``data/scripts/lfm_vl_sft_dataset/pro_prompts.py`` :: SYSTEM_ASSESSMENT.
+_SYSTEM_ASSESSMENT_BRIEF = (
+    "You are a geospatial analyst specializing in satellite imagery interpretation. "
+    "Analyze the provided Sentinel-2 satellite images and report findings grounded in visible evidence. "
+    "Use [x1, y1, x2, y2] bounding boxes normalized to 0-1 relative to image dimensions. "
+    "This is optical-only observation. Avoid certainty claims beyond visible evidence, "
+    "and state confidence and limitations where appropriate. "
+    "TerraMind or TiM modality summaries are **auxiliary model evidence**, not field truth unless "
+    "independently validated. Never treat pseudo-SAR-like or optical-only signals as legal or operational "
+    "confirmation of activity."
+)
 
 def streetview_user_prompt(
     *,
@@ -57,7 +69,8 @@ def narrative_user_payload(captions: list[tuple[str, str]]) -> str:
 
 def pro_brief_system_prompt(profile: str) -> str:
     return (
-        "You write conservative NU:TONIC PRO mini-app briefs from machine-readable artifacts. "
+        f"{_SYSTEM_ASSESSMENT_BRIEF} "
+        "You synthesize conservative NU:TONIC PRO mini-app briefs from machine-readable artifacts only. "
         f"Profile: {profile}. Use only the provided TiM summary, artifact refs, and job metadata. "
         "Do not invent observations, scene IDs, coordinates, incident causes, vessel identity, illegal activity, damage totals, or legal certainty. "
         "Use confidence-aware language such as 'candidate', 'signal', 'screening indicator', and 'requires corroboration'. "

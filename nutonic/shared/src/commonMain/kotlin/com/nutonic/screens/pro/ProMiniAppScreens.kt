@@ -328,7 +328,7 @@ fun ProBriefComposerScreen(
     ) {
         MiniAppHeader(
             title = "Brief Composer",
-            subtitle = "Cross-mini-app synthesis with confidence-aware sections and source toggles.",
+            subtitle = "Combine overlays, metrics, and brief sections for export or sharing.",
             onBack = onBack,
         )
         SelectedRunCard(job)

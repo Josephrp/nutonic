@@ -1,7 +1,9 @@
 package com.nutonic.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,8 +26,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.nutonic.api.ApiResult
 import com.nutonic.api.FeatureFlags
@@ -49,7 +56,7 @@ import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
 import com.nutonic.toImageBitmap
 import com.nutonic.vlm.ProOnDeviceVlmCoordinator
-import com.nutonic.vlm.ProVlmResult
+import com.nutonic.vlm.ProVlmBoundingBox
 import com.nutonic.vlm.ProVlmStatus
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -86,6 +93,11 @@ fun ProCoordinateDashboardDetail(
     var vlmStatus by remember { mutableStateOf<ProVlmStatus>(ProVlmStatus.Idle) }
     var bundleState by remember { mutableStateOf<ProBundleUiState>(ProBundleUiState.Idle) }
     var lastAutoBundledJobId by remember { mutableStateOf<String?>(null) }
+    var vlmOverlayUi by remember { mutableStateOf<VlmOverlayUi?>(null) }
+
+    LaunchedEffect(currentJob?.jobId) {
+        vlmOverlayUi = null
+    }
 
     LaunchedEffect(
         currentJob?.jobId,
@@ -163,7 +175,7 @@ fun ProCoordinateDashboardDetail(
             onBboxHalfKmChange = { bboxHalfKm = it },
             onMapboxZoomChange = { mapboxZoom = it },
         )
-        BundleImageCarouselRow(bundleState = bundleState)
+        UnifiedEvidenceCarousel(bundleState = bundleState, vlmOverlay = vlmOverlayUi)
         MultiProfileSelector(selected = selectedProfiles, onToggle = { toggleProfile(it) })
         NutonicPrimaryButton(
             text = "Run PRO analysis queue",
@@ -312,6 +324,9 @@ fun ProCoordinateDashboardDetail(
             accessToken = proAccessToken,
             vlmStatus = vlmStatus,
             onStatus = { vlmStatus = it },
+            onVlmOverlayReady = { overlay ->
+                vlmOverlayUi = overlay
+            },
         )
         GameplayOverlayHandoff(
             candidate = lastOverlayCandidate,
@@ -338,11 +353,12 @@ private fun OnDeviceVlmCard(
     accessToken: String?,
     vlmStatus: ProVlmStatus,
     onStatus: (ProVlmStatus) -> Unit,
+    onVlmOverlayReady: (VlmOverlayUi) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val completedJob = currentJob?.takeIf { it.status == "completed" }
     NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
-        Text("On-device VLM", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+        Text("On-device analysis", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
         Text(vlmStatus.copy(), style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onBackground)
         if (vlmStatus is ProVlmStatus.DownloadingModel) {
             val total = vlmStatus.totalBytes
@@ -354,11 +370,8 @@ private fun OnDeviceVlmCard(
                 }
             LinearProgressIndicator(progress = progress, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
         }
-        if (vlmStatus is ProVlmStatus.Ready) {
-            VlmResultSummary(vlmStatus.result)
-        }
         NutonicGhostButton(
-            text = "Run local VLM on completed job",
+            text = "Run on-device analysis",
             enabled = completedJob != null && nutonicApiClient != null && accessToken != null,
             onClick = {
                 val client = nutonicApiClient ?: return@NutonicGhostButton
@@ -368,35 +381,40 @@ private fun OnDeviceVlmCard(
                     ProOnDeviceVlmCoordinator(
                         apiClient = client,
                         bearerAccessToken = token,
-                    ).run(job = job, onStatus = onStatus)
+                    ).run(
+                        job = job,
+                        onStatus = onStatus,
+                        onInferenceComplete = { result, prepared ->
+                            val bitmaps =
+                                prepared.mapNotNull { runCatching { it.bytes.toImageBitmap() }.getOrNull() }
+                            if (bitmaps.isNotEmpty()) {
+                                onVlmOverlayReady(
+                                    VlmOverlayUi(
+                                        caption = result.caption,
+                                        boxes = result.boxes,
+                                        frames = bitmaps,
+                                    ),
+                                )
+                            }
+                        },
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Text(
-            "Model weights download from the manifest URL (default: Hugging Face `LiquidAI/LFM2.5-VL-450M`), verified by sha256, and cached outside the repository.",
+            "Uses images from the completed job. The first run may download model data.",
             style = MaterialTheme.typography.caption,
             color = MaterialTheme.colors.onBackground,
         )
     }
 }
 
-@Composable
-private fun VlmResultSummary(result: ProVlmResult) {
-    Text("Caption: ${result.caption}", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onBackground)
-    Text(
-        "Boxes: ${result.boxes.size} · model ${result.modelBundleId.orEmpty()} ${result.revision.orEmpty()}",
-        style = MaterialTheme.typography.caption,
-        color = MaterialTheme.colors.onBackground,
-    )
-    result.boxes.take(4).forEach { box ->
-        Text(
-            "${box.label} · ${box.bbox.joinToString(prefix = "[", postfix = "]")}",
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onBackground,
-        )
-    }
-}
+private data class VlmOverlayUi(
+    val caption: String,
+    val boxes: List<ProVlmBoundingBox>,
+    val frames: List<ImageBitmap>,
+)
 
 private data class ProGameplayOverlayCandidate(
     val mapId: String,
@@ -416,9 +434,21 @@ private data class ProGameplayOverlayCandidate(
 }
 
 @Composable
-private fun BundleImageCarouselRow(bundleState: ProBundleUiState) {
-    when (bundleState) {
-        ProBundleUiState.Loading -> {
+private fun UnifiedEvidenceCarousel(
+    bundleState: ProBundleUiState,
+    vlmOverlay: VlmOverlayUi?,
+) {
+    val bundleImages =
+        when (bundleState) {
+            is ProBundleUiState.Ready -> bundleState.items.filter { it.image != null }
+            else -> emptyList()
+        }
+    val vlmPageCount = vlmOverlay?.frames?.size ?: 0
+    val bundlePageCount = bundleImages.size
+    val pageCount = vlmPageCount + bundlePageCount
+
+    when {
+        bundleState is ProBundleUiState.Loading && vlmOverlay == null -> {
             NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
                 Text("Evidence imagery", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
@@ -429,15 +459,28 @@ private fun BundleImageCarouselRow(bundleState: ProBundleUiState) {
                 )
             }
         }
-        is ProBundleUiState.Ready -> {
-            val images = bundleState.items.filter { it.image != null }
-            if (images.isEmpty()) return
-            val pagerState =
-                rememberPagerState(
-                    pageCount = { images.size },
-                )
+        pageCount == 0 && bundleState !is ProBundleUiState.Loading -> Unit
+        else -> {
+            if (pageCount == 0) return
+            val pagerState = rememberPagerState(pageCount = { pageCount })
             NutonicGlassCard(modifier = Modifier.fillMaxWidth()) {
                 Text("Evidence imagery", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
+                vlmOverlay?.let { overlay ->
+                    Text(
+                        overlay.caption,
+                        style = MaterialTheme.typography.body2,
+                        color = MaterialTheme.colors.onBackground,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                if (bundleState is ProBundleUiState.Loading && vlmOverlay != null) {
+                    Text(
+                        "Loading additional bundle imagery…",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onBackground,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
                 HorizontalPager(
                     state = pagerState,
                     modifier =
@@ -445,26 +488,67 @@ private fun BundleImageCarouselRow(bundleState: ProBundleUiState) {
                             .fillMaxWidth()
                             .padding(top = 8.dp),
                 ) { page ->
-                    val rendered = images[page]
-                    Column {
-                        Text(
-                            rendered.item.artifact.artifactId,
-                            style = MaterialTheme.typography.caption,
-                            color = MaterialTheme.colors.onBackground,
+                    if (page < vlmPageCount && vlmOverlay != null) {
+                        val bitmap = vlmOverlay.frames[page]
+                        ImageWithBboxOverlay(
+                            bitmap = bitmap,
+                            boxes = vlmOverlay.boxes,
+                            contentDescription = "On-device analysis frame ${page + 1}",
                         )
-                        rendered.image?.let { bitmap ->
-                            Image(
-                                bitmap = bitmap,
-                                contentDescription = "PRO bundle image ${rendered.item.artifact.artifactId}",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxWidth().height(200.dp).padding(top = 4.dp),
-                            )
-                        }
+                    } else {
+                        val rendered = bundleImages[page - vlmPageCount]
+                        Image(
+                            bitmap = rendered.image!!,
+                            contentDescription = "PRO bundle image",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxWidth().height(200.dp),
+                        )
                     }
                 }
             }
         }
-        else -> Unit
+    }
+}
+
+@Composable
+private fun ImageWithBboxOverlay(
+    bitmap: ImageBitmap,
+    boxes: List<ProVlmBoundingBox>,
+    contentDescription: String?,
+) {
+    val density = LocalDensity.current
+    Box(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val strokePx = with(density) { 2.dp.toPx() }
+            val stroke = Stroke(width = strokePx)
+            boxes.forEach { box ->
+                val c = box.bbox
+                if (c.size >= 4) {
+                    val x1 = (c[0].toFloat() * w).coerceIn(0f, w)
+                    val y1 = (c[1].toFloat() * h).coerceIn(0f, h)
+                    val x2 = (c[2].toFloat() * w).coerceIn(0f, w)
+                    val y2 = (c[3].toFloat() * h).coerceIn(0f, h)
+                    val left = minOf(x1, x2)
+                    val top = minOf(y1, y2)
+                    val right = maxOf(x1, x2)
+                    val bottom = maxOf(y1, y2)
+                    drawRect(
+                        color = Color(0xFFFF9800),
+                        topLeft = Offset(left, top),
+                        size = Size(right - left, bottom - top),
+                        style = stroke,
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -656,9 +740,10 @@ private fun ProEvidenceBundlePreview(state: ProBundleUiState.Ready) {
     val manifest = state.manifest
     Text(
         if (manifest == null) {
-            "Fetched ${state.sizeBytes} bytes."
+            "Evidence package downloaded."
         } else {
-            "Fetched ${state.sizeBytes} bytes · ${manifest.artifacts.size} artifact(s) · ${manifest.onDevicePayload?.vlmImageSet.orEmpty().size} VLM image(s)"
+            val n = manifest.artifacts.size
+            "Evidence package ready · $n item(s)."
         },
         style = MaterialTheme.typography.body2,
         color = MaterialTheme.colors.onBackground,
@@ -666,11 +751,13 @@ private fun ProEvidenceBundlePreview(state: ProBundleUiState.Ready) {
     state.warning?.let { Text(it, color = MaterialTheme.colors.error, style = MaterialTheme.typography.caption) }
     manifest?.let {
         val missing = it.artifacts.count { artifact -> artifact.missing }
-        Text(
-            "Bundle ${it.schema} · profile ${it.analysisProfile} · missing $missing",
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onBackground,
-        )
+        if (missing > 0) {
+            Text(
+                "$missing item(s) unavailable — open the job bundle for details.",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onBackground,
+            )
+        }
     }
     val summaries = state.items.filter { it.summaryRows.isNotEmpty() }.take(6)
     if (summaries.isNotEmpty()) {
@@ -897,13 +984,15 @@ private fun proErrorCopy(
 
 private fun ProVlmStatus.copy(): String =
     when (this) {
-        ProVlmStatus.Idle -> "Idle. Run a completed PRO job before local inference."
+        ProVlmStatus.Idle -> "Ready when you pick a completed job."
         is ProVlmStatus.DownloadingModel ->
-            "Downloading model ${receivedBytes.bytesLabel()}${totalBytes?.let { " / ${it.bytesLabel()}" }.orEmpty()}"
-        ProVlmStatus.LoadingModel -> "Loading local VLM runtime..."
-        ProVlmStatus.Inferencing -> "Analyzing VLM image set on device..."
-        is ProVlmStatus.Ready -> "Done · ${result.boxes.size} detected box(es)"
-        is ProVlmStatus.Failed -> "Local VLM unavailable: $reason"
+            totalBytes?.let { t ->
+                "Preparing model (${receivedBytes.bytesLabel()} / ${t.bytesLabel()})"
+            } ?: "Preparing model…"
+        ProVlmStatus.LoadingModel -> "Starting analysis…"
+        ProVlmStatus.Inferencing -> "Analyzing images…"
+        is ProVlmStatus.Ready -> "Finished."
+        is ProVlmStatus.Failed -> "Couldn't complete analysis. ${reason.take(120)}"
     }
 
 private fun Long.bytesLabel(): String =

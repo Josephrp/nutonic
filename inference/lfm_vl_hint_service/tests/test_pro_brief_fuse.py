@@ -60,7 +60,7 @@ def test_pro_brief_fuse_uses_profile_artifact_context() -> None:
     body = r.json()
     assert body["confidence"] == "moderate"
     assert "Temporal scene provenance" in body["executive_summary"]
-    assert "Prompt template: pro-brief-v1" in body["sections"][1]["body"]
+    assert "Prompt template: pro-brief-v2" in body["sections"][1]["body"]
 
 
 def test_pro_brief_fuse_softens_generated_certainty(monkeypatch: pytest.MonkeyPatch) -> None:

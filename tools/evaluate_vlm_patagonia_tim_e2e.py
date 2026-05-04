@@ -8,7 +8,7 @@ Outputs a publishable run directory containing:
 - per-target prompt records with the TiM JSON injected in the user turn
 - **local** TerraMind TiM via ``nutonic_terramind_tim_local.run.run_tim_batch_export`` (in-process PyTorch;
   Sentinel-2 STAC inputs; no remote TiM API). Device defaults to **auto** (CUDA → MPS → CPU).
-- **local** Transformers VLMs (default: **NuTonic/lsat** vs **LiquidAI/LFM2.5-VL-450M**; override with
+- **local** Transformers VLMs (default: **NuTonic/lspace** vs **LiquidAI/LFM2.5-VL-450M**; override with
   ``--local-vlm-model`` or env ``NUTONIC_PATAGONIA_EVAL_*_MODEL_ID``)
 - optional HTTP ``/v1/infer`` (no TiM in request) if you pass ``--endpoint`` or set
   ``NUTONIC_PATAGONIA_EVAL_ENABLE_HTTP=1`` to use URL env resolution
@@ -435,7 +435,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help=(
             "HF model id for TiM-in-prompt eval (repeatable). If omitted, runs finetune vs base "
-            "from patagonia_comparison_hf_model_ids() (NuTonic/lsat vs LiquidAI/LFM2.5-VL-450M)."
+            "from patagonia_comparison_hf_model_ids() (NuTonic/lspace vs LiquidAI/LFM2.5-VL-450M)."
         ),
     )
     p.add_argument("--local-vlm-device", default="auto")

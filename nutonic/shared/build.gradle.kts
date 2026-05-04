@@ -54,9 +54,10 @@ kotlin {
             implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
             // Incremental SHA-256 for streaming PRO VLM bundle verification without heap-sized ByteArrays.
-            implementation("org.kotlincrypto.core:common:0.5.3")
-            implementation("org.kotlincrypto.core:digest:0.5.3")
-            implementation("org.kotlincrypto.hash:sha2:0.5.3")
+            // Align with Leap SDK / hash BOM (0.8.x): `core` replaced `common`; mixing 0.5 `common-jvm` + 0.8 `core-jvm` duplicates classes on Android.
+            implementation("org.kotlincrypto.core:core:0.8.0")
+            implementation("org.kotlincrypto.core:digest:0.8.0")
+            implementation("org.kotlincrypto.hash:sha2:0.8.0")
         }
 
         commonTest.dependencies {

@@ -72,7 +72,7 @@ def _default_satellite_endpoint() -> str:
 def patagonia_comparison_hf_model_ids() -> dict[str, str]:
     """HF hub ids for finetune vs base satellite VLMs (local eval or one model per Space)."""
     return {
-        "finetune": (os.environ.get("NUTONIC_PATAGONIA_EVAL_FINETUNE_MODEL_ID") or "NuTonic/lsat").strip(),
+        "finetune": (os.environ.get("NUTONIC_PATAGONIA_EVAL_FINETUNE_MODEL_ID") or "NuTonic/lspace").strip(),
         "base": (os.environ.get("NUTONIC_PATAGONIA_EVAL_BASE_MODEL_ID") or "LiquidAI/LFM2.5-VL-450M").strip(),
     }
 
@@ -83,7 +83,7 @@ def resolve_patagonia_eval_endpoints(cli_endpoints: list[str]) -> list[tuple[str
 
     1) If ``cli_endpoints`` is non-empty, use those (``--endpoint name=url`` or URL only; repeatable).
     2) Else if both ``NUTONIC_PATAGONIA_EVAL_FINETUNE_URL`` and ``NUTONIC_PATAGONIA_EVAL_BASE_URL`` are set,
-       return two named endpoints: **finetune** (``NuTonic/lsat``) and **base** (``LiquidAI/LFM2.5-VL-450M`` by default).
+       return two named endpoints: **finetune** (``NuTonic/lspace``) and **base** (``LiquidAI/LFM2.5-VL-450M`` by default).
     3) Else fall back to a single default from ``NUTONIC_LFM_VL_SATELLITE_URL`` or
        ``NUTONIC_LFM_VL_SATELLITE_REPO_ID`` (HF Space).
     """
@@ -646,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "VLM endpoint as URL or name=url (repeatable). If omitted: use "
             "NUTONIC_PATAGONIA_EVAL_FINETUNE_URL + NUTONIC_PATAGONIA_EVAL_BASE_URL for finetune vs base "
-            "(NuTonic/lsat vs LiquidAI/LFM2.5-VL-450M), else NUTONIC_LFM_VL_SATELLITE_URL / REPO_ID."
+            "(NuTonic/lspace vs LiquidAI/LFM2.5-VL-450M), else NUTONIC_LFM_VL_SATELLITE_URL / REPO_ID."
         ),
     )
     p.add_argument(

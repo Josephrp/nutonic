@@ -27,7 +27,7 @@ content_version: nutonic.tim_local.geoguessr_s2_compatible.v1
 paths:
   repo_root: ../..
 
-model_id: terramind_v1_tiny_tim
+model_id: terramind_v1_large_tim
 pretrained: true
 merge_method: mean
 

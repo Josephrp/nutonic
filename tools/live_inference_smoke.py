@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,10 @@ from nutonic_hmac import nutonic_hmac_headers_from_env
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_TIM_SRC = REPO_ROOT / "inference" / "terramind_tim_local" / "src"
+if str(_TIM_SRC) not in sys.path:
+    sys.path.insert(0, str(_TIM_SRC))
+from nutonic_terramind_tim_local.tim_defaults import DEFAULT_TIM_MODEL_ID
 PRESET_CHOICES = (
     "full",
     "lfm-deploy",
@@ -549,12 +554,12 @@ def main(argv: list[str] | None = None) -> int:
                     name="tim.export",
                     json_body={
                         "config": {
-                            "model_id": "terramind_v1_tiny_tim",
+                            "model_id": DEFAULT_TIM_MODEL_ID,
                             "pretrained": True,
                             "modalities": ["RGB"],
                             "tim_modalities": ["location"],
                             "merge_method": "mean",
-                            "device": "cpu",
+                            "device": "cuda",
                             "inputs": {"mode": "random", "batch_size": 1},
                             "serialization": {
                                 "tensor_sample_limit": 0,

@@ -42,7 +42,7 @@ paths:
   # Resolved relative to **current working directory** when not absolute.
   repo_root: .
 
-model_id: terramind_v1_tiny_tim
+model_id: terramind_v1_large_tim
 pretrained: true
 merge_method: mean
 

@@ -4,7 +4,7 @@
 # Input modalities (config.modalities): passed to BACKBONE_REGISTRY as encoder inputs.
 # TiM output modalities (tim_modalities): TerraTorch spellings, e.g. LULC, NDVI, location (not "Coordinates").
 
-model_id: terramind_v1_tiny_tim
+model_id: terramind_v1_large_tim
 pretrained: true
 modalities:
   - S2L2A

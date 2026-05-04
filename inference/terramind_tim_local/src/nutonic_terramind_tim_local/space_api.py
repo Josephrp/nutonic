@@ -9,6 +9,7 @@ from fastapi import Body, FastAPI, HTTPException
 
 from nutonic_terramind_tim_local.spaces_zero import apply_zero_gpu
 from nutonic_terramind_tim_local.terramind_patches import terramind_patch_diagnostics
+from nutonic_terramind_tim_local.tim_defaults import DEFAULT_TIM_MODEL_ID
 
 app = FastAPI(title="NU:TONIC TerraMind TiM local (Space)", version="0.1.0")
 
@@ -39,7 +40,7 @@ def tim_export(
         examples=[
             {
                 "config": {
-                    "model_id": "terramind_v1_tiny_tim",
+                    "model_id": DEFAULT_TIM_MODEL_ID,
                     "pretrained": True,
                     "modalities": ["RGB"],
                     "tim_modalities": ["LULC", "location"],

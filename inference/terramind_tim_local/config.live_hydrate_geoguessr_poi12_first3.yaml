@@ -1,7 +1,7 @@
 # TerraMind TiM batch — first three rows of ``data/downloads/geoguessr_poi_12``
 # (matches ``catalog_import_poi.py --poi-root .../geoguessr_poi_12 --poi-limit 3``).
 #
-# Run locally (GPU recommended; CPU works for ``terramind_v1_tiny_tim``):
+# Run locally (GPU recommended; default TIM is ``terramind_v1_large_tim``):
 #   uv sync --project inference/terramind_tim_local --extra dev --extra s2
 #   uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local run ^
 #     --config config.live_hydrate_geoguessr_poi12_first3.yaml ^
@@ -16,7 +16,7 @@ content_version: nutonic.tim_local.live_hydrate.poi12_first3.v1
 paths:
   repo_root: ../..
 
-model_id: terramind_v1_tiny_tim
+model_id: terramind_v1_large_tim
 pretrained: true
 merge_method: mean
 

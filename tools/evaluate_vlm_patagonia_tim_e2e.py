@@ -52,6 +52,8 @@ if str(TIM_SRC) not in sys.path:
 if str(REPO_ROOT / "tools") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "tools"))
 
+from nutonic_terramind_tim_local.tim_defaults import DEFAULT_TIM_MODEL_ID  # noqa: E402
+
 from evaluate_vlm_patagonia import (  # noqa: E402
     EvalTarget,
     _check_endpoint_health,
@@ -439,7 +441,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--local-vlm-device", default="auto")
     p.add_argument("--local-vlm-dtype", default="bfloat16")
     p.add_argument("--max-new-tokens", type=int, default=220)
-    p.add_argument("--tim-model-id", default="terramind_v1_tiny_tim")
+    p.add_argument(
+        "--tim-model-id",
+        default=DEFAULT_TIM_MODEL_ID,
+        help=f"TerraTorch TiM backbone (default: {DEFAULT_TIM_MODEL_ID}, largest).",
+    )
     p.add_argument(
         "--tim-device",
         default="auto",

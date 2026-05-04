@@ -1,7 +1,7 @@
 # Example: TerraMind TiM tiny on RGB with LULC + WGS84 location tokens.
 # See README.md for modality naming (use `location`, not `Coordinates`).
 
-model_id: terramind_v1_tiny_tim
+model_id: terramind_v1_large_tim
 pretrained: true
 modalities:
   - RGB

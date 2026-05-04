@@ -1,0 +1,282 @@
+"""Multi-mode Patagonia eval scoring: lexical (legacy), SCL grounding IoU, structured checklist, composite."""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass
+from typing import Any
+
+from evaluate_vlm_patagonia import EvalTarget, _match_terms, _score_caption
+
+
+@dataclass(frozen=True)
+class ScoreWeights:
+    lexical: float = 0.22
+    grounding: float = 0.48
+    structured: float = 0.30
+
+
+def iou_xyxy(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    iw, ih = max(0.0, ix2 - ix1), max(0.0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    return float(inter / union) if union > 0 else 0.0
+
+
+_CANONICAL_ALIASES: dict[str, frozenset[str]] = {
+    "water": frozenset({"water", "ocean", "sea", "marine", "fjord", "lake", "lago", "inundation"}),
+    "vegetation": frozenset(
+        {"vegetation", "veg", "forest", "trees", "woodland", "grass", "crops", "cropland", "shrub", "plant"}
+    ),
+    "bare": frozenset({"bare", "soil", "bare_ground", "barren"}),
+    "snow_ice": frozenset({"snow", "ice", "glacier", "cryosphere", "snow_ice", "frozen"}),
+}
+
+
+def normalize_pred_label(label: str) -> str | None:
+    s = (label or "").strip().lower()
+    if not s:
+        return None
+    if s in _CANONICAL_ALIASES:
+        return s
+    for canon, aliases in _CANONICAL_ALIASES.items():
+        if s in aliases:
+            return canon
+        for a in aliases:
+            if len(a) >= 3 and a in s:
+                return canon
+    return None
+
+
+def parse_predicted_boxes(text: str) -> list[dict[str, Any]]:
+    """Extract ``label`` + ``bbox`` [x1,y1,x2,y2] lists from model output (JSON fragments)."""
+    out: list[dict[str, Any]] = []
+    if not text.strip():
+        return out
+
+    # Objects like {"label":"water","bbox":[0,0,1,1]}
+    for m in re.finditer(r"\{[^{}]*\"label\"[^{}]*\"bbox\"[^{}]*\}", text, re.DOTALL):
+        frag = m.group(0)
+        try:
+            obj = json.loads(frag)
+        except json.JSONDecodeError:
+            continue
+        lab = obj.get("label")
+        bb = obj.get("bbox")
+        if isinstance(lab, str) and isinstance(bb, list) and len(bb) == 4:
+            try:
+                box = tuple(float(x) for x in bb)
+            except (TypeError, ValueError):
+                continue
+            out.append({"label": lab, "bbox": list(box)})
+
+    # JSON arrays of objects
+    for m in re.finditer(r"\[[\s\S]{10,8000}?\]", text):
+        block = m.group(0)
+        try:
+            data = json.loads(block)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(data, list):
+            continue
+        for obj in data:
+            if not isinstance(obj, dict):
+                continue
+            lab = obj.get("label")
+            bb = obj.get("bbox")
+            if isinstance(lab, str) and isinstance(bb, list) and len(bb) == 4:
+                try:
+                    box = tuple(float(x) for x in bb)
+                except (TypeError, ValueError):
+                    continue
+                out.append({"label": lab, "bbox": list(box)})
+
+    # boxes key in nested JSON (single object)
+    if not out:
+        for m in re.finditer(r'"boxes"\s*:\s*\[[\s\S]{0,8000}?\]', text):
+            try:
+                inner = "{" + m.group(0) + "}"
+                obj = json.loads(inner)
+                arr = obj.get("boxes")
+                if isinstance(arr, list):
+                    for item in arr:
+                        if not isinstance(item, dict):
+                            continue
+                        lab = item.get("label")
+                        bb = item.get("bbox")
+                        if isinstance(lab, str) and isinstance(bb, list) and len(bb) == 4:
+                            try:
+                                box = tuple(float(x) for x in bb)
+                            except (TypeError, ValueError):
+                                continue
+                            out.append({"label": lab, "bbox": list(box)})
+            except json.JSONDecodeError:
+                continue
+
+    return out
+
+
+def grounding_score_vs_gold(
+    caption: str,
+    gold_boxes: list[dict[str, Any]],
+) -> tuple[float, dict[str, Any]]:
+    """
+    Mean best IoU per gold box (label must match canonical class); 1.0 if no gold boxes.
+
+    Returns mean IoU in [0,1] and diagnostics.
+    """
+    if not gold_boxes:
+        return 1.0, {"reason": "no_gold", "pred_boxes": []}
+
+    preds = parse_predicted_boxes(caption)
+    diag: dict[str, Any] = {"pred_boxes": preds, "gold_count": len(gold_boxes)}
+    ious: list[float] = []
+
+    for g in gold_boxes:
+        glabel = str(g.get("label") or "")
+        canon_g = normalize_pred_label(glabel) or glabel
+        gbb = g.get("bbox")
+        if not isinstance(gbb, list) or len(gbb) != 4:
+            continue
+        try:
+            gt = tuple(float(x) for x in gbb)
+        except (TypeError, ValueError):
+            continue
+        best = 0.0
+        for p in preds:
+            plab = normalize_pred_label(str(p.get("label") or ""))
+            if plab != canon_g:
+                continue
+            pbb = p.get("bbox")
+            if not isinstance(pbb, list) or len(pbb) != 4:
+                continue
+            try:
+                pt = tuple(float(x) for x in pbb)
+            except (TypeError, ValueError):
+                continue
+            best = max(best, iou_xyxy(gt, pt))
+        ious.append(best)
+
+    mean_iou = float(sum(ious) / max(1, len(ious))) if ious else 0.0
+    diag["per_gold_best_iou"] = ious
+    diag["mean_iou"] = round(mean_iou, 4)
+    return mean_iou, diag
+
+
+def structured_task_score(caption: str, target: EvalTarget) -> tuple[float, dict[str, bool]]:
+    """Light checklist aligned with production-analysis / TiM SFT style outputs."""
+    t = caption.lower()
+    wc = len([w for w in re.split(r"\s+", caption.strip()) if w])
+    checks = {
+        "non_empty": len(caption.strip()) > 0,
+        "min_tokens": wc >= max(12, min(18, target.min_words // 2)),
+        "structured_or_sections": bool(
+            re.search(r"```(?:json|toml)|analytical|dominant|summary|land_cover|tim_modality", t)
+        ),
+        "risk_aware_language": any(
+            x in t for x in ("limitation", "confidence", "optical", "uncertain", "cannot verify", "approximate")
+        ),
+    }
+    score = sum(1 for v in checks.values() if v) / max(1, len(checks))
+    return float(score), checks
+
+
+def score_patagonia_multimodal(
+    caption: str,
+    target: EvalTarget,
+    *,
+    threshold: float,
+    gold_boxes: list[dict[str, Any]] | None,
+    weights: ScoreWeights | None = None,
+    score_mode: str = "composite",
+    pass_metric: str = "composite",
+) -> dict[str, Any]:
+    """
+    Compute lexical, grounding, structured, composite; guardrails from ``EvalTarget``.
+
+    ``score_mode``: lexical | grounding | structured | composite | all
+    ``pass_metric``: which scalar drives ``passed`` (default composite; falls back if unavailable).
+    """
+    w = weights or ScoreWeights()
+
+    lex, gh, gt, e_hits, f_hits, c_hits, q_flags, wc, lex_passed = _score_caption(caption, target, threshold)
+    lex_out = {
+        "score": round(lex, 4),
+        "passed_lexical": lex_passed,
+        "expected_groups_hit": gh,
+        "expected_groups_total": gt,
+        "expected_hits": e_hits,
+        "forbidden_hits": f_hits,
+        "claim_risk_hits": c_hits,
+        "quality_flags": q_flags,
+        "word_count": wc,
+    }
+
+    grounding_usable = bool(gold_boxes) and len(gold_boxes) > 0
+    gr_score, gr_diag = grounding_score_vs_gold(caption, list(gold_boxes or []))
+    if not grounding_usable:
+        gr_score = None  # type: ignore[assignment]
+
+    st_score, st_checks = structured_task_score(caption, target)
+
+    forbidden_penalty = 0.25 * len(f_hits)
+    claim_penalty = 0.08 * len(c_hits)
+    guardrail = max(0.0, 1.0 - forbidden_penalty - claim_penalty)
+
+    if grounding_usable and gr_score is not None:
+        comp_raw = w.lexical * lex + w.grounding * float(gr_score) + w.structured * st_score
+    else:
+        # Renormalize lexical + structured when grounding missing
+        z = w.lexical + w.structured
+        z = z if z > 1e-6 else 1.0
+        comp_raw = (w.lexical / z) * lex + (w.structured / z) * st_score
+
+    composite = max(0.0, min(1.0, comp_raw * guardrail))
+
+    mode = score_mode.strip().lower()
+    if mode == "lexical":
+        primary = lex
+    elif mode == "grounding":
+        primary = float(gr_score) if gr_score is not None else 0.0
+    elif mode == "structured":
+        primary = st_score
+    elif mode in ("composite", "all"):
+        primary = composite
+    else:
+        primary = composite
+
+    pm = pass_metric.strip().lower()
+    if pm == "lexical":
+        passed = lex >= threshold
+    elif pm == "grounding":
+        passed = (float(gr_score) if gr_score is not None else 0.0) >= threshold
+    elif pm == "structured":
+        passed = st_score >= threshold
+    else:
+        passed = composite >= threshold
+
+    return {
+        "score": round(primary, 4),
+        "passed": passed,
+        "score_mode": mode,
+        "pass_metric": pm,
+        "lexical": lex_out,
+        "grounding": {
+            "score": None if gr_score is None else round(float(gr_score), 4),
+            "gold_available": grounding_usable,
+            "diagnostics": gr_diag,
+        },
+        "structured": {"score": round(st_score, 4), "checks": st_checks},
+        "composite": round(composite, 4),
+        "guardrail_factor": round(guardrail, 4),
+        "weights_applied": {"lexical": w.lexical, "grounding": w.grounding, "structured": w.structured},
+    }

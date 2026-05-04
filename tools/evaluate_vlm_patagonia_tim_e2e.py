@@ -13,6 +13,9 @@ Outputs a publishable run directory containing:
 - optional HTTP ``/v1/infer`` (no TiM in request) if you pass ``--endpoint`` or set
   ``NUTONIC_PATAGONIA_EVAL_ENABLE_HTTP=1`` to use URL env resolution
 - aggregate JSON + Markdown summary
+- **Multi-mode scoring** (``--score-mode``): legacy **lexical** checks, **grounding** vs Sentinel-2 SCL
+  reference boxes (COG-aligned still refresh), **structured** checklist for production-style outputs,
+  and **composite** (default) combining them with guardrails
 
 The local TiM path reuses `inference/terramind_tim_local` directly; no TiM
 remote service is required. Use ``--skip-local-vlm`` for HTTP-only evals on deployed Spaces.
@@ -58,7 +61,6 @@ from evaluate_vlm_patagonia import (  # noqa: E402
     EvalTarget,
     _check_endpoint_health,
     _infer_caption,
-    _score_caption,
     _sha256_bytes,
     _sanitize_filename,
     default_patagonia_targets,
@@ -68,6 +70,7 @@ from evaluate_vlm_patagonia import (  # noqa: E402
     write_patagonia_eval_still,
     write_patagonia_per_model_artifacts,
 )
+from patagonia_eval_scoring import ScoreWeights, score_patagonia_multimodal  # noqa: E402
 from patagonia_eval_sft_prompts import (  # noqa: E402
     PRODUCTION_ANALYSIS_SYSTEM,
     build_production_tim_user_prompt,
@@ -130,6 +133,120 @@ def _resolve_tim_device(flag: str) -> str:
             pass
         return "cpu"
     return flag.strip()
+
+
+def _resolve_pass_metric(score_mode: str, pass_metric_cli: str) -> str:
+    pm = (pass_metric_cli or "auto").strip().lower()
+    if pm not in ("", "auto"):
+        return pm
+    sm = score_mode.strip().lower()
+    return {"lexical": "lexical", "grounding": "grounding", "structured": "structured"}.get(sm, "composite")
+
+
+def _needs_stac_gold_refresh(args: argparse.Namespace) -> bool:
+    if getattr(args, "no_stac_gold", False):
+        return False
+    if args.still_source != "stac":
+        return False
+    sm = args.score_mode.strip().lower()
+    return sm in ("grounding", "composite", "all")
+
+
+def _build_score_weights(args: argparse.Namespace) -> ScoreWeights:
+    w = getattr(args, "score_weight", None)
+    if isinstance(w, (list, tuple)) and len(w) == 3:
+        return ScoreWeights(lexical=float(w[0]), grounding=float(w[1]), structured=float(w[2]))
+    return ScoreWeights()
+
+
+def _apply_full_scoring(
+    caption: str,
+    target: EvalTarget,
+    args: argparse.Namespace,
+    gold_boxes: list[dict[str, Any]] | None,
+    pass_metric_resolved: str,
+) -> dict[str, Any]:
+    mode = args.score_mode.strip().lower()
+    if mode == "all":
+        mode = "composite"
+    scored = score_patagonia_multimodal(
+        caption,
+        target,
+        threshold=args.score_threshold,
+        gold_boxes=gold_boxes,
+        weights=_build_score_weights(args),
+        score_mode=mode,
+        pass_metric=pass_metric_resolved,
+    )
+    return {
+        "score": scored["score"],
+        "passed": scored["passed"],
+        "expected_groups_hit": scored["lexical"]["expected_groups_hit"],
+        "expected_groups_total": scored["lexical"]["expected_groups_total"],
+        "expected_hits": scored["lexical"]["expected_hits"],
+        "forbidden_hits": scored["lexical"]["forbidden_hits"],
+        "claim_risk_hits": scored["lexical"]["claim_risk_hits"],
+        "quality_flags": scored["lexical"]["quality_flags"],
+        "word_count": scored["lexical"]["word_count"],
+        "lexical_score": scored["lexical"]["score"],
+        "grounding_score": scored["grounding"]["score"],
+        "structured_score": scored["structured"]["score"],
+        "composite_score": scored["composite"],
+        "scoring": scored,
+    }
+
+
+def _refresh_stills_with_stac_cog_gold(
+    args: argparse.Namespace,
+    targets: list[EvalTarget],
+    target_records: dict[str, dict[str, Any]],
+    out_dir: Path,
+) -> dict[str, Any]:
+    """Replace cached stills with COG RGB aligned to SCL when possible; write ``gold/*.json`` sidecars."""
+    data_scripts = REPO_ROOT / "data" / "scripts"
+    if str(data_scripts) not in sys.path:
+        sys.path.insert(0, str(data_scripts))
+    from patagonia_eval_gold import gold_boxes_from_scl
+    from stac_reference_still import fetch_sentinel_cog_rgb_scl_matched
+
+    gold_dir = out_dir / "gold"
+    gold_dir.mkdir(parents=True, exist_ok=True)
+    gold_by_id: dict[str, Any] = {}
+    st_raw = (args.stac_still_url or "").strip() or None
+    coll = (args.stac_still_collection or "").strip() or None
+    dt_raw = (args.stac_still_datetime or "").strip() or None
+
+    for t in targets:
+        rgb, scl, meta = fetch_sentinel_cog_rgb_scl_matched(
+            t.lat,
+            t.lon,
+            width_px=int(args.mapbox_size),
+            height_px=int(args.mapbox_size),
+            stac_url=st_raw,
+            collection=coll,
+            bbox_half_km=float(args.stac_still_bbox_half_km),
+            max_cloud=float(args.stac_still_max_cloud),
+            max_items=int(args.stac_still_max_items),
+            datetime_range=dt_raw,
+        )
+        sidecar = {"target_id": t.target_id, "stac_pair_meta": meta}
+        if rgb is not None and scl is not None:
+            p = Path(target_records[t.target_id]["image_path"])
+            rgb.save(p)
+            target_records[t.target_id]["image_sha256"] = _sha256_bytes(p.read_bytes())
+            prov = target_records[t.target_id].setdefault("still_provenance", {})
+            if isinstance(prov, dict):
+                prov["cog_scl_gold_refresh"] = True
+                prov["stac_gold_item_id"] = meta.get("item_id")
+            boxes = gold_boxes_from_scl(scl, category=t.category)
+            gold_by_id[t.target_id] = boxes
+            sidecar["gold_boxes"] = boxes
+        else:
+            gold_by_id[t.target_id] = None
+            sidecar["gold_boxes"] = None
+            sidecar["reason"] = meta.get("reason", "cog_pair_failed")
+        _write_json(gold_dir / f"{t.target_id}.json", sidecar)
+    return gold_by_id
 
 
 def _target_profile(target: EvalTarget) -> str:
@@ -284,66 +401,115 @@ def _local_vlm_caption(
     return processor.batch_decode(out[:, in_len:], skip_special_tokens=True)[0].strip()
 
 
-def _score_result(caption: str, target: EvalTarget, threshold: float) -> dict[str, Any]:
-    score, gh, gt, e_hits, f_hits, c_hits, flags, wc, passed = _score_caption(caption, target, threshold)
-    return {
-        "score": round(score, 4),
-        "passed": passed,
-        "expected_groups_hit": gh,
-        "expected_groups_total": gt,
-        "expected_hits": e_hits,
-        "forbidden_hits": f_hits,
-        "claim_risk_hits": c_hits,
-        "quality_flags": flags,
-        "word_count": wc,
-    }
-
-
 def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for r in results:
         name = str(r["model_name"])
-        cur = out.setdefault(name, {"n": 0, "errors": 0, "passed": 0, "score_sum": 0.0})
+        cur = out.setdefault(
+            name,
+            {
+                "n": 0,
+                "errors": 0,
+                "passed": 0,
+                "score_sum": 0.0,
+                "lexical_sum": 0.0,
+                "grounding_sum": 0.0,
+                "structured_sum": 0.0,
+                "composite_sum": 0.0,
+                "lexical_n": 0,
+                "grounding_n": 0,
+                "structured_n": 0,
+                "composite_n": 0,
+            },
+        )
         cur["n"] += 1
         if r.get("error"):
             cur["errors"] += 1
             continue
         cur["passed"] += int(bool(r.get("passed")))
         cur["score_sum"] += float(r.get("score") or 0.0)
+        if r.get("lexical_score") is not None:
+            cur["lexical_sum"] += float(r["lexical_score"])
+            cur["lexical_n"] += 1
+        if r.get("grounding_score") is not None:
+            cur["grounding_sum"] += float(r["grounding_score"])
+            cur["grounding_n"] += 1
+        if r.get("structured_score") is not None:
+            cur["structured_sum"] += float(r["structured_score"])
+            cur["structured_n"] += 1
+        if r.get("composite_score") is not None:
+            cur["composite_sum"] += float(r["composite_score"])
+            cur["composite_n"] += 1
     for cur in out.values():
         scored = max(1, int(cur["n"]) - int(cur["errors"]))
         cur["mean_score"] = round(float(cur["score_sum"]) / scored, 4)
         cur["pass_rate"] = round(float(cur["passed"]) / scored, 4)
         cur.pop("score_sum", None)
+        if cur.get("lexical_n", 0) > 0:
+            cur["mean_lexical_score"] = round(cur["lexical_sum"] / cur["lexical_n"], 4)
+        if cur.get("grounding_n", 0) > 0:
+            cur["mean_grounding_score"] = round(cur["grounding_sum"] / cur["grounding_n"], 4)
+        if cur.get("structured_n", 0) > 0:
+            cur["mean_structured_score"] = round(cur["structured_sum"] / cur["structured_n"], 4)
+        if cur.get("composite_n", 0) > 0:
+            cur["mean_composite_score"] = round(cur["composite_sum"] / cur["composite_n"], 4)
+        for k in (
+            "lexical_sum",
+            "lexical_n",
+            "grounding_sum",
+            "grounding_n",
+            "structured_sum",
+            "structured_n",
+            "composite_sum",
+            "composite_n",
+        ):
+            cur.pop(k, None)
     return out
 
 
+def _summary_metric_cell(summary_row: dict[str, Any], key: str) -> str:
+    v = summary_row.get(key)
+    return f"{float(v):.3f}" if v is not None else "—"
+
+
 def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
+    meta = payload["meta"]
     lines = [
         "# Patagonia TiM E2E VLM Evaluation",
         "",
-        f"Generated: `{payload['meta']['generated_at_utc']}`",
+        f"Generated: `{meta['generated_at_utc']}`",
+        f"Scoring: `{meta.get('score_mode', '')}` · pass metric: `{meta.get('pass_metric_resolved', '')}` · "
+        f"threshold `{meta.get('score_threshold', '')}`",
         "",
         "## Summary",
         "",
-        "| Model | Targets | Errors | Pass Rate | Mean Score |",
-        "|---|---:|---:|---:|---:|",
+        "| Model | Targets | Errors | Pass Rate | Mean (primary) | Mean Lex | Mean Grd | Mean Str | Mean Comp |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, s in payload["summary_by_model"].items():
-        lines.append(f"| {name} | {s['n']} | {s['errors']} | {s['pass_rate']:.3f} | {s['mean_score']:.3f} |")
+        lines.append(
+            f"| {name} | {s['n']} | {s['errors']} | {s['pass_rate']:.3f} | {s['mean_score']:.3f} | "
+            f"{_summary_metric_cell(s, 'mean_lexical_score')} | {_summary_metric_cell(s, 'mean_grounding_score')} | "
+            f"{_summary_metric_cell(s, 'mean_structured_score')} | {_summary_metric_cell(s, 'mean_composite_score')} |"
+        )
     lines.extend(["", "## Artifacts", ""])
     lines.append("- `report.json`: full machine-readable report")
     lines.append("- `predictions.jsonl`: one row per model/target prediction")
     lines.append("- `prompts.jsonl`: exact user prompt records with injected TiM JSON")
     lines.append("- `tim/tim_export.jsonl`: local TiM outputs")
     lines.append("- `images/`: cached reference stills (STAC or Mapbox)")
+    lines.append("- `gold/`: Sentinel-2 SCL-derived reference boxes (when STAC COG pair succeeded)")
     lines.extend(["", "## Per-Target Results", ""])
     for r in payload["results"]:
         lines.append(f"### {r['target_id']} · {r['model_name']}")
         if r.get("error"):
             lines.append(f"- Error: `{r['error']}`")
         else:
-            lines.append(f"- Score: `{r['score']}` · passed: `{r['passed']}`")
+            lines.append(
+                f"- Primary score: `{r['score']}` · passed: `{r['passed']}` · "
+                f"lex `{r.get('lexical_score', '')}` · grd `{r.get('grounding_score', '')}` · "
+                f"str `{r.get('structured_score', '')}` · comp `{r.get('composite_score', '')}`"
+            )
             lines.append(f"- Hits: `{', '.join(r.get('expected_hits') or [])}`")
             flags = ", ".join(r.get("quality_flags") or [])
             if flags:
@@ -384,7 +550,36 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--category", action="append", default=[])
     p.add_argument("--target-id", action="append", default=[])
     p.add_argument("--max-targets", type=int, default=0)
-    p.add_argument("--score-threshold", type=float, default=0.55)
+    p.add_argument(
+        "--score-threshold",
+        type=float,
+        default=0.5,
+        help="Pass threshold for the active pass metric (default 0.5; use 0.55 for stricter legacy-style runs).",
+    )
+    p.add_argument(
+        "--score-mode",
+        choices=("lexical", "grounding", "structured", "composite", "all"),
+        default="composite",
+        help="primary reported score: composite (default) mixes lexical+SCL IoU+structured; 'all' same as composite with full breakdown.",
+    )
+    p.add_argument(
+        "--pass-metric",
+        default="auto",
+        help="What drives pass/fail: auto (follows score-mode), lexical, grounding, structured, or composite.",
+    )
+    p.add_argument(
+        "--score-weight",
+        nargs=3,
+        type=float,
+        metavar=("LEX", "GRD", "STR"),
+        default=None,
+        help="Composite weights when SCL gold exists (default 0.22 0.48 0.30).",
+    )
+    p.add_argument(
+        "--no-stac-gold",
+        action="store_true",
+        help="Do not replace stills with COG RGB+SCL pair or write gold/ (lexical+structured only for composite).",
+    )
     p.add_argument(
         "--endpoint",
         action="append",
@@ -508,6 +703,12 @@ def main(argv: list[str] | None = None) -> int:
                 "still_provenance": prov,
             }
 
+    pass_metric_resolved = _resolve_pass_metric(args.score_mode, args.pass_metric)
+    if _needs_stac_gold_refresh(args):
+        gold_by_id = _refresh_stills_with_stac_cog_gold(args, targets, target_records, out_dir)
+    else:
+        gold_by_id = {t.target_id: None for t in targets}
+
     tim_device_effective = _resolve_tim_device(args.tim_device)
     tim_by_id = _run_local_tim(args, targets, out_dir, tim_device_effective=tim_device_effective)
 
@@ -567,7 +768,8 @@ def main(argv: list[str] | None = None) -> int:
                     )
                     rec["caption"] = infer.caption
                     rec["model_id"] = infer.model_id
-                    rec.update(_score_result(infer.caption, t, args.score_threshold))
+                    gb = gold_by_id.get(t.target_id)
+                    rec.update(_apply_full_scoring(infer.caption, t, args, gb, pass_metric_resolved))
                 except Exception as exc:  # noqa: BLE001
                     rec["error"] = f"{type(exc).__name__}: {exc}"
                 results.append(rec)
@@ -605,7 +807,8 @@ def main(argv: list[str] | None = None) -> int:
                         system_text=PRODUCTION_ANALYSIS_SYSTEM,
                     )
                     rec["caption"] = caption
-                    rec.update(_score_result(caption, t, args.score_threshold))
+                    gb = gold_by_id.get(t.target_id)
+                    rec.update(_apply_full_scoring(caption, t, args, gb, pass_metric_resolved))
                 except Exception as exc:  # noqa: BLE001
                     rec["error"] = f"{type(exc).__name__}: {exc}"
                 results.append(rec)
@@ -627,6 +830,15 @@ def main(argv: list[str] | None = None) -> int:
             "generated_at_utc": dt.datetime.now(dt.UTC).isoformat(),
             "out_dir": str(out_dir),
             "score_threshold": args.score_threshold,
+            "score_mode": args.score_mode,
+            "pass_metric": args.pass_metric,
+            "pass_metric_resolved": pass_metric_resolved,
+            "stac_gold_refresh": bool(_needs_stac_gold_refresh(args)),
+            "score_weights": (
+                {"lexical": float(args.score_weight[0]), "grounding": float(args.score_weight[1]), "structured": float(args.score_weight[2])}
+                if getattr(args, "score_weight", None) is not None
+                else {"lexical": 0.22, "grounding": 0.48, "structured": 0.30}
+            ),
             "still_source": args.still_source,
             "mapbox_size": args.mapbox_size,
             "still_provenance_by_target": still_prov,
@@ -646,7 +858,8 @@ def main(argv: list[str] | None = None) -> int:
                 "notes": (
                     "TiM runs in-process (run_tim_batch_export); VLM runs locally by default (Transformers) "
                     "with TiM JSON in the prompt. Local VLM uses SFT-aligned production_analysis system + user "
-                    "layout (see patagonia_eval_sft_prompts). Override ids with NUTONIC_PATAGONIA_EVAL_*_MODEL_ID. "
+                    "layout (see patagonia_eval_sft_prompts). Scoring: multimodal (lexical + SCL IoU grounding + "
+                    "structured checklist + composite). Override ids with NUTONIC_PATAGONIA_EVAL_*_MODEL_ID. "
                     "Optional HTTP /v1/infer: --endpoint or NUTONIC_PATAGONIA_EVAL_ENABLE_HTTP=1."
                 ),
             },
@@ -674,6 +887,9 @@ def main(argv: list[str] | None = None) -> int:
                 "http_endpoints": dict(endpoints),
                 "out_dir": str(out_dir),
                 "vlm_prompt_style": payload["meta"]["vlm_prompt_style"],
+                "score_mode": payload["meta"].get("score_mode"),
+                "pass_metric_resolved": payload["meta"].get("pass_metric_resolved"),
+                "score_threshold": payload["meta"].get("score_threshold"),
             },
             indent=2,
             ensure_ascii=False,
@@ -684,7 +900,12 @@ def main(argv: list[str] | None = None) -> int:
     _write_markdown(out_dir, payload)
     print(f"Patagonia TiM E2E evaluation complete: {out_dir}")
     for name, s in payload["summary_by_model"].items():
-        print(f"- {name}: pass_rate={s['pass_rate']:.3f} mean_score={s['mean_score']:.3f} errors={s['errors']}")
+        extra = ""
+        if "mean_composite_score" in s:
+            extra = f" mean_composite={s['mean_composite_score']:.3f}"
+        print(
+            f"- {name}: pass_rate={s['pass_rate']:.3f} mean_primary={s['mean_score']:.3f}{extra} errors={s['errors']}"
+        )
 
     hf_repo = (args.hf_dataset_repo or "").strip() or (os.environ.get("NUTONIC_PATAGONIA_EVAL_HF_DATASET") or "").strip()
     if hf_repo and not args.skip_hf_upload:

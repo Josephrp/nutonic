@@ -9,6 +9,10 @@ What it does:
 3) Scores captions against target-specific expected concepts.
 4) Writes a machine-readable JSON report and prints a concise console summary.
 
+**TiM E2E** (``tools/evaluate_vlm_patagonia_tim_e2e.py``) adds multimodal scoring: see
+``tools/patagonia_eval_scoring.py`` (lexical + SCL IoU + structured + composite) and
+``tools/patagonia_eval_gold.py`` (reference boxes from Sentinel-2 SCL).
+
 Sources used for core geographies (investigation baseline):
 - Los Alerces NP: SIB / National Parks / Wikipedia
 - Yaganes MPA: SIB (APN Argentina)

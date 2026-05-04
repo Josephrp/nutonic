@@ -430,7 +430,7 @@ jobs:
         if: vars.NUTONIC_PRO_VLM_EMBED_IN_SPACE == 'true'
         env:
           # Empty uses tools/stage_pro_vlm_bundle.py default:
-          # https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/main/model.safetensors
+          # Default staging URL: tools/stage_pro_vlm_bundle.py → NuTonic/lspace (tools/hf_deploy/profiles/game_server.yaml).
           NUTONIC_PRO_VLM_MODEL_SOURCE_URL: ${{ vars.NUTONIC_PRO_VLM_MODEL_SOURCE_URL }}
           NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256: ${{ vars.NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256 }}
         run: |

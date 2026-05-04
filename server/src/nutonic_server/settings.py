@@ -10,17 +10,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _SERVER_DIR = Path(__file__).resolve().parent.parent.parent
 _REPO_ROOT = _SERVER_DIR.parent
 
-# Canonical product checkpoint id (Hugging Face repo for NU:TONIC fine-tunes). Weights file URL/sha below remain the
-# published Liquid base until ``NuTonic/lspace`` artifacts are shipped — then set ``NUTONIC_PRO_VLM_MODEL_*`` env.
+# PRO on-device VLM: default ``model.safetensors`` from ``NuTonic/lspace`` (pin matches Hub commit on ``main``).
 _DEFAULT_PRO_VLM_MODEL_DOWNLOAD_URL = (
-    "https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/"
-    "fc6221ca597f3315e4f82fc2df606783267b34ba/model.safetensors"
+    "https://huggingface.co/NuTonic/lspace/resolve/"
+    "3ec756bfc8a94fcb23801fe6925d832ab35595f2/model.safetensors"
 )
 _DEFAULT_PRO_VLM_MODEL_SHA256 = (
-    "2f6deb5dd43707de5cfe3c59470d3bccf4c3112a810a74570499f4728d412eea"
+    "7e9ae0b2225c8755eb68924aa97f81c0826678f77f7832aa81c8398f5439cf5c"
 )
 _DEFAULT_PRO_VLM_MODEL_SIZE_BYTES = 897_484_568
-_DEFAULT_PRO_VLM_MODEL_REVISION = "fc6221ca597f3315e4f82fc2df606783267b34ba"
+_DEFAULT_PRO_VLM_MODEL_REVISION = "3ec756bfc8a94fcb23801fe6925d832ab35595f2"
 _DEFAULT_PRO_VLM_MODEL_BUNDLE_ID = "NuTonic/lspace"
 
 

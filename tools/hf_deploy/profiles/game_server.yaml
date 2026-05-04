@@ -25,10 +25,10 @@ variables:
   # Optional: used for extra health probing (e.g. pano service). Not required for PRO materialization.
   NUTONIC_INFERENCE_WORKER_BASE_URL: "https://Tonic-nutonic-streetview-pano.hf.space"
   # Keep model bytes out of Git, Git LFS, and the HF Space repo. The client downloads and verifies this URL.
-  NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL: "https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/main/model.safetensors"
+  NUTONIC_PRO_VLM_MODEL_DOWNLOAD_URL: "https://huggingface.co/NuTonic/lspace/resolve/3ec756bfc8a94fcb23801fe6925d832ab35595f2/model.safetensors"
   NUTONIC_PRO_VLM_MODEL_BUNDLE_ID: "NuTonic/lspace"
-  NUTONIC_PRO_VLM_MODEL_REVISION: "main"
-  NUTONIC_PRO_VLM_MODEL_SHA256: "2f6deb5dd43707de5cfe3c59470d3bccf4c3112a810a74570499f4728d412eea"
+  NUTONIC_PRO_VLM_MODEL_REVISION: "3ec756bfc8a94fcb23801fe6925d832ab35595f2"
+  NUTONIC_PRO_VLM_MODEL_SHA256: "7e9ae0b2225c8755eb68924aa97f81c0826678f77f7832aa81c8398f5439cf5c"
   NUTONIC_PRO_VLM_MODEL_SIZE_BYTES: "897484568"
   NUTONIC_PRO_VLM_MODEL_RUNTIME: "leap"
   # Reference client + PRO dashboard submit sentinel-only jobs (`nutonic.pro.vlm.v1_512_s2_only`).

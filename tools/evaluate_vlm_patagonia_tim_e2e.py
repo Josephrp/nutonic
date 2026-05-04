@@ -5,7 +5,7 @@ Standalone Patagonia evaluation with local TerraMind TiM artifacts.
 Outputs a publishable run directory containing:
 - fetched reference stills (STAC Sentinel-2 by default, or Mapbox via ``--still-source mapbox``)
 - local TiM export JSONL generated on-device via torch/TerraTorch
-- per-target prompt records with the TiM JSON injected in the user turn
+- per-target prompt records with the TiM JSON injected in the user turn (SFT **production_analysis** layout + system message; see ``patagonia_eval_sft_prompts``)
 - **local** TerraMind TiM via ``nutonic_terramind_tim_local.run.run_tim_batch_export`` (in-process PyTorch;
   Sentinel-2 STAC inputs; no remote TiM API). Device defaults to **auto** (CUDA → MPS → CPU).
 - **local** Transformers VLMs (default: **NuTonic/lspace** vs **LiquidAI/LFM2.5-VL-450M**; override with
@@ -67,6 +67,11 @@ from evaluate_vlm_patagonia import (  # noqa: E402
     resolve_patagonia_eval_endpoints,
     write_patagonia_eval_still,
     write_patagonia_per_model_artifacts,
+)
+from patagonia_eval_sft_prompts import (  # noqa: E402
+    PRODUCTION_ANALYSIS_SYSTEM,
+    build_production_tim_user_prompt,
+    compact_tim_for_production_prompt,
 )
 
 try:
@@ -222,23 +227,6 @@ def _run_local_tim(
     return by_id
 
 
-def _compact_tim_for_prompt(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "tim_modality_outputs": row.get("tim_modality_outputs") or {},
-        "profile_analytics": row.get("profile_analytics") or {},
-    }
-
-
-def _prompt_text(tim_row: dict[str, Any]) -> str:
-    compact = _compact_tim_for_prompt(tim_row)
-    return (
-        "Review the provided satellite imagery and the provided analytics JSON. "
-        "Use the JSON as auxiliary context, and put any comparisons or change interpretation in your response.\n\n"
-        f"Provided analytics JSON:\n{_json_dumps(compact)}\n\n"
-        "Describe the visible land-cover pattern and summarize any relevant change or risk indicated by the provided analytics."
-    )
-
-
 def _load_local_vlm(model_id: str, *, device: str, dtype: str) -> tuple[Any, Any]:
     try:
         import torch
@@ -267,11 +255,17 @@ def _local_vlm_caption(
     image_path: Path,
     prompt: str,
     max_new_tokens: int,
+    system_text: str | None = None,
 ) -> str:
     import torch
 
     image = Image.open(image_path).convert("RGB")
-    conversation = [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}]
+    conversation: list[dict[str, Any]] = []
+    if system_text:
+        conversation.append({"role": "system", "content": system_text})
+    conversation.append(
+        {"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": prompt}]}
+    )
     inputs = processor.apply_chat_template(
         conversation,
         add_generation_prompt=True,
@@ -526,7 +520,11 @@ def main(argv: list[str] | None = None) -> int:
     prompt_by_id: dict[str, str] = {}
     for t in targets:
         tim_row = tim_by_id.get(t.target_id) or {}
-        prompt = _prompt_text(tim_row)
+        profile = str(tim_row.get("analysis_profile") or _target_profile(t)).strip()
+        prompt = build_production_tim_user_prompt(
+            analysis_profile=profile,
+            tim_compact_json=compact_tim_for_production_prompt(tim_row),
+        )
         prompt_by_id[t.target_id] = prompt
         _append_jsonl(
             prompts_path,
@@ -534,7 +532,7 @@ def main(argv: list[str] | None = None) -> int:
                 "target_id": t.target_id,
                 "image_path": target_records[t.target_id]["image_path"],
                 "prompt": prompt,
-                "tim": _compact_tim_for_prompt(tim_row),
+                "tim": compact_tim_for_production_prompt(tim_row),
             },
         )
 
@@ -604,6 +602,7 @@ def main(argv: list[str] | None = None) -> int:
                         image_path=Path(target_records[t.target_id]["image_path"]),
                         prompt=prompt_by_id[t.target_id],
                         max_new_tokens=args.max_new_tokens,
+                        system_text=PRODUCTION_ANALYSIS_SYSTEM,
                     )
                     rec["caption"] = caption
                     rec.update(_score_result(caption, t, args.score_threshold))
@@ -646,10 +645,12 @@ def main(argv: list[str] | None = None) -> int:
                 "expected_hf_models": patagonia_comparison_hf_model_ids(),
                 "notes": (
                     "TiM runs in-process (run_tim_batch_export); VLM runs locally by default (Transformers) "
-                    "with TiM JSON in the prompt. Override ids with NUTONIC_PATAGONIA_EVAL_*_MODEL_ID. "
+                    "with TiM JSON in the prompt. Local VLM uses SFT-aligned production_analysis system + user "
+                    "layout (see patagonia_eval_sft_prompts). Override ids with NUTONIC_PATAGONIA_EVAL_*_MODEL_ID. "
                     "Optional HTTP /v1/infer: --endpoint or NUTONIC_PATAGONIA_EVAL_ENABLE_HTTP=1."
                 ),
             },
+            "vlm_prompt_style": "sft_production_analysis",
         },
         "targets": target_records,
         "summary_by_model": _summarize(results),
@@ -672,6 +673,7 @@ def main(argv: list[str] | None = None) -> int:
                 "local_vlm_runs": payload["meta"]["local_vlm_runs"],
                 "http_endpoints": dict(endpoints),
                 "out_dir": str(out_dir),
+                "vlm_prompt_style": payload["meta"]["vlm_prompt_style"],
             },
             indent=2,
             ensure_ascii=False,

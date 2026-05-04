@@ -4,7 +4,7 @@ package com.nutonic.pro
  * Canonical PRO / VLM prompt prose aligned with post-training SFT and Python workers.
  *
  * **Source of truth (keep in lockstep):** `data/scripts/lfm_vl_sft_dataset/pro_prompts.py`
- * (`SYSTEM_*`, `PRO_*`, `BRIEF_*`). Inference brief fuse mirrors assessment rules in
+ * (`SYSTEM_*`, `PRODUCTION_ANALYSIS_SYSTEM`, `PRO_*`, `BRIEF_*`). Inference brief fuse mirrors assessment rules in
  * `inference/lfm_vl_hint_service/prompts.py`.
  */
 object ProModelPromptContract {
@@ -16,6 +16,13 @@ object ProModelPromptContract {
     const val SYSTEM_OPTICAL_LIMITS: String =
         "This is optical-only observation. Avoid certainty claims beyond visible evidence, " +
             "and state confidence and limitations where appropriate."
+
+    /** Matches ``lfm_vl_sft_dataset.pro_prompts.PRODUCTION_ANALYSIS_SYSTEM`` / Patagonia TiM E2E eval system turn. */
+    val PRODUCTION_ANALYSIS_SYSTEM: String =
+        "$SYSTEM_GEOSPATIAL_ANALYST $SYSTEM_OPTICAL_LIMITS " +
+            "You receive Sentinel-2 imagery plus a compact TiM-style analytics JSON block (model-shaped signals). " +
+            "Write an analytical summary grounded in the images and that JSON; distinguish what you infer from " +
+            "the optical chip from TiM-predicted signals encoded in the JSON."
 
     val SYSTEM_ASSESSMENT: String =
         "$SYSTEM_GEOSPATIAL_ANALYST $SYSTEM_OPTICAL_LIMITS " +

@@ -55,7 +55,8 @@ internal class IosLeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
         withContext(Dispatchers.Default) {
             val r = runner ?: return@withContext ProOnDeviceVlmRunResult.Failed("PRO VLM is not prepared")
             try {
-                val systemPreamble = ProModelPromptContract.LEAP_CHAT_SYSTEM_PREAMBLE
+                val systemPreamble =
+                    input.leapSystemPreamble ?: ProModelPromptContract.LEAP_CHAT_SYSTEM_PREAMBLE
                 val conversation = r.createConversation(systemPreamble)
                 val contents =
                     buildList {

@@ -38,6 +38,11 @@ from nutonic_server.jwt_tokens import decode_round_ticket, issue_round_ticket, i
 from nutonic_server.leaderboard_store import LeaderboardRow, create_leaderboard_store
 from nutonic_server.pro_jobs_runner import ProJobRunner
 from nutonic_server.pro_jobs_store import ProJobRecord, ProJobStore
+from nutonic_server.production_analysis_prompt import (
+    PRODUCTION_ANALYSIS_SYSTEM,
+    build_production_tim_user_prompt,
+    compact_tim_from_summary,
+)
 from nutonic_server.ranked_store import create_ranked_store
 from nutonic_server.schemas import (
     CacheManifestOut,
@@ -665,7 +670,13 @@ def _pro_status_out(row: ProJobRecord, settings: Settings) -> ProJobStatusOut:
         analysis_artifacts=analysis_artifacts,
         brief_artifacts=brief_artifacts,
         scene_provenance=row.scene_provenance or None,
-        on_device_payload=_on_device_payload(settings, materialization_summary, artifacts, analysis_artifacts),
+        on_device_payload=_on_device_payload(
+            settings,
+            materialization_summary,
+            artifacts,
+            analysis_artifacts,
+            job_analysis_profile=row.analysis_profile,
+        ),
         bundle_download_url=_pro_bundle_download_url(row),
         materialization_id=row.materialization_id,
         cache_key=row.cache_key,
@@ -845,6 +856,8 @@ def _on_device_payload(
     materialization_summary: dict[str, object] | None,
     artifacts: list[ProArtifactRef],
     analysis_artifacts: list[ProArtifactRef],
+    *,
+    job_analysis_profile: str | None = None,
 ) -> ProOnDevicePayload | None:
     if not materialization_summary:
         return None
@@ -877,7 +890,10 @@ def _on_device_payload(
         overlay_refs=analysis_artifacts[:4],
         confidence_summary=conf_summary,
         vlm_image_set=image_set,
-        vlm_prompt_injection=_vlm_prompt_injection(materialization_summary),
+        vlm_prompt_injection=_vlm_prompt_injection(
+            materialization_summary,
+            job_analysis_profile=job_analysis_profile,
+        ),
         on_device_model_hint=settings.pro_vlm_model_runtime.strip() or "leap",
         model_bundle_id=_pro_vlm_model_bundle_id(settings),
     )
@@ -929,13 +945,31 @@ def _tim_context_block_text(tim_summary: dict[str, Any] | None) -> str:
     return "- TerraMind / TiM context (capped JSON, model evidence only):\n" + body
 
 
-def _vlm_prompt_injection(materialization_summary: dict[str, object]) -> dict[str, object]:
-    """On-device VLM: ``tim_context_block`` uses training-matched prettified TiM JSON (``ensure_ascii=False``, indent=2)."""
-    run_manifest = materialization_summary.get("run_manifest")
-    tim_summary = materialization_summary.get("tim_summary")
+def _vlm_prompt_injection(
+    materialization_summary: dict[str, object] | None,
+    *,
+    job_analysis_profile: str | None = None,
+) -> dict[str, object]:
+    """On-device VLM: legacy ``tim_context_block`` plus SFT ``production_analysis`` user text (matches Patagonia eval)."""
+    ms = materialization_summary if isinstance(materialization_summary, dict) else None
+    run_manifest = ms.get("run_manifest") if ms else None
+    tim_summary = ms.get("tim_summary") if ms else None
     ts_dict = tim_summary if isinstance(tim_summary, dict) else None
+    mat_profile = ms.get("analysis_profile") if ms else None
+    profile = (
+        (job_analysis_profile or "").strip()
+        or (str(mat_profile).strip() if isinstance(mat_profile, str) else "")
+        or "brief_only"
+    )
+    tim_compact = compact_tim_from_summary(ts_dict)
+    production_user = build_production_tim_user_prompt(analysis_profile=profile, tim_compact_json=tim_compact)
     return {
         "product": "NU:TONIC PRO",
+        "vlm_prompt_style": "sft_production_analysis",
+        "analysis_profile": profile,
+        "production_analysis_system": PRODUCTION_ANALYSIS_SYSTEM,
+        "production_tim_user_prompt": production_user,
+        "tim_compact_json": tim_compact,
         "run_manifest": run_manifest if isinstance(run_manifest, dict) else {},
         "tim_context_block": _tim_context_block_text(ts_dict),
     }

@@ -3,7 +3,8 @@
 Patagonia-focused VLM evaluator (Los Alerces + marine reserves + control targets).
 
 What it does:
-1) Fetches Mapbox Satellite stills for curated Patagonia targets.
+1) Fetches reference stills per target — default **Sentinel-2 via Earth Search STAC** (see
+   ``data/scripts/stac_reference_still.py``), or Mapbox Satellite static images via ``--still-source mapbox``.
 2) Sends each image to one or more VLM endpoints (NU:TONIC satellite /v1/infer contract).
 3) Scores captions against target-specific expected concepts.
 4) Writes a machine-readable JSON report and prints a concise console summary.
@@ -24,7 +25,9 @@ import hashlib
 import json
 import os
 import re
+import sys
 from dataclasses import dataclass, field
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +36,11 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise SystemExit("Install httpx first: pip install httpx") from exc
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_DATA_SCRIPTS = REPO_ROOT / "data" / "scripts"
+if str(_DATA_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_DATA_SCRIPTS))
+
 DEFAULT_REPORT_DIR = REPO_ROOT / "data" / "downloads" / "evals"
 DEFAULT_IMAGE_CACHE_DIR = DEFAULT_REPORT_DIR / "patagonia_stills"
 
@@ -61,6 +67,61 @@ def _default_satellite_endpoint() -> str:
         return direct.rstrip("/")
     repo_id = (os.environ.get("NUTONIC_LFM_VL_SATELLITE_REPO_ID") or "").strip()
     return _space_url_from_repo_id(repo_id).rstrip("/") if repo_id else ""
+
+
+def patagonia_comparison_hf_model_ids() -> dict[str, str]:
+    """HF hub ids for finetune vs base satellite VLMs (local eval or one model per Space)."""
+    return {
+        "finetune": (os.environ.get("NUTONIC_PATAGONIA_EVAL_FINETUNE_MODEL_ID") or "NuTonic/lsat").strip(),
+        "base": (os.environ.get("NUTONIC_PATAGONIA_EVAL_BASE_MODEL_ID") or "LiquidAI/LFM2.5-VL-450M").strip(),
+    }
+
+
+def resolve_patagonia_eval_endpoints(cli_endpoints: list[str]) -> list[tuple[str, str]]:
+    """
+    VLM /v1/infer endpoints for Patagonia eval.
+
+    1) If ``cli_endpoints`` is non-empty, use those (``--endpoint name=url`` or URL only; repeatable).
+    2) Else if both ``NUTONIC_PATAGONIA_EVAL_FINETUNE_URL`` and ``NUTONIC_PATAGONIA_EVAL_BASE_URL`` are set,
+       return two named endpoints: **finetune** (``NuTonic/lsat``) and **base** (``LiquidAI/LFM2.5-VL-450M`` by default).
+    3) Else fall back to a single default from ``NUTONIC_LFM_VL_SATELLITE_URL`` or
+       ``NUTONIC_LFM_VL_SATELLITE_REPO_ID`` (HF Space).
+    """
+    if cli_endpoints:
+        return _parse_endpoints(cli_endpoints, "")
+    ft = (os.environ.get("NUTONIC_PATAGONIA_EVAL_FINETUNE_URL") or "").strip().rstrip("/")
+    bs = (os.environ.get("NUTONIC_PATAGONIA_EVAL_BASE_URL") or "").strip().rstrip("/")
+    if ft and bs:
+        return [("finetune", ft), ("base", bs)]
+    return _parse_endpoints([], _default_satellite_endpoint())
+
+
+def write_patagonia_per_model_artifacts(
+    out_dir: Path,
+    *,
+    results: list[dict[str, Any]],
+    summary_by_model: dict[str, dict[str, Any]],
+    name_field: str,
+) -> None:
+    """
+    Write ``out_dir/models/<role>/predictions.jsonl`` and ``summary.json`` for each key in
+    ``summary_by_model`` (e.g. ``finetune`` / ``base`` from endpoint names).
+    """
+    if not summary_by_model:
+        return
+    models_root = out_dir / "models"
+    models_root.mkdir(parents=True, exist_ok=True)
+    for role in summary_by_model:
+        safe = _sanitize_filename(role) or "model"
+        sub = models_root / safe
+        sub.mkdir(parents=True, exist_ok=True)
+        rows = [r for r in results if r.get(name_field) == role]
+        body = "\n".join(json.dumps(r, ensure_ascii=False) for r in rows)
+        (sub / "predictions.jsonl").write_text(body + ("\n" if body else ""), encoding="utf-8")
+        (sub / "summary.json").write_text(
+            json.dumps(summary_by_model[role], indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
 
 @dataclass(frozen=True)
@@ -293,6 +354,19 @@ def _sanitize_filename(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("_")
 
 
+def resolve_local_vlm_comparison_runs(cli_local_models: list[str]) -> list[tuple[str, str]]:
+    """
+    Local TiM-in-prompt VLM runs as ``(model_name, hf_model_id)``.
+
+    If ``cli_local_models`` is non-empty, each entry is ``(sanitize(id), id)``.
+    If empty, returns **finetune** and **base** from ``patagonia_comparison_hf_model_ids()`` (default comparison).
+    """
+    if cli_local_models:
+        return [(_sanitize_filename(mid) or "model", mid.strip()) for mid in cli_local_models if mid.strip()]
+    ids = patagonia_comparison_hf_model_ids()
+    return [("finetune", ids["finetune"]), ("base", ids["base"])]
+
+
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -342,6 +416,104 @@ def _mapbox_static_png(
     if "image/" not in ctype:
         raise RuntimeError(f"Mapbox returned non-image content-type {ctype or '<missing>'}: {r.text[:200]}")
     return r.content
+
+
+def _patagonia_still_cache_basename(t: EvalTarget, pixel_size: int, still_source: str) -> str:
+    if still_source == "mapbox":
+        return _sanitize_filename(f"{t.target_id}_z{t.zoom}_s{pixel_size}_{t.lat:.4f}_{t.lon:.4f}.png")
+    return _sanitize_filename(f"{t.target_id}_stac_s{pixel_size}_{t.lat:.4f}_{t.lon:.4f}.png")
+
+
+def patagonia_still_png_bytes(
+    client: httpx.Client,
+    *,
+    target: EvalTarget,
+    pixel_size: int,
+    still_source: str,
+    mapbox_token: str,
+    stac_url: str,
+    stac_collection: str,
+    stac_bbox_half_km: float | None,
+    stac_max_cloud: float | None,
+    stac_max_items: int | None,
+    stac_datetime: str,
+) -> tuple[bytes, dict[str, Any]]:
+    """
+    RGB PNG bytes for one Patagonia eval target + small provenance dict (STAC item meta when applicable).
+    """
+    prov: dict[str, Any] = {"still_source": still_source}
+    if still_source == "mapbox":
+        raw = _mapbox_static_png(
+            client,
+            token=mapbox_token,
+            lat=target.lat,
+            lon=target.lon,
+            zoom=target.zoom,
+            size=pixel_size,
+        )
+        return raw, prov
+    if still_source == "stac":
+        from stac_reference_still import fetch_sentinel_reference_still
+
+        dt_arg = stac_datetime.strip()
+        im, st_meta = fetch_sentinel_reference_still(
+            target.lat,
+            target.lon,
+            width_px=pixel_size,
+            height_px=pixel_size,
+            stac_url=stac_url.strip() or None,
+            collection=stac_collection.strip() or None,
+            bbox_half_km=stac_bbox_half_km,
+            max_cloud=stac_max_cloud,
+            max_items=stac_max_items,
+            datetime_range=dt_arg or None,
+        )
+        buf = BytesIO()
+        im.convert("RGB").save(buf, format="PNG")
+        prov.update(st_meta)
+        return buf.getvalue(), prov
+
+    raise ValueError(f"Unknown --still-source {still_source!r} (expected mapbox or stac)")
+
+
+def write_patagonia_eval_still(
+    *,
+    client: httpx.Client,
+    cache_dir: Path,
+    target: EvalTarget,
+    pixel_size: int,
+    refresh: bool,
+    still_source: str,
+    mapbox_token: str,
+    stac_url: str,
+    stac_collection: str,
+    stac_bbox_half_km: float | None,
+    stac_max_cloud: float | None,
+    stac_max_items: int | None,
+    stac_datetime: str,
+) -> tuple[Path, bytes, dict[str, Any]]:
+    """Write or reuse a cached PNG; returns path, bytes, provenance."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    img_name = _patagonia_still_cache_basename(target, pixel_size, still_source)
+    img_path = cache_dir / img_name
+    if img_path.is_file() and img_path.stat().st_size > 0 and not refresh:
+        return img_path, img_path.read_bytes(), {"still_source": still_source, "cached": True}
+    image_bytes, prov = patagonia_still_png_bytes(
+        client,
+        target=target,
+        pixel_size=pixel_size,
+        still_source=still_source,
+        mapbox_token=mapbox_token,
+        stac_url=stac_url,
+        stac_collection=stac_collection,
+        stac_bbox_half_km=stac_bbox_half_km,
+        stac_max_cloud=stac_max_cloud,
+        stac_max_items=stac_max_items,
+        stac_datetime=stac_datetime,
+    )
+    prov["cached"] = False
+    img_path.write_bytes(image_bytes)
+    return img_path, image_bytes, prov
 
 
 def _infer_caption(
@@ -471,10 +643,43 @@ def main(argv: list[str] | None = None) -> int:
         "--endpoint",
         action="append",
         default=[],
-        help="VLM endpoint as URL or name=url (repeatable). Default from NUTONIC_LFM_VL_SATELLITE_URL.",
+        help=(
+            "VLM endpoint as URL or name=url (repeatable). If omitted: use "
+            "NUTONIC_PATAGONIA_EVAL_FINETUNE_URL + NUTONIC_PATAGONIA_EVAL_BASE_URL for finetune vs base "
+            "(NuTonic/lsat vs LiquidAI/LFM2.5-VL-450M), else NUTONIC_LFM_VL_SATELLITE_URL / REPO_ID."
+        ),
     )
-    p.add_argument("--mapbox-token", default=(os.environ.get("MAPBOX_ACCESS_TOKEN") or ""), help="Mapbox token (default env MAPBOX_ACCESS_TOKEN).")
-    p.add_argument("--mapbox-size", type=int, default=640, help="Mapbox static image size (square).")
+    p.add_argument(
+        "--still-source",
+        choices=("mapbox", "stac"),
+        default="stac",
+        help="Reference imagery: Sentinel-2 via Earth Search STAC (default), or Mapbox Satellite static API.",
+    )
+    p.add_argument("--mapbox-token", default=(os.environ.get("MAPBOX_ACCESS_TOKEN") or ""), help="Mapbox token when --still-source mapbox (env MAPBOX_ACCESS_TOKEN).")
+    p.add_argument(
+        "--mapbox-size",
+        type=int,
+        default=640,
+        help="Square edge length in pixels for both Mapbox static tiles and STAC-derived thumbnails.",
+    )
+    p.add_argument(
+        "--stac-still-url",
+        default="",
+        help="STAC API root when --still-source stac (default: Earth Search or NUTONIC_STAC_STILL_URL).",
+    )
+    p.add_argument(
+        "--stac-still-collection",
+        default="",
+        help="STAC collection id (default: sentinel-2-l2a or NUTONIC_STAC_STILL_COLLECTION).",
+    )
+    p.add_argument("--stac-still-bbox-half-km", type=float, default=14.0, help="STAC search bbox half-extent in km.")
+    p.add_argument("--stac-still-max-cloud", type=float, default=80.0, help="STAC eo:cloud_cover upper bound (strict <).")
+    p.add_argument("--stac-still-max-items", type=int, default=30, help="Max STAC items to consider per target.")
+    p.add_argument(
+        "--stac-still-datetime",
+        default="",
+        help="STAC datetime range, e.g. 2025-11-01/2026-04-30 (default: wide window or NUTONIC_STAC_STILL_DATETIME).",
+    )
     p.add_argument("--timeout", type=float, default=45.0, help="HTTP timeout seconds.")
     p.add_argument("--ranked-clue-safe", action="store_true", help="Use ranked-safe prompt mode in /v1/infer.")
     p.add_argument("--score-threshold", type=float, default=0.55, help="Pass threshold for per-target score.")
@@ -484,7 +689,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--list-targets", action="store_true", help="Print targets and exit.")
     p.add_argument("--report-path", default="", help="Optional output report path (.json).")
     p.add_argument("--image-cache-dir", default=str(DEFAULT_IMAGE_CACHE_DIR), help="Directory to store fetched still images.")
-    p.add_argument("--refresh-images", action="store_true", help="Re-fetch Mapbox stills even if cached files exist.")
+    p.add_argument("--refresh-images", action="store_true", help="Re-fetch stills even if cached PNGs exist.")
     p.add_argument("--skip-health-check", action="store_true", help="Skip GET /health on VLM endpoints before inference.")
     p.add_argument("--strict", action="store_true", help="Exit non-zero if any endpoint call errors or any scored target fails threshold.")
     args = p.parse_args(argv)
@@ -507,14 +712,14 @@ def main(argv: list[str] | None = None) -> int:
     if not targets:
         raise SystemExit("No targets selected after filtering.")
 
-    token = args.mapbox_token.strip()
-    if not token:
-        raise SystemExit("MAPBOX_ACCESS_TOKEN is required (or pass --mapbox-token).")
+    if args.still_source == "mapbox" and not args.mapbox_token.strip():
+        raise SystemExit("MAPBOX_ACCESS_TOKEN is required for --still-source mapbox (or pass --mapbox-token).")
 
-    endpoints = _parse_endpoints(args.endpoint, _default_satellite_endpoint())
+    endpoints = resolve_patagonia_eval_endpoints(args.endpoint)
     if not endpoints:
         raise SystemExit(
             "No endpoint configured. Pass --endpoint name=url (or URL), "
+            "or set NUTONIC_PATAGONIA_EVAL_FINETUNE_URL + NUTONIC_PATAGONIA_EVAL_BASE_URL, "
             "or set NUTONIC_LFM_VL_SATELLITE_URL."
         )
     cache_dir = Path(args.image_cache_dir).resolve()
@@ -522,25 +727,28 @@ def main(argv: list[str] | None = None) -> int:
 
     results: list[TargetResult] = []
     endpoint_health: dict[str, dict[str, Any]] = {}
+    still_provenance: dict[str, Any] = {}
     with httpx.Client(timeout=httpx.Timeout(args.timeout), follow_redirects=True) as client:
         if not args.skip_health_check:
             endpoint_health = {ep_name: _check_endpoint_health(client, ep_url) for ep_name, ep_url in endpoints}
 
         for t in targets:
-            img_name = _sanitize_filename(f"{t.target_id}_z{t.zoom}_s{args.mapbox_size}_{t.lat:.4f}_{t.lon:.4f}.png")
-            img_path = cache_dir / img_name
-            if img_path.is_file() and img_path.stat().st_size > 0 and not args.refresh_images:
-                image_bytes = img_path.read_bytes()
-            else:
-                image_bytes = _mapbox_static_png(
-                    client,
-                    token=token,
-                    lat=t.lat,
-                    lon=t.lon,
-                    zoom=t.zoom,
-                    size=args.mapbox_size,
-                )
-                img_path.write_bytes(image_bytes)
+            img_path, image_bytes, st_prov = write_patagonia_eval_still(
+                client=client,
+                cache_dir=cache_dir,
+                target=t,
+                pixel_size=args.mapbox_size,
+                refresh=bool(args.refresh_images),
+                still_source=args.still_source,
+                mapbox_token=args.mapbox_token.strip(),
+                stac_url=args.stac_still_url,
+                stac_collection=args.stac_still_collection,
+                stac_bbox_half_km=args.stac_still_bbox_half_km,
+                stac_max_cloud=args.stac_still_max_cloud,
+                stac_max_items=args.stac_still_max_items,
+                stac_datetime=args.stac_still_datetime,
+            )
+            still_provenance[t.target_id] = st_prov
             image_sha = _sha256_bytes(image_bytes)
 
             for ep_name, ep_url in endpoints:
@@ -603,8 +811,25 @@ def main(argv: list[str] | None = None) -> int:
             "generated_at_utc": dt.datetime.now(dt.UTC).isoformat(),
             "ranked_clue_safe": bool(args.ranked_clue_safe),
             "score_threshold": args.score_threshold,
+            "still_source": args.still_source,
             "mapbox_size": args.mapbox_size,
+            "stac_still": {
+                "stac_still_url": args.stac_still_url,
+                "stac_still_collection": args.stac_still_collection,
+                "stac_still_bbox_half_km": args.stac_still_bbox_half_km,
+                "stac_still_max_cloud": args.stac_still_max_cloud,
+                "stac_still_max_items": args.stac_still_max_items,
+                "stac_still_datetime": args.stac_still_datetime,
+            },
+            "still_provenance_by_target": still_provenance,
             "target_count": len(targets),
+            "comparison_expectations": {
+                "expected_hf_models": patagonia_comparison_hf_model_ids(),
+                "notes": (
+                    "Deploy one HF Space per listed URL; each Space should load the matching weights. "
+                    "Response ``model_id`` should reflect the loaded checkpoint."
+                ),
+            },
             "endpoint_health": endpoint_health,
             "targets": [
                 {

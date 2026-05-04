@@ -157,42 +157,61 @@ def fetch_sentinel_reference_still(
     *,
     width_px: int,
     height_px: int,
+    stac_url: str | None = None,
+    collection: str | None = None,
+    bbox_half_km: float | None = None,
+    max_cloud: float | None = None,
+    max_items: int | None = None,
+    datetime_range: str | None = None,
 ) -> tuple[Image.Image, dict[str, Any]]:
     """
     Return an RGB PIL image and metadata for one catalog point.
+
+    Optional ``stac_url``, ``collection``, ``bbox_half_km``, ``max_cloud``, ``max_items``, and
+    ``datetime_range`` override ``NUTONIC_STAC_STILL_*`` environment variables (see module docstring).
 
     Raises ``RuntimeError`` if no usable STAC scene was found or decoded.
     """
     from pystac_client import Client
 
-    stac_url = (os.environ.get("NUTONIC_STAC_STILL_URL") or "").strip() or "https://earth-search.aws.element84.com/v1"
-    collection = (os.environ.get("NUTONIC_STAC_STILL_COLLECTION") or "").strip() or "sentinel-2-l2a"
-    half_km = float((os.environ.get("NUTONIC_STAC_STILL_BBOX_HALF_KM") or "12.0").strip())
-    max_cloud = float((os.environ.get("NUTONIC_STAC_STILL_MAX_CLOUD") or "85.0").strip())
-    max_items = int((os.environ.get("NUTONIC_STAC_STILL_MAX_ITEMS") or "30").strip())
-    dt_raw = (os.environ.get("NUTONIC_STAC_STILL_DATETIME") or "").strip()
-    datetime_range = dt_raw if dt_raw else _default_datetime_window()
+    stac_url_resolved = (stac_url or "").strip() or (os.environ.get("NUTONIC_STAC_STILL_URL") or "").strip()
+    stac_url_resolved = stac_url_resolved or "https://earth-search.aws.element84.com/v1"
+    collection_resolved = (collection or "").strip() or (os.environ.get("NUTONIC_STAC_STILL_COLLECTION") or "").strip()
+    collection_resolved = collection_resolved or "sentinel-2-l2a"
+    half_km = bbox_half_km
+    if half_km is None:
+        half_km = float((os.environ.get("NUTONIC_STAC_STILL_BBOX_HALF_KM") or "12.0").strip())
+    max_cloud_resolved = max_cloud
+    if max_cloud_resolved is None:
+        max_cloud_resolved = float((os.environ.get("NUTONIC_STAC_STILL_MAX_CLOUD") or "85.0").strip())
+    max_items_resolved = max_items
+    if max_items_resolved is None:
+        max_items_resolved = int((os.environ.get("NUTONIC_STAC_STILL_MAX_ITEMS") or "30").strip())
+    dt_raw = (datetime_range or "").strip()
+    if not dt_raw:
+        dt_raw = (os.environ.get("NUTONIC_STAC_STILL_DATETIME") or "").strip()
+    datetime_range_resolved = dt_raw if dt_raw else _default_datetime_window()
 
     bbox = bbox_around_point(lon, lat, half_km)
-    client = Client.open(stac_url)
+    client = Client.open(stac_url_resolved)
     search = client.search(
-        collections=[collection],
+        collections=[collection_resolved],
         bbox=list(bbox),
-        datetime=datetime_range,
-        max_items=max_items,
-        query={"eo:cloud_cover": {"lt": max_cloud}},
+        datetime=datetime_range_resolved,
+        max_items=max_items_resolved,
+        query={"eo:cloud_cover": {"lt": max_cloud_resolved}},
     )
     items = [it for it in search.items() if it.datetime is not None]
     if not items:
         raise RuntimeError(
-            f"No STAC items for lon={lon:.5f} lat={lat:.5f} in {datetime_range} "
-            f"(collection={collection}, max_cloud<{max_cloud}).",
+            f"No STAC items for lon={lon:.5f} lat={lat:.5f} in {datetime_range_resolved} "
+            f"(collection={collection_resolved}, max_cloud<{max_cloud_resolved}).",
         )
 
     items.sort(key=lambda it: float(it.properties.get("eo:cloud_cover", 999.0)))
 
     sess = _session()
-    base_meta: dict[str, Any] = {"stac_url": stac_url, "collection": collection}
+    base_meta: dict[str, Any] = {"stac_url": stac_url_resolved, "collection": collection_resolved}
     for it in items:
         row_meta = {
             **base_meta,

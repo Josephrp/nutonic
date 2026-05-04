@@ -121,7 +121,7 @@ android {
     sourceSets["main"].assets.srcDirs("src/androidMain/assets")
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 31
         buildConfigField("String", "NUTONIC_CLIENT_VERSION", "\"1.0-SNAPSHOT\"")
     }
     buildFeatures {

@@ -28,8 +28,9 @@ internal class LeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
             require(bundleBytes.isNotEmpty()) { "Model bundle is empty" }
         }
         val ctx =
-            AndroidNutonicAppContext.application
-                ?: throw IllegalStateException("Application context is not set; cannot load Liquid Leap VLM")
+            checkNotNull(AndroidNutonicAppContext.application) {
+                "Application context is not set; cannot load Liquid Leap VLM"
+            }
         val modelName = LiquidLeapModelIds.modelName(cacheRecord)
         val quant = LiquidLeapModelIds.quantization(cacheRecord)
         val key = "$modelName|$quant"

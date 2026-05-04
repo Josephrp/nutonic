@@ -188,78 +188,178 @@ class ProOnDeviceVlmCoordinator(
         return out.also(onStatus)
     }
 
-    @Suppress("NestedBlockDepth")
     private suspend fun prepareModel(
         preferredModelBundleId: String?,
         onStatus: (ProVlmStatus) -> Unit,
     ): ApiResult<ProVlmCacheRecord> {
         val cached = modelCache.load()?.takeIf { preferredModelBundleId == null || it.modelBundleId == preferredModelBundleId }
+        prepareModelFromCache(cached)?.let { return it }
+        return prepareModelFromManifest(preferredModelBundleId, onStatus)
+    }
+
+    private suspend fun prepareModelFromCache(
+        cached: ProVlmCacheRecord?,
+    ): ApiResult<ProVlmCacheRecord>? {
+        if (cached == null) return null
+        tryPrepareCachedLeapStub(cached)?.let { return it }
+        tryPrepareCachedLeapEngine(cached)?.let { return it }
+        return tryPrepareCachedBundledOrVerified(cached)
+    }
+
+    private suspend fun tryPrepareCachedLeapStub(
+        cached: ProVlmCacheRecord,
+    ): ApiResult<ProVlmCacheRecord>? {
         val stubEngine = engine as? DeterministicProOnDeviceVlmEngine
-        if (cached != null &&
-            cached.runtime.equals("leap", ignoreCase = true) &&
-            stubEngine != null &&
-            stubEngine.stubPrepareAllowed
+        if (!cached.runtime.equals("leap", ignoreCase = true) ||
+            stubEngine == null ||
+            !stubEngine.stubPrepareAllowed
         ) {
+            return null
+        }
+        return try {
+            stubEngine.prepareModel(cached, null)
+            ApiResult.Ok(cached)
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: "Web VLM stub prepare failed")
+        }
+    }
+
+    private suspend fun tryPrepareCachedLeapEngine(
+        cached: ProVlmCacheRecord,
+    ): ApiResult<ProVlmCacheRecord>? {
+        if (!cached.runtime.equals("leap", ignoreCase = true) || !supportsLiquidLeapOnDeviceVlm()) {
+            return null
+        }
+        return try {
+            engine.prepareModel(cached, null)
+            ApiResult.Ok(cached)
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: "Liquid Leap VLM prepare failed")
+        }
+    }
+
+    private suspend fun tryPrepareCachedBundledOrVerified(
+        cached: ProVlmCacheRecord,
+    ): ApiResult<ProVlmCacheRecord>? {
+        val bundledBytes = loadBundledProVlmModelBytes(cached)
+        if (bundledBytes != null) {
+            engine.prepareModel(cached, bundledBytes)
+            return ApiResult.Ok(cached)
+        }
+        if (proVlmVerifiedBundleExists(cached)) {
+            engine.prepareModel(cached, null)
+            return ApiResult.Ok(cached)
+        }
+        return null
+    }
+
+    private suspend fun prepareModelFromManifest(
+        preferredModelBundleId: String?,
+        onStatus: (ProVlmStatus) -> Unit,
+    ): ApiResult<ProVlmCacheRecord> {
+        val manifestResult = apiClient.getProVlmModelManifest(bearerAccessToken)
+        val manifest = (manifestResult as? ApiResult.Ok)?.value
+        if (manifest == null) {
+            return when (manifestResult) {
+                is ApiResult.HttpFailure -> manifestResult
+                is ApiResult.NetworkFailure -> manifestResult
+                is ApiResult.Ok -> ApiResult.NetworkFailure("Unable to parse model manifest")
+            }
+        }
+        if (preferredModelBundleId != null && manifest.modelBundleId != preferredModelBundleId) {
+            return ApiResult.NetworkFailure(
+                "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
+            )
+        }
+        return if (manifest.runtime.equals("leap", ignoreCase = true)) {
+            prepareLeapRuntimeFromManifest(manifest)
+        } else {
+            downloadNonLeapModelFromManifest(manifest, onStatus)
+        }
+    }
+
+    private suspend fun prepareLeapRuntimeFromManifest(
+        manifest: ProVlmModelManifest,
+    ): ApiResult<ProVlmCacheRecord> {
+        if (supportsLiquidLeapOnDeviceVlm()) {
+            val record =
+                ProVlmCacheRecord(
+                    modelBundleId = manifest.modelBundleId,
+                    revision = manifest.revision,
+                    sha256 = manifest.sha256.lowercase(),
+                    sizeBytes = manifest.sizeBytes,
+                    runtime = manifest.runtime,
+                )
+            modelCache.save(record)
             return try {
-                stubEngine.prepareModel(cached, null)
-                ApiResult.Ok(cached)
+                engine.prepareModel(record, null)
+                ApiResult.Ok(record)
+            } catch (e: Exception) {
+                ApiResult.NetworkFailure(e.message ?: "Liquid Leap VLM initialization failed")
+            }
+        }
+        val leapStub = engine as? DeterministicProOnDeviceVlmEngine
+        if (leapStub != null && leapStub.stubPrepareAllowed) {
+            val record =
+                ProVlmCacheRecord(
+                    modelBundleId = manifest.modelBundleId,
+                    revision = manifest.revision,
+                    sha256 = manifest.sha256.lowercase(),
+                    sizeBytes = manifest.sizeBytes,
+                    runtime = manifest.runtime,
+                )
+            modelCache.save(record)
+            return try {
+                leapStub.prepareModel(record, null)
+                ApiResult.Ok(record)
             } catch (e: Exception) {
                 ApiResult.NetworkFailure(e.message ?: "Web VLM stub prepare failed")
             }
         }
-        if (cached != null && cached.runtime.equals("leap", ignoreCase = true) && supportsLiquidLeapOnDeviceVlm()) {
-            return try {
-                engine.prepareModel(cached, null)
-                ApiResult.Ok(cached)
-            } catch (e: Exception) {
-                ApiResult.NetworkFailure(e.message ?: "Liquid Leap VLM prepare failed")
+        return ApiResult.NetworkFailure(
+            "Liquid Leap on-device VLM is not available on this target (use Android, iOS, or desktop).",
+        )
+    }
+
+    private suspend fun downloadNonLeapModelFromManifest(
+        manifest: ProVlmModelManifest,
+        onStatus: (ProVlmStatus) -> Unit,
+    ): ApiResult<ProVlmCacheRecord> =
+        withContext(Dispatchers.Default) {
+            val digest = SHA256()
+            val writer =
+                ProVlmModelCacheWriter(
+                    manifest.modelBundleId,
+                    manifest.revision,
+                )
+            if (!writer.open()) {
+                return@withContext ApiResult.NetworkFailure(
+                    "Cannot prepare on-device model cache on this platform.",
+                )
             }
-        }
-        if (cached != null) {
-            val bundledBytes = loadBundledProVlmModelBytes(cached)
-            if (bundledBytes != null) {
-                engine.prepareModel(cached, bundledBytes)
-                return ApiResult.Ok(cached)
-            }
-            if (proVlmVerifiedBundleExists(cached)) {
-                engine.prepareModel(cached, null)
-                return ApiResult.Ok(cached)
-            }
-        }
-        val result: ApiResult<ProVlmCacheRecord> =
-            run {
-                val manifestResult = apiClient.getProVlmModelManifest(bearerAccessToken)
-                val manifest = (manifestResult as? ApiResult.Ok)?.value
-                if (manifest == null) {
-                    when (manifestResult) {
-                        is ApiResult.HttpFailure -> manifestResult
-                        is ApiResult.NetworkFailure -> manifestResult
-                        is ApiResult.Ok -> ApiResult.NetworkFailure("Unable to parse model manifest")
-                    }
-                } else if (preferredModelBundleId != null && manifest.modelBundleId != preferredModelBundleId) {
-                    ApiResult.NetworkFailure(
-                        "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
+            try {
+                val dl =
+                    apiClient.downloadAuthenticatedStreaming(
+                        manifest.downloadUrl,
+                        bearerAccessToken,
+                        onProgress = { received, total ->
+                            onStatus(ProVlmStatus.DownloadingModel(received, total))
+                        },
+                        onChunk = { buf, off, len ->
+                            digest.update(buf, off, len)
+                            writer.write(buf, off, len)
+                        },
                     )
-                } else if (manifest.runtime.equals("leap", ignoreCase = true)) {
-                    if (supportsLiquidLeapOnDeviceVlm()) {
-                        val record =
-                            ProVlmCacheRecord(
-                                modelBundleId = manifest.modelBundleId,
-                                revision = manifest.revision,
-                                sha256 = manifest.sha256.lowercase(),
-                                sizeBytes = manifest.sizeBytes,
-                                runtime = manifest.runtime,
-                            )
-                        modelCache.save(record)
-                        try {
-                            engine.prepareModel(record, null)
-                            ApiResult.Ok(record)
-                        } catch (e: Exception) {
-                            ApiResult.NetworkFailure(e.message ?: "Liquid Leap VLM initialization failed")
-                        }
-                    } else {
-                        val leapStub = engine as? DeterministicProOnDeviceVlmEngine
-                        if (leapStub != null && leapStub.stubPrepareAllowed) {
+                when (dl) {
+                    is ApiResult.Ok -> {
+                        val shaHex = digestToHexLowercase(digest.digest())
+                        val verification =
+                            verifyDownloadedModel(manifest, dl.value, shaHex)
+                        if (verification != null) {
+                            writer.abort()
+                            ApiResult.NetworkFailure(verification)
+                        } else {
+                            writer.commit()
                             val record =
                                 ProVlmCacheRecord(
                                     modelBundleId = manifest.modelBundleId,
@@ -269,90 +369,29 @@ class ProOnDeviceVlmCoordinator(
                                     runtime = manifest.runtime,
                                 )
                             modelCache.save(record)
-                            try {
-                                leapStub.prepareModel(record, null)
-                                ApiResult.Ok(record)
-                            } catch (e: Exception) {
-                                ApiResult.NetworkFailure(e.message ?: "Web VLM stub prepare failed")
-                            }
-                        } else {
-                            ApiResult.NetworkFailure(
-                                "Liquid Leap on-device VLM is not available on this target (use Android, iOS, or desktop).",
-                            )
+                            engine.prepareModel(record, null)
+                            ApiResult.Ok(record)
                         }
                     }
-                } else {
-                    withContext(Dispatchers.Default) {
-                        val digest = SHA256()
-                        val writer =
-                            ProVlmModelCacheWriter(
-                                manifest.modelBundleId,
-                                manifest.revision,
-                            )
-                        if (!writer.open()) {
-                            return@withContext ApiResult.NetworkFailure(
-                                "Cannot prepare on-device model cache on this platform.",
-                            )
-                        }
-                        try {
-                            val dl =
-                                apiClient.downloadAuthenticatedStreaming(
-                                    manifest.downloadUrl,
-                                    bearerAccessToken,
-                                    onProgress = { received, total ->
-                                        onStatus(ProVlmStatus.DownloadingModel(received, total))
-                                    },
-                                    onChunk = { buf, off, len ->
-                                        digest.update(buf, off, len)
-                                        writer.write(buf, off, len)
-                                    },
-                                )
-                            when (dl) {
-                                is ApiResult.Ok -> {
-                                    val shaHex = digestToHexLowercase(digest.digest())
-                                    val verification =
-                                        verifyDownloadedModel(manifest, dl.value, shaHex)
-                                    if (verification != null) {
-                                        writer.abort()
-                                        ApiResult.NetworkFailure(verification)
-                                    } else {
-                                        writer.commit()
-                                        val record =
-                                            ProVlmCacheRecord(
-                                                modelBundleId = manifest.modelBundleId,
-                                                revision = manifest.revision,
-                                                sha256 = manifest.sha256.lowercase(),
-                                                sizeBytes = manifest.sizeBytes,
-                                                runtime = manifest.runtime,
-                                            )
-                                        modelCache.save(record)
-                                        engine.prepareModel(record, null)
-                                        ApiResult.Ok(record)
-                                    }
-                                }
 
-                                is ApiResult.HttpFailure -> {
-                                    writer.abort()
-                                    dl
-                                }
+                    is ApiResult.HttpFailure -> {
+                        writer.abort()
+                        dl
+                    }
 
-                                is ApiResult.NetworkFailure -> {
-                                    writer.abort()
-                                    dl
-                                }
-                            }
-                        } catch (e: CancellationException) {
-                            writer.abort()
-                            throw e
-                        } catch (e: Exception) {
-                            writer.abort()
-                            ApiResult.NetworkFailure(e.message ?: "model download failed")
-                        }
+                    is ApiResult.NetworkFailure -> {
+                        writer.abort()
+                        dl
                     }
                 }
+            } catch (e: CancellationException) {
+                writer.abort()
+                throw e
+            } catch (e: Exception) {
+                writer.abort()
+                ApiResult.NetworkFailure(e.message ?: "model download failed")
             }
-        return result
-    }
+        }
 
     private suspend fun fetchImageBytes(
         job: ProJobStatusOut,

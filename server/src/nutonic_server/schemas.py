@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TokenResponse(BaseModel):
@@ -91,11 +91,17 @@ class GuessRecordIn(BaseModel):
     guess_lon: float = Field(ge=-180.0, le=180.0)
     client_distance_km: float | None = Field(default=None, ge=0.0, le=40_000.0)
     ruleset_version: str | None = Field(default=None, max_length=128)
+    display_handle: str | None = Field(default=None, max_length=64)
+    score_points: int | None = Field(default=None, ge=0, le=2_000_000_000)
+    player_role: str | None = Field(default=None, max_length=32)
 
 
 class GuessRecordOut(BaseModel):
     id: int
     recorded: bool = True
+    distance_km: float | None = None
+    score_points: int | None = None
+    display_handle: str | None = None
 
 
 class RankedRoundStartIn(BaseModel):
@@ -233,9 +239,9 @@ class ProJobCreateIn(BaseModel):
         description="Mini-app analysis profile. Legacy vessel_monitoring requests are normalized to OceanScout.",
     )
     enable_tim: bool = False
-    tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "RGB_mapbox"
-    vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512", max_length=128)
-    sentinel_fetch_mode: Literal["MINIMAL_RGB", "TERRAMIND_SPECTRAL", "FULL_STAC"] = "MINIMAL_RGB"
+    tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "S2L2A_full"
+    vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512_s2_only", max_length=128)
+    sentinel_fetch_mode: Literal["MINIMAL_RGB", "TERRAMIND_SPECTRAL", "FULL_STAC"] = "TERRAMIND_SPECTRAL"
     datetime_interval: str | None = Field(default=None, max_length=128)
     scene_id_t0: str | None = Field(default=None, max_length=256)
     scene_id_t1: str | None = Field(default=None, max_length=256)
@@ -247,6 +253,17 @@ class ProJobCreateIn(BaseModel):
         if str(v).strip() == "vessel_monitoring":
             return "oceanscout_ship_detection"
         return v
+
+    @model_validator(mode="after")
+    def _pro_jobs_sentinel_imagery_only(self) -> Self:
+        if self.sentinel_fetch_mode == "MINIMAL_RGB":
+            raise ValueError("PRO jobs use Sentinel-2 only; sentinel_fetch_mode cannot be MINIMAL_RGB.")
+        cid = self.vlm_contract_id.strip()
+        if cid in {"nutonic.pro.vlm.v1_512", "nutonic.pro.vlm.v1_512_fc_scl"}:
+            raise ValueError(
+                "PRO jobs cannot use Mapbox-backed vlm_contract_id; use nutonic.pro.vlm.v1_512_s2_only.",
+            )
+        return self
 
 
 class ProJobCreateOut(BaseModel):

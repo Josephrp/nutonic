@@ -111,6 +111,8 @@ Jobs run in order: **sv-lfm** → **TiM** → **llm-sidecars**. Override the in-
 
 For a **small slice** (e.g. first five ``geoguessr_poi_12`` POIs), pass ``--poi-limit 5`` on ``run_full_hydration.py`` / ``run_hf_hydration_full.py`` (Jobs set ``NUTONIC_POI_LIMIT``). **Geo context:** the sv-lfm entrypoint runs ``build_poi_geo_context.py`` with ``--allow-partial`` by default (skip bad coordinates / Shapely failures; still writes other POIs). Set ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL=0`` on the Job to fail fast, or ``--skip-geo-hints`` to omit geo + useful_hints entirely. TiM uses ``config.hf_job_geoguessr_poi12_first5.yaml`` when the limit is 5 (unless you override ``--tim-config-in-container``).
 
+**Without Mapbox (Sentinel-2 STAC reference stills):** pass ``--skip-mapbox-stills`` (or set ``NUTONIC_SKIP_MAPBOX_STILLS=1`` before submit). The sv-lfm Job runs ``render_mapbox_still.py --stac-reference-stills`` — Earth Search ``sentinel-2-l2a`` thumbnail/visual previews per POI (falls back to gray placeholder if STAC decode fails). No Mapbox token. Set ``NUTONIC_STAC_REFERENCE_STILLS=0`` for solid placeholders only. Optional tuning: ``NUTONIC_STAC_STILL_URL``, ``NUTONIC_STAC_STILL_BBOX_HALF_KM``, ``NUTONIC_STAC_STILL_MAX_CLOUD``, ``NUTONIC_STAC_STILL_DATETIME``. **TiM** bundled YAMLs (``config.hf_job_geoguessr_poi12_first*.yaml``, ``config.geoguessr_live_3row_*.yaml``) default to **``terramind_v1_large_tim``** (see ``nutonic_terramind_tim_local.tim_defaults``); override with ``TIM_HF_CONFIG`` / ``--tim-config-in-container`` when you need a smaller backbone for smoke tests.
+
 Use `--dry-run-submit` to print resolved Job specs without calling the Hub. Use `--skip-download` if you only want Hub-side artifacts.
 
 **Narrative LLM on the llm-sidecars Job:** default sidecar is **dry-run** unless **`NUTONIC_NARRATIVE_LLM_LIVE=1`**. Live inference (set via host **`--narrative-llm-live`** on `run_hf_hydration_full.py`):
@@ -176,7 +178,7 @@ Omit **`--dry-run-submit`** to actually submit and wait. For **LFM-VL via vLLM**
 
 Local `uv run … nutonic_terramind_tim_local run` is unchanged. For **Hugging Face Jobs**, prefer **`Dockerfile.hydration-tim`** (batch + `huggingface_hub` upload) wired into `run_full_hydration.py` rather than the Space-oriented `inference/terramind_tim_local/Dockerfile`.
 
-Default TiM job config in the image: `inference/terramind_tim_local/config.hf_job_geoguessr_poi12_first3.yaml` (`repo_root: /workspace`, STAC-only rows). Override with env `TIM_HF_CONFIG` or the orchestrator’s `--tim-config-in-container`.
+Default TiM job config in the image: `inference/terramind_tim_local/config.hf_job_geoguessr_poi12_first3.yaml` (`repo_root: /workspace`, STAC-only rows, **`terramind_v1_large_tim`**). Override with env `TIM_HF_CONFIG` or the orchestrator’s `--tim-config-in-container`.
 
 Advanced: submit TiM alone with `submit_nutonic_hydration_job.py tim-s2` and a custom command if you outgrow the bundled YAML.
 

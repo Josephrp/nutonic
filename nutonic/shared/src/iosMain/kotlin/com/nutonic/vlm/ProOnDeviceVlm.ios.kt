@@ -8,7 +8,7 @@ import kotlinx.cinterop.usePinned
 import platform.CoreCrypto.CC_SHA256
 import platform.CoreCrypto.CC_SHA256_DIGEST_LENGTH
 
-actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = DeterministicProOnDeviceVlmEngine("iOS verified-bundle runtime")
+actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = IosLeapProOnDeviceVlmEngine()
 
 actual fun sha256Hex(bytes: ByteArray): String {
     val digest = UByteArray(CC_SHA256_DIGEST_LENGTH)

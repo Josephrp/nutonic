@@ -7,7 +7,7 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 
-actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = DeterministicProOnDeviceVlmEngine("desktop verified-bundle runtime")
+actual fun createProOnDeviceVlmEngine(): ProOnDeviceVlmEngine = DesktopLeapProOnDeviceVlmEngine()
 
 actual fun sha256Hex(bytes: ByteArray): String = bytes.sha256HexJvm()
 

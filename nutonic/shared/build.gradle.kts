@@ -18,8 +18,8 @@ kotlin {
         useEsModules()
     }
 
+    // iosX64 omitted: Liquid Leap ships iosArm64 + iosSimulatorArm64 only (no legacy Intel simulator klib).
     listOf(
-        iosX64(),
         iosArm64(),
         iosSimulatorArm64(),
     ).forEach { iosTarget ->
@@ -53,6 +53,11 @@ kotlin {
             implementation("io.ktor:ktor-client-core:$ktorVersion")
             implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
             implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+            // Incremental SHA-256 for streaming PRO VLM bundle verification without heap-sized ByteArrays.
+            // Align with Leap SDK / hash BOM (0.8.x): `core` replaced `common`; mixing 0.5 `common-jvm` + 0.8 `core-jvm` duplicates classes on Android.
+            implementation("org.kotlincrypto.core:core:0.8.0")
+            implementation("org.kotlincrypto.core:digest:0.8.0")
+            implementation("org.kotlincrypto.hash:sha2:0.8.0")
         }
 
         commonTest.dependencies {
@@ -62,6 +67,9 @@ kotlin {
         }
 
         androidMain.dependencies {
+            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+            implementation("ai.liquid.leap:leap-sdk:0.10.2")
+            implementation("ai.liquid.leap:leap-model-downloader:0.10.2")
             implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
             api("androidx.activity:activity-compose:1.13.0")
             api("androidx.appcompat:appcompat:1.7.1")
@@ -80,6 +88,7 @@ kotlin {
         val iosMain by getting {
             dependencies {
                 implementation("io.ktor:ktor-client-darwin:$ktorVersion")
+                implementation("ai.liquid.leap:leap-sdk:0.10.2")
             }
         }
 
@@ -92,6 +101,7 @@ kotlin {
 
         val desktopMain by getting
         desktopMain.dependencies {
+            implementation("ai.liquid.leap:leap-sdk-jvm:0.10.2")
             implementation("io.ktor:ktor-client-cio:$ktorVersion")
             implementation(compose.desktop.common)
             implementation(project(":mapview-desktop"))
@@ -112,7 +122,7 @@ android {
     sourceSets["main"].assets.srcDirs("src/androidMain/assets")
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 31
         buildConfigField("String", "NUTONIC_CLIENT_VERSION", "\"1.0-SNAPSHOT\"")
     }
     buildFeatures {

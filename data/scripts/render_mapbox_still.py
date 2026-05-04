@@ -171,6 +171,31 @@ def _load_image_from_bytes(data: bytes) -> Image.Image:
     return Image.open(io.BytesIO(data))
 
 
+def _make_placeholder_still_image(policy: StillPolicy, lat: float, lon: float) -> Image.Image:
+    """
+    Solid reference JPEG used when Mapbox Static API is disabled (HF Jobs ``--placeholder-stills``).
+
+    Keeps merge_asset_contract dimensions compatible with ``assemble_manifest`` / Compose validation.
+    """
+    w, h = min(policy.width_px, policy.max_edge_px), min(policy.height_px, policy.max_edge_px)
+    w = max(64, w)
+    h = max(64, h)
+    img = Image.new("RGB", (w, h), color=(42, 44, 49))
+    try:
+        from PIL import ImageDraw
+
+        draw = ImageDraw.Draw(img)
+        lines = ("NU:TONIC placeholder (no Mapbox)", f"{lat:.5f}, {lon:.5f}")
+        y = 16
+        for line in lines:
+            draw.text((16, y), line, fill=(210, 212, 220))
+            y += 22
+    except Exception:
+        pass
+    img, _ = _fit_within_max_edge(img, policy.max_edge_px)
+    return img
+
+
 def process_location(
     location_id: str,
     map_id: str,
@@ -184,6 +209,8 @@ def process_location(
     meta_stills_dir: Path,
     reuse_only: bool,
     allow_network: bool,
+    placeholder_stills: bool,
+    stac_reference_stills: bool,
     dry_run: bool,
 ) -> dict[str, Any]:
     bundled = (still_source or {}).get("bundled_relative")
@@ -223,29 +250,59 @@ def process_location(
                 f"{location_id}: no bundled_relative and --reuse-only set",
                 EXIT_MISSING_TOKEN,
             )
-        if not allow_network:
+        if stac_reference_stills:
+            try:
+                from stac_reference_still import fetch_sentinel_reference_still
+
+                img, _meta = fetch_sentinel_reference_still(
+                    center_lat,
+                    center_lon,
+                    width_px=effective.width_px,
+                    height_px=effective.height_px,
+                )
+                source_label = "sentinel2_stac_reference"
+                img, contained = _contain_to_policy_box(img, effective)
+                policy_mismatch = policy_mismatch or contained
+            except Exception as e:
+                print(
+                    f"render_mapbox_still: STAC reference still failed for {location_id} ({e}); "
+                    "using placeholder.",
+                    file=sys.stderr,
+                )
+                img = _make_placeholder_still_image(effective, center_lat, center_lon)
+                source_label = "stac_fallback_placeholder"
+                img, contained = _contain_to_policy_box(img, effective)
+                policy_mismatch = policy_mismatch or contained
+        elif placeholder_stills:
+            img = _make_placeholder_still_image(effective, center_lat, center_lon)
+            source_label = "placeholder_no_mapbox"
+            img, contained = _contain_to_policy_box(img, effective)
+            policy_mismatch = policy_mismatch or contained
+        elif not allow_network:
             raise RenderMapboxStillError(
-                f"{location_id}: network render disabled; pass --allow-network to call Mapbox Static API",
+                f"{location_id}: network render disabled; pass --allow-network to call Mapbox Static API, "
+                "--stac-reference-stills for Sentinel-2 STAC, or --placeholder-stills",
                 EXIT_MISSING_TOKEN,
             )
-        token = _mapbox_access_token()
-        if not token:
-            raise RenderMapboxStillError(
-                "MAPBOX_ACCESS_TOKEN (or MAPBOX_TOKEN) required for render path",
-                EXIT_MISSING_TOKEN,
+        else:
+            token = _mapbox_access_token()
+            if not token:
+                raise RenderMapboxStillError(
+                    "MAPBOX_ACCESS_TOKEN (or MAPBOX_TOKEN) required for render path",
+                    EXIT_MISSING_TOKEN,
+                )
+            raw = _fetch_mapbox_static_image(
+                center_lon,
+                center_lat,
+                effective.zoom,
+                effective.width_px,
+                effective.height_px,
+                effective.style_id,
+                token,
             )
-        raw = _fetch_mapbox_static_image(
-            center_lon,
-            center_lat,
-            effective.zoom,
-            effective.width_px,
-            effective.height_px,
-            effective.style_id,
-            token,
-        )
-        img = _load_image_from_bytes(raw)
-        source_label = "mapbox_static"
-        img, _ = _fit_within_max_edge(img, effective.max_edge_px)
+            img = _load_image_from_bytes(raw)
+            source_label = "mapbox_static"
+            img, _ = _fit_within_max_edge(img, effective.max_edge_px)
 
     assert img is not None
     jpeg = _jpeg_bytes(img)
@@ -302,6 +359,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--still-policy", type=Path, default=None)
     p.add_argument("--reuse-only", action="store_true")
     p.add_argument(
+        "--stac-reference-stills",
+        action="store_true",
+        help="When catalog row has no bundled_relative, fetch Sentinel-2 RGB preview via Earth Search STAC "
+        "(no Mapbox). Falls back to gray placeholder if STAC decode fails.",
+    )
+    p.add_argument(
+        "--placeholder-stills",
+        action="store_true",
+        help="When catalog row has no bundled_relative, emit a solid placeholder JPEG (no Mapbox / no STAC).",
+    )
+    p.add_argument(
         "--allow-network",
         action="store_true",
         help="Permit Mapbox Static Images HTTP fetch when catalog row has no bundled_relative.",
@@ -339,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
                 meta_stills_dir=meta_stills,
                 reuse_only=bool(ns.reuse_only),
                 allow_network=bool(ns.allow_network),
+                placeholder_stills=bool(ns.placeholder_stills) and not bool(ns.stac_reference_stills),
+                stac_reference_stills=bool(ns.stac_reference_stills),
                 dry_run=bool(ns.dry_run),
             )
             rows.append(rec)

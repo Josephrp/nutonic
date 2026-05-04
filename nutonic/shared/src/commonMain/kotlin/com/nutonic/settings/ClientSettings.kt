@@ -1,9 +1,12 @@
 package com.nutonic.settings
 
+import kotlinx.serialization.Serializable
+
 /**
  * Cross-platform preference keys (`docs/CLIENT-SETTINGS-SPEC.md` §6 sketch).
- * Platform persistence actuals can back [SettingsRepository] later.
+ * Serialized to JSON via [PersistedSettingsRepository].
  */
+@Serializable
 data class ClientSettings(
     /** `game.role` — HUMAN | ASTRONAUT | ALIEN (`docs/CLIENT-SETTINGS-SPEC.md` §6.1). */
     val playerRole: String? = null,

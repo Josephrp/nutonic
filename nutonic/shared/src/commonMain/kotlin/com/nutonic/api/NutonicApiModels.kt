@@ -137,12 +137,21 @@ data class GuessRecordIn(
     @SerialName("guess_lon") val guessLon: Double,
     @SerialName("client_distance_km") val clientDistanceKm: Double? = null,
     @SerialName("ruleset_version") val rulesetVersion: String? = null,
+    /** Client-presented handle for telemetry joins (optional). */
+    @SerialName("display_handle") val displayHandle: String? = null,
+    /** Non-ranked presentation score echo (`scoreFromDistanceKm` on client). */
+    @SerialName("score_points") val scorePoints: Int? = null,
+    @SerialName("player_role") val playerRole: String? = null,
 )
 
 @Serializable
 data class GuessRecordOut(
     val id: Int,
     val recorded: Boolean = true,
+    /** Echo of verified/client distance when server stores telemetry (`rules/05`). */
+    @SerialName("distance_km") val distanceKm: Double? = null,
+    @SerialName("score_points") val scorePoints: Int? = null,
+    @SerialName("display_handle") val displayHandle: String? = null,
 )
 
 @Serializable
@@ -255,9 +264,9 @@ data class ProJobCreateIn(
     @SerialName("mapbox_zoom") val mapboxZoom: Int = 12,
     @SerialName("analysis_profile") val analysisProfile: ProJobProfile = ProJobProfile.BRIEF_ONLY,
     @SerialName("enable_tim") val enableTim: Boolean = false,
-    @SerialName("tim_branch") val timBranch: String = "RGB_mapbox",
-    @SerialName("vlm_contract_id") val vlmContractId: String = "nutonic.pro.vlm.v1_512",
-    @SerialName("sentinel_fetch_mode") val sentinelFetchMode: String = "MINIMAL_RGB",
+    @SerialName("tim_branch") val timBranch: String = "S2L2A_full",
+    @SerialName("vlm_contract_id") val vlmContractId: String = "nutonic.pro.vlm.v1_512_s2_only",
+    @SerialName("sentinel_fetch_mode") val sentinelFetchMode: String = "TERRAMIND_SPECTRAL",
     @SerialName("datetime_interval") val datetimeInterval: String? = null,
     @SerialName("scene_id_t0") val sceneIdT0: String? = null,
     @SerialName("scene_id_t1") val sceneIdT1: String? = null,

@@ -29,6 +29,7 @@ import com.nutonic.api.ApiResult
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.ProArtifactRef
 import com.nutonic.api.ProJobStatusOut
+import com.nutonic.pro.allProArtifactRefsForJob
 import com.nutonic.filter.getPlatformContext
 import com.nutonic.share.shareNutonicScorecard
 import com.nutonic.style.NutonicGhostButton
@@ -327,7 +328,7 @@ fun ProBriefComposerScreen(
     ) {
         MiniAppHeader(
             title = "Brief Composer",
-            subtitle = "Cross-mini-app synthesis with confidence-aware sections and source toggles.",
+            subtitle = "Combine overlays, metrics, and brief sections for export or sharing.",
             onBack = onBack,
         )
         SelectedRunCard(job)
@@ -344,7 +345,11 @@ fun ProBriefComposerScreen(
             Text("Brief sections", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             val sections = job?.onDevicePayload?.briefSections.orEmpty()
             if (sections.isEmpty()) {
-                Text("No brief sections are attached yet.", style = MaterialTheme.typography.caption)
+                Text(
+                    "No brief sections are attached yet.",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                )
             } else {
                 sections.forEach { section ->
                     Text(section.title, style = MaterialTheme.typography.body1, color = MaterialTheme.colors.primary)
@@ -812,16 +817,7 @@ private fun expectedRequiredArtifactIds(profile: String?): List<String> =
         else -> emptyList()
     }
 
-private fun proArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> =
-    if (job == null) {
-        emptyList()
-    } else {
-        (
-            job.artifacts.orEmpty() +
-                job.analysisArtifacts.orEmpty() +
-                job.onDevicePayload?.overlayRefs.orEmpty()
-        ).distinctBy { it.artifactId }
-    }
+private fun proArtifacts(job: ProJobStatusOut?): List<ProArtifactRef> = allProArtifactRefsForJob(job)
 
 private sealed interface BriefShareState {
     data object Idle : BriefShareState

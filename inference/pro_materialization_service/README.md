@@ -18,7 +18,7 @@ HTTP worker for **`PRO_MATERIALIZATION_SERVICE_URL`** / **`NUTONIC_PRO_MATERIALI
 - **`FULL_STAC`** + **`RGB_mapbox`** TiM still uses Mapbox-derived RGB NPZ while STAC stack is fetched for manifest/audit.
 - **`TERRAMIND_SPECTRAL`** + **`enable_tim`** requires **`S2L2A_full`** (422 `TIM_BRANCH_REQUIRES_S2L2A_FULL` if **`RGB_mapbox`**).
 - **`data/s2_asset_allowlist.yaml`**: **`version`** + ordered **`assets`** (12 keys); drives cache key + STAC reads.
-- Optional install **`pip install -e ".[s2]"`** (`pystac-client`, **`rasterio`**) — without it, spectral modes return **503** `S2_DEPENDENCIES_MISSING`.
+- **Sentinel/STAC** (`pystac-client`, **`rasterio`**) are **core dependencies** (since **0.3.1**). Spectral modes still return **503** `S2_DEPENDENCIES_MISSING` only if imports fail at runtime (e.g. missing GDAL system libs — the service **Dockerfile** installs **`gdal-bin`** / **`libgdal-dev`**).
 
 ## Constraints
 
@@ -36,7 +36,7 @@ HTTP worker for **`PRO_MATERIALIZATION_SERVICE_URL`** / **`NUTONIC_PRO_MATERIALI
 ## Run locally
 
 ```bash
-pip install -e "./inference/pro_materialization_service[dev,s2]"
+pip install -e "./inference/pro_materialization_service[dev]"
 set MAPBOX_ACCESS_TOKEN=your_token
 uvicorn pro_materialization_service.main:app --host 127.0.0.1 --port 7865
 ```
@@ -49,4 +49,4 @@ From the monorepo root, tests should pick up this package’s `src` first (or us
 docker build -t nutonic-pro-materialization inference/pro_materialization_service
 ```
 
-For Sentinel in container images, extend the image to `pip install .[s2]` (adds GDAL/rasterio stack).
+The packaged **Dockerfile** installs **`gdal-bin`** and **`libgdal-dev`** (rasterio needs GDAL/PROJ/GEOS at runtime on Debian slim), then **`pip install .`**, and fails the build if **`import rasterio`** / **`pystac_client`** do not work.

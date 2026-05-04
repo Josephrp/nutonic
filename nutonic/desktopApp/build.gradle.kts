@@ -21,6 +21,8 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.nutonic.MainKt"
+        // Large PRO VLM bundles + Compose Multiplatform need headroom beyond the default JVM heap.
+        jvmArgs("-Xmx4g")
         if (nutonicServerOrigin != null) {
             // Forward Gradle property into the JVM so `defaultNutonicServerOrigin()` can pick it up.
             jvmArgs("-Dnutonic.serverOrigin=$nutonicServerOrigin")

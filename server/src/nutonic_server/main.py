@@ -7,7 +7,7 @@ import zipfile
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
 
 import jwt
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
@@ -285,10 +285,12 @@ def post_guess_record(
         client_distance_km=body.client_distance_km,
         ruleset_version=body.ruleset_version.strip()[:128] if body.ruleset_version else None,
         session_id=sid or None,
+        display_handle=body.display_handle.strip()[:64] if body.display_handle else None,
+        score_points=body.score_points,
+        player_role=body.player_role.strip()[:32] if body.player_role else None,
     )
     key = idempotency_key.strip() if idempotency_key and idempotency_key.strip() else None
-    rid = _guess_telemetry_store.record(row, idempotency_key=key)
-    return GuessRecordOut(id=rid, recorded=True)
+    return _guess_telemetry_store.record(row, idempotency_key=key)
 
 
 @app.post("/api/v1/ranked/rounds/start", tags=["ranked"], response_model=RankedRoundStartOut)
@@ -813,8 +815,8 @@ def _pro_vlm_model_manifest_or_none(settings: Settings) -> ProVlmModelManifest |
         stat = local_path.stat()
         size_bytes = stat.st_size
         sha256 = _sha256_file(local_path)
-        if not download_url:
-            download_url = "/api/v1/pro/vlm/model-bundle"
+        # Always serve baked bundles from this server; ignore any configured CDN/HF URL defaults.
+        download_url = "/api/v1/pro/vlm/model-bundle"
     model_bundle_id = settings.pro_vlm_model_bundle_id.strip() or (f"nutonic.pro.vlm.{local_path.stem}" if local_path else "")
     revision = settings.pro_vlm_model_revision.strip() or (str(int(local_path.stat().st_mtime)) if local_path else "")
     if not (model_bundle_id and revision and download_url and sha256 and size_bytes > 0 and contract_ids):
@@ -847,33 +849,33 @@ def _on_device_payload(
     if not materialization_summary:
         return None
     brief = materialization_summary.get("brief_summary")
-    if not isinstance(brief, dict):
-        return None
     sections: list[ProBriefSection] = []
-    executive_summary = brief.get("executive_summary")
-    if isinstance(executive_summary, str) and executive_summary.strip():
-        sections.append(
-            ProBriefSection(
-                title="Executive summary",
-                body=_bounded_text(executive_summary, 2000),
-                confidence=_brief_confidence(brief),
+    if isinstance(brief, dict):
+        executive_summary = brief.get("executive_summary")
+        if isinstance(executive_summary, str) and executive_summary.strip():
+            sections.append(
+                ProBriefSection(
+                    title="Executive summary",
+                    body=_bounded_text(executive_summary, 2000),
+                    confidence=_brief_confidence(brief),
+                )
             )
-        )
-    key_findings = brief.get("key_findings")
-    if isinstance(key_findings, list) and key_findings:
-        body = "\n".join(f"- {str(item)[:300]}" for item in key_findings[:5])
-        sections.append(ProBriefSection(title="Key findings", body=_bounded_text(body, 2000), confidence=_brief_confidence(brief)))
-    recommended_actions = brief.get("recommended_actions")
-    if isinstance(recommended_actions, list) and recommended_actions:
-        body = "\n".join(f"- {str(item)[:300]}" for item in recommended_actions[:5])
-        sections.append(ProBriefSection(title="Recommended actions", body=_bounded_text(body, 2000), confidence=None))
+        key_findings = brief.get("key_findings")
+        if isinstance(key_findings, list) and key_findings:
+            body = "\n".join(f"- {str(item)[:300]}" for item in key_findings[:5])
+            sections.append(ProBriefSection(title="Key findings", body=_bounded_text(body, 2000), confidence=_brief_confidence(brief)))
+        recommended_actions = brief.get("recommended_actions")
+        if isinstance(recommended_actions, list) and recommended_actions:
+            body = "\n".join(f"- {str(item)[:300]}" for item in recommended_actions[:5])
+            sections.append(ProBriefSection(title="Recommended actions", body=_bounded_text(body, 2000), confidence=None))
     image_set = _vlm_image_set(artifacts)
     if not sections and not analysis_artifacts and not image_set:
         return None
+    conf_summary = _brief_confidence(brief) if isinstance(brief, dict) else None
     return ProOnDevicePayload(
         brief_sections=sections[:5],
         overlay_refs=analysis_artifacts[:4],
-        confidence_summary=_brief_confidence(brief),
+        confidence_summary=conf_summary,
         vlm_image_set=image_set,
         vlm_prompt_injection=_vlm_prompt_injection(materialization_summary),
         on_device_model_hint=settings.pro_vlm_model_runtime.strip() or "leap",
@@ -897,14 +899,45 @@ def _vlm_image_set(artifacts: list[ProArtifactRef]) -> list[dict[str, object]]:
     return out[:4]
 
 
+def _build_tim_context_dict_for_vlm(tim_summary: dict[str, Any] | None) -> dict[str, Any]:
+    """TiM JSON shape aligned with ``terramind_assessment_sft.cap_tim_context`` / assessment prompts (no raw NPZ)."""
+    ts = tim_summary if isinstance(tim_summary, dict) else {}
+    out: dict[str, Any] = {}
+    branch = ts.get("branch")
+    if isinstance(branch, str) and branch.strip():
+        out["branch"] = branch
+    modalities = ts.get("modalities_keys")
+    if isinstance(modalities, list):
+        out["modalities_keys"] = modalities
+    elif modalities is not None:
+        out["modalities_keys"] = modalities
+    if bool(ts.get("has_npz")):
+        out["npz_base64"] = "<redacted>"
+    mode = ts.get("mode")
+    if isinstance(mode, str) and mode.strip():
+        out["mode"] = mode
+    tmo = ts.get("tim_modality_outputs")
+    if isinstance(tmo, dict) and tmo:
+        out["tim_modality_outputs"] = tmo
+    return out if out else {"mode": ts.get("mode") if isinstance(ts.get("mode"), str) else "not_available"}
+
+
+def _tim_context_block_text(tim_summary: dict[str, Any] | None) -> str:
+    """Same prelude + ``indent=2`` JSON as ``terramind_assessment_sft.build_assessment_user_text`` TiM section."""
+    tc = _build_tim_context_dict_for_vlm(tim_summary)
+    body = json.dumps(tc, ensure_ascii=False, indent=2)
+    return "- TerraMind / TiM context (capped JSON, model evidence only):\n" + body
+
+
 def _vlm_prompt_injection(materialization_summary: dict[str, object]) -> dict[str, object]:
+    """On-device VLM: ``tim_context_block`` uses training-matched prettified TiM JSON (``ensure_ascii=False``, indent=2)."""
     run_manifest = materialization_summary.get("run_manifest")
     tim_summary = materialization_summary.get("tim_summary")
+    ts_dict = tim_summary if isinstance(tim_summary, dict) else None
     return {
         "product": "NU:TONIC PRO",
-        "task": "Analyze the provided geospatial frame set. Avoid claiming certainty beyond visible evidence.",
         "run_manifest": run_manifest if isinstance(run_manifest, dict) else {},
-        "tim_summary": tim_summary if isinstance(tim_summary, dict) else {},
+        "tim_context_block": _tim_context_block_text(ts_dict),
     }
 
 

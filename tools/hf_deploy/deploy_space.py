@@ -295,7 +295,7 @@ def _deploy_with_hf(
             repo_id,
             "--repo-type",
             "space",
-            "--space_sdk",
+            "--space-sdk",
             space_sdk,
             "--exist-ok",
         ],

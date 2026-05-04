@@ -4,6 +4,7 @@
 # optional attach of `.apk` / `.ipa` to the same GitHub Release.
 # Android secrets: NUTONIC_ANDROID_KEYSTORE_BASE64, NUTONIC_ANDROID_KEYSTORE_PASSWORD, NUTONIC_ANDROID_KEY_ALIAS,
 #   NUTONIC_ANDROID_KEY_PASSWORD; optional NUTONIC_MAPS_API_KEY_RELEASE.
+# Android variable (optional): NUTONIC_DEMO_SERVER_ORIGIN — used when workflow input android_nutonic_server_origin is empty.
 # iOS signing secrets: IOS_DISTRIBUTION_P12_BASE64, IOS_DISTRIBUTION_P12_PASSWORD, IOS_PROVISIONING_PROFILE_BASE64,
 #   IOS_PROVISIONING_PROFILE_NAME (exact profile Name in Apple Developer), APPLE_TEAM_ID.
 # TestFlight (App Store Connect API): APPSTORE_ISSUER_ID, APPSTORE_API_KEY_ID, APPSTORE_API_PRIVATE_KEY (.p8 body).
@@ -54,7 +55,7 @@ on:
         default: ""
         type: string
       android_nutonic_server_origin:
-        description: "Android BuildConfig NUTONIC_SERVER_ORIGIN (no /api/v1). Empty = Gradle default"
+        description: "Android BuildConfig NUTONIC_SERVER_ORIGIN (no /api/v1). Empty = variable NUTONIC_DEMO_SERVER_ORIGIN, else Gradle default"
         required: false
         default: ""
         type: string
@@ -234,6 +235,7 @@ jobs:
           STORE_PW: ${{ secrets.NUTONIC_ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.NUTONIC_ANDROID_KEY_ALIAS }}
           KEY_PW: ${{ secrets.NUTONIC_ANDROID_KEY_PASSWORD }}
+          DEMO_ORIGIN_FALLBACK: ${{ vars.NUTONIC_DEMO_SERVER_ORIGIN }}
         run: |
           set -euo pipefail
           if [ -z "${STORE_PW:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PW:-}" ]; then
@@ -248,6 +250,10 @@ jobs:
           VC="${{ github.event.inputs.android_version_code }}"
           VN="${{ github.event.inputs.android_version_name }}"
           SO="${{ github.event.inputs.android_nutonic_server_origin }}"
+          SO="${SO%%/}"
+          if [ -z "${SO:-}" ] && [ -n "${DEMO_ORIGIN_FALLBACK:-}" ]; then
+            SO="${DEMO_ORIGIN_FALLBACK%%/}"
+          fi
           [ -n "$VC" ] && GRADLE_ARGS+=(-PnutonicVersionCode="$VC")
           [ -n "$VN" ] && GRADLE_ARGS+=(-PnutonicVersionName="$VN")
           [ -n "$SO" ] && GRADLE_ARGS+=(-PnutonicServerOrigin="$SO")

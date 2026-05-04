@@ -122,7 +122,7 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 | Job | Runner | Purpose |
 |-----|--------|---------|
 | **quality-and-unit-tests** | `ubuntu-latest` | `./gradlew --continue quality test` (one invocation; `--continue` so lint and tests both run even if one fails); Android SDK via **setup-android before** `local.properties`; **Checks** from JUnit XML; artifacts for tests + detekt. |
-| **android-debug-apk** | `ubuntu-latest` | `:androidApp:assembleDebug` → APK artifact. |
+| **android-debug-apk** | `ubuntu-latest` | `:androidApp:assembleDebug` → APK artifact; if repository variable **`NUTONIC_DEMO_SERVER_ORIGIN`** is set, passes **`-PnutonicServerOrigin`** so the APK targets the deployed demo (otherwise Gradle default). |
 | **desktop-deb** | `ubuntu-latest` | `:desktopApp:packageReleaseDeb` → `.deb` artifact. |
 | **desktop-msi** | `windows-latest` | After `:downloadWix` / `:unzipWix`, CI **unsets** inherited `WIX_PATH`, then sets `WIX_PATH` to the folder containing `candle.exe` under `nutonic/build/wix311` (Compose’s WiX 3.11). Packaging uses **short** `TEMP`/`TMP` on `D:/jpktmp` to reduce `jpackage` long-path failures. **MSI metadata** stays WiX-safe (see `desktopApp/build.gradle.kts`: no `:` in Start Menu group, ASCII description). |
 | **desktop-dmg** | `macos-latest` | `:desktopApp:packageReleaseDmg` → `.dmg` artifact (unsigned; notarization still manual). |
@@ -132,7 +132,11 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 ### Release installers + GitHub Release (`.github/workflows/nutonic-release.yml`)
 
 - **Triggers:** **`push`** to **`main`** (path-filtered: `nutonic/**`, release workflow file, `docs/openapi.yaml`, `rules/**`) builds **`.deb` / `.msi` / `.dmg`** and uploads **workflow artifacts** (no GitHub Release on push). **`workflow_dispatch`** runs the same builds, then **publishes** assets to a **GitHub Release** for the **tag** you enter, using **`softprops/action-gh-release@v2.6.2`**.
-- **Optional mobile (same workflow, `workflow_dispatch` only):** boolean inputs build a **signed Android release APK** (keystore via secrets + Gradle injected signing), an **iOS archive → IPA** (distribution cert + provisioning profile + shared **`.xcscheme`**), optional **TestFlight upload** via **`apple-actions/upload-testflight-build@v4`**, and optional **attach** of `.apk` / `.ipa` to the same GitHub Release. See the workflow file header comments for the exact secret names.
+- **Optional mobile (same workflow, `workflow_dispatch` only):** boolean inputs build a **signed Android release APK** (keystore via secrets + Gradle injected signing), an **iOS archive → IPA** (distribution cert + provisioning profile + shared **`.xcscheme`**), optional **TestFlight upload** via **`apple-actions/upload-testflight-build@v4`**, and optional **attach** of `.apk` / `.ipa` to the same GitHub Release. See the workflow file header comments for the exact secret names. If **`android_nutonic_server_origin`** is left empty, **repository variable** **`NUTONIC_DEMO_SERVER_ORIGIN`** is used when set (same origin used by the tester workflow below).
+
+### Android demo APK for testers (`.github/workflows/nutonic-android-tester-build.yml`)
+
+- **`workflow_dispatch` only.** Builds a **signed** release APK pointed at **`NUTONIC_DEMO_SERVER_ORIGIN`** (or the per-run **origin** input), runs **`GET {origin}/api/v1/health`** before Gradle (optional skip), and uploads artifact **`nutonic-android-demo`** containing **`nutonic-demo.apk`** and **`README-TESTERS.txt`**. Use this for a **stable, documented** handoff to testers; PR CI’s debug APK can also pick up the same variable (see `nutonic-ci` **android-debug-apk** job).
 - **Repository settings:** publishing requires **Actions → General → Workflow permissions → Read and write** for the default `GITHUB_TOKEN` (the publish job sets **`contents: write`**; push-only runs use **`contents: read`**).
 
 ### CI conventions

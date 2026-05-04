@@ -85,7 +85,7 @@ def test_roundtrip_yaml_snippet(tmp_path: Path) -> None:
         yaml.dump(
             {
                 "content_version": "cv",
-                "model_id": "terramind_v1_base_tim",
+                "model_id": "terramind_v1_large_tim",
                 "pretrained": True,
                 "merge_method": "mean",
                 "modalities": ["RGB", "S2L2A"],

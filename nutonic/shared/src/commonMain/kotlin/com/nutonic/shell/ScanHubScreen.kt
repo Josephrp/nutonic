@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Card
@@ -28,14 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nutonic.MainTab
 import com.nutonic.api.ApiResult
-import com.nutonic.api.FeatureFlags
 import com.nutonic.api.MapSummary
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.RankedRoundStartIn
 import com.nutonic.cache.ContentCacheRepository
 import com.nutonic.leaderboard.GuessRecordOutboxRepository
 import com.nutonic.navigation.ShellDetail
-import com.nutonic.screens.CommunityLeaderboardPanel
 import com.nutonic.screens.RankedPlaySession
 import com.nutonic.style.NutonicColors
 import com.nutonic.style.NutonicGhostButton
@@ -43,11 +44,14 @@ import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
 import kotlinx.coroutines.launch
 
+private const val MAPS_PER_PAGE = 3
+
 @Composable
 fun ScanHubScreen(
     onOpenDetail: (ShellDetail) -> Unit,
+    onNavigateToRank: () -> Unit,
+    operatorDisplayName: String,
     nutonicApiClient: NutonicApiClient?,
-    serverFeatureFlags: FeatureFlags?,
     mapContextId: String,
     onMapContextSelect: (String, String?) -> Unit,
     contentCacheRepository: ContentCacheRepository?,
@@ -61,6 +65,7 @@ fun ScanHubScreen(
     var mapsStatus by remember { mutableStateOf<String?>(null) }
     var manifestLine by remember { mutableStateOf<String?>(null) }
     var selectedMissionId by rememberSaveable { mutableStateOf("mission_recon") }
+    var catalogDetailsOpen by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(nutonicApiClient, contentCacheRepository) {
         val client = nutonicApiClient ?: return@LaunchedEffect
@@ -106,15 +111,23 @@ fun ScanHubScreen(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "Choose mission, map, and rank context before launch.",
+            text = "Pick how you want to play, choose a map, then jump in.",
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.onBackground,
         )
+        val greet = operatorDisplayName.trim()
+        if (greet.isNotEmpty()) {
+            Text(
+                text = "Welcome, $greet",
+                style = MaterialTheme.typography.subtitle2,
+                color = MaterialTheme.colors.primary,
+            )
+        }
         NutonicGlassCard(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         ) {
             Text(
-                text = "Mission selection",
+                text = "Mission",
                 style = MaterialTheme.typography.subtitle1,
                 color = MaterialTheme.colors.primary,
             )
@@ -142,7 +155,7 @@ fun ScanHubScreen(
                 }
             }
             Text(
-                text = "Selected mission: ${selectedMission.title}",
+                text = "Selected: ${selectedMission.title}",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onBackground,
             )
@@ -150,7 +163,7 @@ fun ScanHubScreen(
 
         if (nutonicApiClient == null) {
             Text(
-                "Connect the game client on this host to load the live map list (bundled maps still work offline).",
+                "Connect this client to your game server to refresh maps from the network. Offline bundles still work.",
                 style = MaterialTheme.typography.caption,
                 color = MaterialTheme.colors.onBackground,
             )
@@ -158,21 +171,19 @@ fun ScanHubScreen(
             NutonicGlassCard(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             ) {
-                manifestLine?.let { line ->
-                    Text(
-                        line,
-                        style = MaterialTheme.typography.caption,
-                        color = MaterialTheme.colors.onBackground,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
                 Text(
-                    "Map selection",
+                    "Maps",
                     style = MaterialTheme.typography.subtitle1,
                     color = MaterialTheme.colors.primary,
                 )
+                Text(
+                    "Swipe sideways to browse. Tap a card to select it for play.",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
                 NutonicGhostButton(
-                    text = "Refresh map list from server",
+                    text = "Refresh map list",
                     onClick = {
                         scope.launch {
                             refreshScanHubCatalog(
@@ -186,8 +197,32 @@ fun ScanHubScreen(
                             )
                         }
                     },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                 )
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp)
+                            .clickable { catalogDetailsOpen = !catalogDetailsOpen },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (catalogDetailsOpen) "Hide catalog details" else "Show catalog details",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.primary,
+                    )
+                }
+                if (catalogDetailsOpen) {
+                    manifestLine?.let { line ->
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onBackground,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
                 mapsStatus?.let {
                     Text(
                         it,
@@ -197,72 +232,107 @@ fun ScanHubScreen(
                     )
                 }
                 if (maps.isNotEmpty()) {
-                    Text(
-                        "Tap a map to set SCAN play context and the leaderboard preview.",
-                        style = MaterialTheme.typography.caption,
-                        color = MaterialTheme.colors.onBackground,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    maps.forEach { m ->
-                        val selected = m.mapId == mapContextId
-                        Card(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp)
-                                    .clickable { onMapContextSelect(m.mapId, m.title) },
-                            backgroundColor =
-                                if (selected) {
-                                    NutonicColors.surfaceContainerHigh.copy(alpha = 0.85f)
-                                } else {
-                                    NutonicColors.surfaceContainerLow.copy(alpha = 0.55f)
-                                },
-                            elevation = 0.dp,
+                    val mapPages = remember(maps) { maps.chunked(MAPS_PER_PAGE) }
+                    val selectedPageIndex =
+                        remember(mapContextId, maps) {
+                            val idx = maps.indexOfFirst { it.mapId == mapContextId }
+                            if (idx < 0) 0 else idx / MAPS_PER_PAGE
+                        }
+                    val pagerState =
+                        rememberPagerState(
+                            initialPage =
+                                selectedPageIndex.coerceIn(
+                                    0,
+                                    (mapPages.size - 1).coerceAtLeast(0),
+                                ),
+                            pageCount = { mapPages.size },
+                        )
+                    LaunchedEffect(mapContextId, maps) {
+                        val target =
+                            selectedPageIndex.coerceIn(0, (mapPages.size - 1).coerceAtLeast(0))
+                        if (mapPages.isNotEmpty() && pagerState.currentPage != target) {
+                            pagerState.scrollToPage(target)
+                        }
+                    }
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(280.dp)
+                                .padding(top = 12.dp),
+                    ) { page ->
+                        val chunk = mapPages.getOrElse(page) { emptyList() }
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = m.title,
-                                        style = MaterialTheme.typography.subtitle2,
-                                        color = MaterialTheme.colors.primary,
-                                    )
-                                    Text(
-                                        text =
-                                            buildString {
-                                                append("Map ")
-                                                append(m.mapId)
-                                                m.engineVersion?.let { ev -> append(" - engine ").append(ev) }
-                                            },
-                                        style = MaterialTheme.typography.caption,
-                                        color = MaterialTheme.colors.onBackground,
-                                    )
+                            chunk.forEach { m ->
+                                val selected = m.mapId == mapContextId
+                                Card(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onMapContextSelect(m.mapId, m.title) },
+                                    backgroundColor =
+                                        if (selected) {
+                                            NutonicColors.surfaceContainerHigh.copy(alpha = 0.85f)
+                                        } else {
+                                            NutonicColors.surfaceContainerLow.copy(alpha = 0.55f)
+                                        },
+                                    elevation = 0.dp,
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = m.title.ifBlank { m.mapId },
+                                                style = MaterialTheme.typography.subtitle2,
+                                                color = MaterialTheme.colors.primary,
+                                            )
+                                            Text(
+                                                text = m.mapId,
+                                                style = MaterialTheme.typography.caption,
+                                                color = MaterialTheme.colors.onBackground,
+                                            )
+                                        }
+                                        Text(
+                                            text = if (selected) "●" else "›",
+                                            style = MaterialTheme.typography.h6,
+                                            color = MaterialTheme.colors.primary,
+                                        )
+                                    }
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = ">",
-                                    style = MaterialTheme.typography.h6,
-                                    color = MaterialTheme.colors.primary,
-                                )
                             }
                         }
                     }
                     Text(
-                        text = "Play entry",
-                        style = MaterialTheme.typography.subtitle1,
-                        color = MaterialTheme.colors.primary,
-                        modifier = Modifier.padding(top = 12.dp),
+                        text = "Page ${pagerState.currentPage + 1} of ${mapPages.size} · swipe for more maps",
+                        style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onBackground,
+                        modifier = Modifier.padding(top = 8.dp),
                     )
                     NutonicPrimaryButton(
-                        text = "Play selected mission on map",
+                        text = "View leaderboards (RANK)",
+                        onClick = onNavigateToRank,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    )
+                    Text(
+                        text = "Play",
+                        style = MaterialTheme.typography.subtitle1,
+                        color = MaterialTheme.colors.primary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    NutonicPrimaryButton(
+                        text = "Play on selected map",
                         onClick = {
                             onClearRankedSession()
                             onOpenDetail(ShellDetail.WorldMapGameplay)
                         },
-                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                     if (rankedEnabled) {
                         NutonicGhostButton(
@@ -302,10 +372,10 @@ fun ScanHubScreen(
                                         }
 
                                         is ApiResult.HttpFailure ->
-                                            mapsStatus = "Auth failed: ${tok.userMessage}"
+                                            mapsStatus = "Session token failed: ${tok.userMessage}"
 
                                         is ApiResult.NetworkFailure ->
-                                            mapsStatus = "Sign-in failed due to network. Try again when online."
+                                            mapsStatus = "Network unavailable. Try again when online."
                                     }
                                 }
                             },
@@ -313,21 +383,12 @@ fun ScanHubScreen(
                         )
                     }
                     NutonicGhostButton(
-                        text = "Open final results preview",
+                        text = "Round summary preview",
                         onClick = { onOpenDetail(ShellDetail.FinalResults) },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     )
                 }
             }
-            CommunityLeaderboardPanel(
-                nutonicApiClient = nutonicApiClient,
-                mapId = mapContextId,
-                onMapIdChange = null,
-                featureFlags = serverFeatureFlags,
-                sectionTitle = "SCAN hub - community leaderboard preview",
-                showRankedVerifiedFetch = serverFeatureFlags?.ranked == true,
-                modifier = Modifier.padding(top = 16.dp),
-            )
         }
     }
 }

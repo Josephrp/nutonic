@@ -14,7 +14,7 @@ from typing import Any, Mapping
 from urllib.parse import urlparse
 
 from lfm_vl_sft_dataset.jsonl_format import make_multi_image_vlm_message, split_key
-from lfm_vl_sft_dataset.pro_prompts import SYSTEM_GEOSPATIAL_ANALYST, SYSTEM_OPTICAL_LIMITS
+from lfm_vl_sft_dataset.pro_prompts import PRO_ASSESSMENT_TASK_FOOTER, SYSTEM_ASSESSMENT
 
 # Ordered roles for stable image ordering in user messages (PRO materialization contract).
 VLM_ROLE_ORDER: tuple[str, ...] = ("sentinel_fc", "cloud_mask_thumb", "mapbox_rgb")
@@ -79,13 +79,6 @@ def lat_lon_from_materialize_bbox(materialize: Mapping[str, Any]) -> tuple[float
     if not all(isinstance(x, (int, float)) for x in (west, south, east, north)):
         return None
     return float(south + north) / 2.0, float(west + east) / 2.0
-
-SYSTEM_ASSESSMENT = (
-    f"{SYSTEM_GEOSPATIAL_ANALYST} {SYSTEM_OPTICAL_LIMITS} "
-    "TerraMind or TiM modality summaries are **auxiliary model evidence**, not field truth unless "
-    "independently validated. Never treat pseudo-SAR-like or optical-only signals as legal or operational "
-    "confirmation of activity."
-)
 
 FORBIDDEN_SUBSTRINGS = (
     "illegal activity",
@@ -583,12 +576,7 @@ def build_assessment_user_text(
     if brief_fuse:
         parts.append("- optional brief composer summary (also model-generated):")
         parts.append(json.dumps(brief_fuse, ensure_ascii=False, indent=2))
-    parts.append(
-        "\nTask: Assess the AOI using **all** images (in order) plus the TerraMind context. "
-        "Separate **visible** evidence from **model-inferred** evidence. "
-        "State confidence and limitations. Suggest practical follow-up checks. "
-        "Do not claim legal outcomes or definitive vessel detections from optical-only data."
-    )
+    parts.append(PRO_ASSESSMENT_TASK_FOOTER)
     return "\n".join(parts)
 
 

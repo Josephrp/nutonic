@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,10 @@ from nutonic_hmac import nutonic_hmac_headers_from_env
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_TIM_SRC = REPO_ROOT / "inference" / "terramind_tim_local" / "src"
+if str(_TIM_SRC) not in sys.path:
+    sys.path.insert(0, str(_TIM_SRC))
+from nutonic_terramind_tim_local.tim_defaults import DEFAULT_TIM_MODEL_ID
 PRESET_CHOICES = (
     "full",
     "lfm-deploy",
@@ -156,6 +161,50 @@ def _request_json(
 
     detail = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=True)[:300]
     return _fail(name, f"{method} {url} -> {response.status_code}: {detail}", response.status_code), payload
+
+
+def _response_detail_code(payload: dict[str, Any] | list[Any] | str | None) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    detail = payload.get("detail")
+    if isinstance(detail, dict):
+        code = detail.get("code")
+        return str(code) if code is not None else None
+    return None
+
+
+def _post_pro_materialize_with_optional_build_wait(
+    client: httpx.Client,
+    *,
+    mat_url: str,
+    json_body: dict[str, Any],
+    max_attempts: int,
+    interval_sec: float,
+) -> tuple[CheckResult, dict[str, Any] | list[Any] | str | None]:
+    """
+    HF Spaces apply uploaded Dockerfiles asynchronously; smoke may hit the previous image until
+    the new build finishes. Retry only on 503 ``S2_DEPENDENCIES_MISSING`` (old image / build pending).
+    """
+    for attempt in range(max(1, max_attempts)):
+        r, payload = _request_json(
+            client,
+            "POST",
+            mat_url,
+            name="pro.materialize",
+            sign_with_env_hmac=True,
+            json_body=json_body,
+        )
+        if r.status == "ok":
+            return r, payload
+        if (
+            r.http_status == 503
+            and _response_detail_code(payload) == "S2_DEPENDENCIES_MISSING"
+            and attempt + 1 < max_attempts
+        ):
+            time.sleep(interval_sec)
+            continue
+        return r, payload
+    raise RuntimeError("pro.materialize retry loop exited without return")  # pragma: no cover
 
 
 def _extract_gradio_event_id(payload: dict[str, Any] | list[Any] | str | None) -> str:
@@ -333,6 +382,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     p.add_argument("--lat", type=float, default=37.7749, help="Latitude for PRO materialize/job checks.")
     p.add_argument("--lon", type=float, default=-122.4194, help="Longitude for PRO materialize/job checks.")
+    p.add_argument(
+        "--pro-materialize-max-attempts",
+        type=int,
+        default=6,
+        help=(
+            "POST /internal/v1/materialize: max attempts on 503 S2_DEPENDENCIES_MISSING only "
+            "(fallback when Hub build wait is not used). Default 6."
+        ),
+    )
+    p.add_argument(
+        "--pro-materialize-wait-interval",
+        type=float,
+        default=8.0,
+        help="Seconds between those retries (default: 8).",
+    )
     p.add_argument("--json", action="store_true", help="Print machine-readable JSON output.")
     p.add_argument(
         "--json-report-path",
@@ -490,12 +554,12 @@ def main(argv: list[str] | None = None) -> int:
                     name="tim.export",
                     json_body={
                         "config": {
-                            "model_id": "terramind_v1_tiny_tim",
+                            "model_id": DEFAULT_TIM_MODEL_ID,
                             "pretrained": True,
                             "modalities": ["RGB"],
                             "tim_modalities": ["location"],
                             "merge_method": "mean",
-                            "device": "cpu",
+                            "device": "cuda",
                             "inputs": {"mode": "random", "batch_size": 1},
                             "serialization": {
                                 "tensor_sample_limit": 0,
@@ -536,24 +600,24 @@ def main(argv: list[str] | None = None) -> int:
             results.append(r)
             if run_pro_materialize:
                 mat_url = f"{urls['pro_materialization']}/internal/v1/materialize"
-                r, _ = _request_json(
+                mat_body = {
+                    "latitude": args.lat,
+                    "longitude": args.lon,
+                    "bbox_half_km": 5.0,
+                    "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+                    "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+                    "enable_tim": False,
+                    "tim_branch": "RGB_mapbox",
+                    "mapbox_zoom": 12,
+                    "mapbox_size": 256,
+                    "retina": False,
+                }
+                r, _ = _post_pro_materialize_with_optional_build_wait(
                     client,
-                    "POST",
-                    mat_url,
-                    name="pro.materialize",
-                    sign_with_env_hmac=True,
-                    json_body={
-                        "latitude": args.lat,
-                        "longitude": args.lon,
-                        "bbox_half_km": 5.0,
-                        "sentinel_fetch_mode": "MINIMAL_RGB",
-                        "vlm_contract_id": "nutonic.pro.vlm.v1_512",
-                        "enable_tim": False,
-                        "tim_branch": "RGB_mapbox",
-                        "mapbox_zoom": 12,
-                        "mapbox_size": 256,
-                        "retina": False,
-                    },
+                    mat_url=mat_url,
+                    json_body=mat_body,
+                    max_attempts=args.pro_materialize_max_attempts,
+                    interval_sec=args.pro_materialize_wait_interval,
                 )
                 results.append(r)
             else:
@@ -647,8 +711,8 @@ def main(argv: list[str] | None = None) -> int:
                                 "mapbox_zoom": 12,
                                 "enable_tim": False,
                                 "tim_branch": "RGB_mapbox",
-                                "vlm_contract_id": "nutonic.pro.vlm.v1_512",
-                                "sentinel_fetch_mode": "MINIMAL_RGB",
+                                "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+                                "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
                             },
                         )
                         results.append(create_check)

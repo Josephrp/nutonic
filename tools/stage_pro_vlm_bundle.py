@@ -14,7 +14,11 @@ import shutil
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-DEFAULT_PRO_VLM_MODEL_SOURCE_URL = "https://huggingface.co/LiquidAI/LFM2.5-VL-450M/resolve/main/model.safetensors"
+# Pin revision so CI/package hashes stay aligned with server defaults in `nutonic_server/settings.py`.
+DEFAULT_PRO_VLM_MODEL_SOURCE_URL = (
+    "https://huggingface.co/NuTonic/lspace/resolve/"
+    "3ec756bfc8a94fcb23801fe6925d832ab35595f2/model.safetensors"
+)
 
 
 def main() -> int:

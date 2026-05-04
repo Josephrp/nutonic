@@ -23,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.nutonic.api.GuessRecordOut
+import com.nutonic.api.RankedSubmitOut
 import com.nutonic.filter.PlatformContext
 import com.nutonic.share.shareNutonicScorecard
 import com.nutonic.style.nutonicOnSurfaceMuted
@@ -44,9 +46,14 @@ internal fun RoundSuccessOverlay(
     mapId: String,
     mapTitle: String?,
     locationId: String,
+    operatorDisplayName: String,
     scorePoints: Int?,
     distanceKm: Double?,
+    aiDistanceToTruthKm: Double?,
+    rankedOutcome: RankedSubmitOut?,
     serverVerified: Boolean,
+    telemetryAck: GuessRecordOut?,
+    syncStatusLine: String?,
     platformContext: PlatformContext,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -62,6 +69,11 @@ internal fun RoundSuccessOverlay(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Round complete", style = MaterialTheme.typography.subtitle1, color = MaterialTheme.colors.primary)
             Text(
+                text = "Operator: $operatorDisplayName",
+                style = MaterialTheme.typography.body2,
+                color = MaterialTheme.colors.onBackground,
+            )
+            Text(
                 text =
                     buildString {
                         append("Map ")
@@ -72,11 +84,41 @@ internal fun RoundSuccessOverlay(
                 color = nutonicOnSurfaceMuted(alpha = 0.85f),
             )
             Text("Location $locationId", style = MaterialTheme.typography.caption, color = nutonicOnSurfaceMuted())
-            if (serverVerified) {
-                Text("Server-verified ranked score", style = MaterialTheme.typography.caption, color = MaterialTheme.colors.secondary)
+            if (serverVerified && rankedOutcome != null) {
+                Text(
+                    "Ranked · server-verified · ${rankedOutcome.scorePoints} pts · ${rankedOutcome.distanceKm.format(2)} km",
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.secondary,
+                )
             }
-            if (scorePoints != null && distanceKm != null) {
-                Text("$scorePoints pts · ${distanceKm.format(2)} km from truth", style = MaterialTheme.typography.body2)
+            val resolvedPts = telemetryAck?.scorePoints ?: scorePoints
+            val resolvedKm = telemetryAck?.distanceKm ?: distanceKm
+            if (!serverVerified && resolvedPts != null && resolvedKm != null) {
+                Text(
+                    "$resolvedPts pts · ${resolvedKm.format(2)} km from local manifest truth",
+                    style = MaterialTheme.typography.body2,
+                    color = MaterialTheme.colors.onBackground,
+                )
+            }
+            aiDistanceToTruthKm?.let { aiKm ->
+                Text(
+                    "AI marker vs truth: ${aiKm.format(2)} km (comparison only)",
+                    style = MaterialTheme.typography.caption,
+                    color = nutonicOnSurfaceMuted(alpha = 0.9f),
+                )
+            }
+            telemetryAck?.let { ack ->
+                Text(
+                    buildString {
+                        append("Telemetry row #${ack.id}")
+                        ack.displayHandle?.takeIf { it.isNotBlank() }?.let { h -> append(" · ").append(h) }
+                    },
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.secondary,
+                )
+            }
+            syncStatusLine?.takeIf { it.isNotBlank() }?.let { line ->
+                Text(line, style = MaterialTheme.typography.caption, color = MaterialTheme.colors.onBackground)
             }
             when (val state = shareState) {
                 ShareScorecardState.Idle -> Unit
@@ -110,17 +152,24 @@ internal fun RoundSuccessOverlay(
                             val body =
                                 buildString {
                                     appendLine("NU:TONIC scorecard")
+                                    append("Operator: ").appendLine(operatorDisplayName)
                                     append("Map: ").appendLine(mapId)
                                     mapTitle?.takeIf { it.isNotBlank() }?.let { append("Title: ").appendLine(it) }
                                     append("Location: ").appendLine(locationId)
-                                    if (scorePoints != null && distanceKm != null) {
-                                        appendLine("$scorePoints pts · ${distanceKm.format(2)} km from truth")
+                                    val pts = telemetryAck?.scorePoints ?: scorePoints
+                                    val km = telemetryAck?.distanceKm ?: distanceKm
+                                    if (pts != null && km != null) {
+                                        appendLine("$pts pts · ${km.format(2)} km from truth")
+                                    }
+                                    aiDistanceToTruthKm?.let {
+                                        appendLine("AI vs truth: ${it.format(2)} km")
                                     }
                                     if (serverVerified) {
                                         appendLine("Mode: ranked (server-verified)")
                                     } else {
                                         appendLine("Mode: non-ranked (local truth)")
                                     }
+                                    telemetryAck?.let { appendLine("Telemetry id: ${it.id}") }
                                 }
                             val ok = shareNutonicScorecard(platformContext, body.trim())
                             shareState =

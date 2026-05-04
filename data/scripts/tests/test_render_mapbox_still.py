@@ -120,6 +120,46 @@ def test_network_render_disabled_without_allow_network(tmp_path: Path) -> None:
     assert proc.returncode == 4
 
 
+def test_placeholder_stills_writes_without_mapbox(tmp_path: Path) -> None:
+    catalog = tmp_path / "catalog"
+    loc = catalog / "locations"
+    loc.mkdir(parents=True, exist_ok=True)
+    row = {
+        "location_id": "loc_ph",
+        "map_id": "loc_ph",
+        "truth_lat": -33.8688,
+        "truth_lon": 151.2093,
+        "assist_level": "standard",
+    }
+    (loc / "loc_ph.yaml").write_text(yaml.safe_dump(row, sort_keys=True), encoding="utf-8")
+    out_maps = tmp_path / "maps"
+    meta = tmp_path / "meta"
+    cmd = [
+        sys.executable,
+        str(SCRIPTS / "render_mapbox_still.py"),
+        "--catalog-root",
+        str(catalog),
+        "--compose-resources-maps-dir",
+        str(out_maps),
+        "--meta-dir",
+        str(meta),
+        "--placeholder-stills",
+    ]
+    env = os.environ.copy()
+    env.pop("MAPBOX_ACCESS_TOKEN", None)
+    env.pop("MAPBOX_TOKEN", None)
+    env["NUTONIC_NO_DOTENV"] = "1"
+    proc = subprocess.run(cmd, cwd=str(REPO_ROOT), env=env, check=False)
+    assert proc.returncode == 0
+
+    jpg = out_maps / "loc_ph.jpg"
+    assert jpg.is_file()
+    Image.open(jpg).verify()
+
+    idx = json.loads((meta / "still_index.json").read_text(encoding="utf-8"))
+    assert idx["locations"][0]["source"] == "placeholder_no_mapbox"
+
+
 def test_mapbox_render_requires_token_when_allow_network(tmp_path: Path) -> None:
     catalog = tmp_path / "catalog"
     loc = catalog / "locations"

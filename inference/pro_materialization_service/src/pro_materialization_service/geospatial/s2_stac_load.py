@@ -3,7 +3,7 @@
 Aligned with ``nutonic_terramind_tim_local.s2_stac`` (same asset keys and
 ``resolve_href``) so NPZ stacks match TiM expectations — **no torch** here.
 
-Optional deps: ``pip install nutonic-pro-materialization-service[s2]`` (``pystac-client``, ``rasterio``).
+Requires ``pystac-client`` and ``rasterio`` (core deps); container images should install GDAL (see service ``Dockerfile``).
 """
 
 from __future__ import annotations
@@ -43,13 +43,13 @@ def _require_stac_rasterio() -> Any:
         import rasterio.warp  # noqa: F401 — ensure ``rasterio.warp.*`` is bound (lazy submodules)
     except ImportError as e:  # pragma: no cover
         raise ImportError(
-            "Sentinel materialization needs rasterio (pip install nutonic-pro-materialization-service[s2])",
+            "Sentinel materialization needs rasterio (core dependency; check the runtime environment)",
         ) from e
     try:
         from pystac_client import Client  # noqa: F401
     except ImportError as e:  # pragma: no cover
         raise ImportError(
-            "Sentinel materialization needs pystac-client (pip install nutonic-pro-materialization-service[s2])",
+            "Sentinel materialization needs pystac-client (core dependency; check the runtime environment)",
         ) from e
     return rasterio
 

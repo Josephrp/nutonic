@@ -13,7 +13,7 @@ dependencies = [
     "terratorch>=1.1.1,<1.3",
     "PyYAML>=6.0.1",
     "numpy>=1.26.0",
-    "Pillow>=10.0.0",
+    "Pillow>=12.2.0",
     # Align with TerraTorch → peft: older peft imports HybridCache from transformers;
     # transformers 5.2+ reshaped exports — peft 0.18.1+ avoids the stale import path.
     "peft>=0.18.1",
@@ -31,7 +31,7 @@ s2 = ["pystac-client>=0.7.0", "rasterio>=1.3.9", "boto3>=1.34.0"]
 space = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
-    "gradio>=4.44.0,<6",
+    "gradio>=6.7.0",
     "spaces>=0.44.0,<1",
 ]
 

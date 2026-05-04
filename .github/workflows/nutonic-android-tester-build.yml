@@ -1,0 +1,179 @@
+# Point Android at your **deployed** game API (e.g. Hugging Face Space) and produce a **signed** release APK for field testers.
+#
+# Prereqs (repo **Settings → Secrets and variables**):
+#   - Same Android signing secrets as `nutonic-release.yml`: NUTONIC_ANDROID_KEYSTORE_BASE64,
+#     NUTONIC_ANDROID_KEYSTORE_PASSWORD, NUTONIC_ANDROID_KEY_ALIAS, NUTONIC_ANDROID_KEY_PASSWORD
+#   - Optional: NUTONIC_MAPS_API_KEY_RELEASE (otherwise Maps uses CI_STUB)
+#
+# Prereqs (**Variables** tab):
+#   - **NUTONIC_DEMO_SERVER_ORIGIN** — e.g. `https://your-org-your-space.hf.space` (no `/api/v1`).
+#     Override per run with the workflow input.
+#
+# This workflow **probes** `GET {origin}/api/v1/health` before building so a mis-typed or down demo
+# fails fast. Use "Skip health check" only if the API is intentionally unreachable from GitHub (rare).
+
+name: nutonic — Android demo APK (testers)
+
+on:
+  workflow_dispatch:
+    inputs:
+      nutonic_server_origin:
+        description: "Game API origin (no /api/v1). Empty = variable NUTONIC_DEMO_SERVER_ORIGIN"
+        required: false
+        default: ""
+        type: string
+      skip_health_check:
+        description: "Skip GET {origin}/api/v1/health (only if the API cannot be reached from GitHub)"
+        required: false
+        default: "no"
+        type: choice
+        options:
+          - "no"
+          - "yes"
+
+concurrency:
+  group: nutonic-android-tester-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: nutonic
+
+jobs:
+  build-android-demo-apk:
+    name: Signed release APK (demo server) + verify API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve demo server origin
+        id: origin
+        env:
+          IN: ${{ github.event.inputs.nutonic_server_origin }}
+          VAR: ${{ vars.NUTONIC_DEMO_SERVER_ORIGIN }}
+        run: |
+          set -euo pipefail
+          O="${IN:-}"
+          if [ -z "${O// }" ]; then
+            O="${VAR:-}"
+          fi
+          O="${O// }"
+          if [ -z "$O" ]; then
+            echo "Set repository variable NUTONIC_DEMO_SERVER_ORIGIN or pass nutonic_server_origin when running this workflow."
+            exit 1
+          fi
+          O="${O%%/}"
+          {
+            echo "value=$O"
+            echo "health_url=$O/api/v1/health"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify demo API (health)
+        if: github.event.inputs.skip_health_check != 'yes'
+        run: |
+          set -euo pipefail
+          echo "Probing ${{ steps.origin.outputs.health_url }}"
+          curl -fsS --connect-timeout 15 --max-time 30 "${{ steps.origin.outputs.health_url }}"
+          echo ""
+          echo "Health check OK."
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: local.properties (SDK + Maps)
+        env:
+          MAPS_KEY: ${{ secrets.NUTONIC_MAPS_API_KEY_RELEASE }}
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          if [ -n "${MAPS_KEY:-}" ]; then echo "MAPS_API_KEY=${MAPS_KEY}" >> local.properties
+          else echo "MAPS_API_KEY=CI_STUB" >> local.properties
+          fi
+
+      - name: Decode Android release keystore
+        env:
+          KS_B64: ${{ secrets.NUTONIC_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${KS_B64:-}" ]; then echo "Missing secret NUTONIC_ANDROID_KEYSTORE_BASE64"; exit 1; fi
+          echo "$KS_B64" | base64 -d > "${RUNNER_TEMP}/nutonic-release.keystore"
+
+      - name: Optional PRO VLM Android asset
+        if: vars.NUTONIC_PRO_VLM_EMBED_IN_ANDROID == 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          NUTONIC_PRO_VLM_MODEL_SOURCE_URL: ${{ vars.NUTONIC_PRO_VLM_MODEL_SOURCE_URL }}
+          NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256: ${{ vars.NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256 }}
+        run: |
+          python tools/stage_pro_vlm_bundle.py \
+            --required \
+            --output nutonic/shared/src/androidMain/assets/pro_vlm/pro-vlm.bundle
+
+      - name: Assemble signed release APK (demo origin)
+        env:
+          STORE_PW: ${{ secrets.NUTONIC_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.NUTONIC_ANDROID_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.NUTONIC_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STORE_PW:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PW:-}" ]; then
+            echo "Missing one of: NUTONIC_ANDROID_KEYSTORE_PASSWORD, NUTONIC_ANDROID_KEY_ALIAS, NUTONIC_ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+          ./gradlew --no-configuration-cache :androidApp:assembleRelease \
+            -Pandroid.injected.signing.store.file="${RUNNER_TEMP}/nutonic-release.keystore" \
+            -Pandroid.injected.signing.store.password="${STORE_PW}" \
+            -Pandroid.injected.signing.key.alias="${KEY_ALIAS}" \
+            -Pandroid.injected.signing.key.password="${KEY_PW}" \
+            -PnutonicServerOrigin="${{ steps.origin.outputs.value }}"
+
+      - name: Package artifact for testers
+        id: pack
+        run: |
+          set -euo pipefail
+          OUT="${RUNNER_TEMP}/nutonic-android-demo"
+          mkdir -p "$OUT"
+          SRC=(androidApp/build/outputs/apk/release/*.apk)
+          if [ ! -e "${SRC[0]}" ]; then echo "No release APK found"; exit 1; fi
+          cp -v "${SRC[0]}" "$OUT/nutonic-demo.apk"
+          ORIGIN="${{ steps.origin.outputs.value }}"
+          {
+            echo "Nutonic Android — demo / tester build"
+            echo ""
+            echo "Build: ${{ github.run_id }}  |  Ref: ${{ github.ref_name }}  |  Commit: ${{ github.sha }}"
+            echo ""
+            echo "This APK is built to use the game API at:"
+            echo "  ${ORIGIN}"
+            echo ""
+            echo "Sanity-check in a browser (should return JSON):"
+            echo "  ${ORIGIN}/api/v1/health"
+            echo ""
+            echo "Install: copy nutonic-demo.apk to the device, allow installing from unknown sources, open the file."
+            echo "Maps: if the app map is blank, set NUTONIC_MAPS_API_KEY_RELEASE and rebuild (Play / Cloud console key for com.nutonic.android)."
+          } > "$OUT/README-TESTERS.txt"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nutonic-android-demo
+          path: ${{ steps.pack.outputs.path }}
+          if-no-files-found: error
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Android demo build"
+            echo ""
+            echo "- **Server origin (BuildConfig):** \`${{ steps.origin.outputs.value }}\`"
+            echo "- **Health URL:** [${{ steps.origin.outputs.health_url }}](${{ steps.origin.outputs.health_url }})"
+            echo "- **Artifact:** \`nutonic-android-demo\` (contains \`nutonic-demo.apk\` + \`README-TESTERS.txt\`)"
+            echo ""
+            echo "Download the artifact from this run, share the zip with testers, and have them install \`nutonic-demo.apk\`."
+          } >> "$GITHUB_STEP_SUMMARY"

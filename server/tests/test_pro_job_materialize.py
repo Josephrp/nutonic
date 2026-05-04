@@ -73,7 +73,7 @@ def test_pro_job_calls_materialize_when_health_ok(
                 "cache_key": "ck-test",
                 "vlm_artifacts": [
                     {
-                        "role": "mapbox_rgb",
+                        "role": "sentinel_fc",
                         "sha256": "abc",
                         "mime": "image/png",
                         "width": 512,
@@ -82,7 +82,7 @@ def test_pro_job_calls_materialize_when_health_ok(
                     },
                 ],
                 "tim_payload": None,
-                "run_manifest": {"mapbox_center_mode": "user_pin"},
+                "run_manifest": {"bbox_wgs84": {"west": 0.0, "south": 0.0, "east": 1.0, "north": 1.0}},
                 "errors": [],
                 "warnings": [],
             }
@@ -115,6 +115,7 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert posts[0][0] == "http://pro.worker.test/internal/v1/materialize"
     assert posts[0][1]["latitude"] == 48.86
     assert posts[0][1]["sentinel_fetch_mode"] == "TERRAMIND_SPECTRAL"
+    assert posts[0][1]["vlm_contract_id"] == "nutonic.pro.vlm.v1_512_s2_only"
     assert posts[0][1]["enable_tim"] is True
     assert posts[0][1]["tim_branch"] == "S2L2A_full"
     assert posts[0][1]["analysis_profile"] == "wildfire"
@@ -122,20 +123,20 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert sj["cache_key"] == "ck-test"
     assert sj["progress_pct"] == 100
     assert sj["analysis_profile"] == "wildfire"
-    assert sj["materialization_summary"]["vlm_artifacts"][0]["role"] == "mapbox_rgb"
+    assert sj["materialization_summary"]["vlm_artifacts"][0]["role"] == "sentinel_fc"
     assert "inline_base64" not in sj["materialization_summary"]["vlm_artifacts"][0]
-    assert sj["artifacts"][0]["artifact_id"] == "mapbox_rgb"
-    assert sj["artifacts"][0]["contract_id"] == "pro.vlm_image.mapbox_rgb.v1"
-    assert sj["artifacts"][0]["role"] == "mapbox_rgb"
+    assert sj["artifacts"][0]["artifact_id"] == "sentinel_fc"
+    assert sj["artifacts"][0]["contract_id"] == "pro.vlm_image.sentinel_fc.v1"
+    assert sj["artifacts"][0]["role"] == "sentinel_fc"
     assert sj["artifacts"][0]["category"] == "vlm_image"
     assert sj["artifacts"][0]["required_for_profile"] is True
     assert sj["artifacts"][0]["size_bytes"] == 5
-    assert sj["on_device_payload"]["vlm_image_set"][0]["artifact_id"] == "mapbox_rgb"
-    assert sj["on_device_payload"]["vlm_image_set"][0]["url"] == f"/api/v1/pro/jobs/{job_id}/artifacts/mapbox_rgb"
+    assert sj["on_device_payload"]["vlm_image_set"][0]["artifact_id"] == "sentinel_fc"
+    assert sj["on_device_payload"]["vlm_image_set"][0]["url"] == f"/api/v1/pro/jobs/{job_id}/artifacts/sentinel_fc"
     assert sj["bundle_download_url"] == f"/api/v1/pro/jobs/{job_id}/bundle"
 
     artifact = pro_client.get(
-        f"/api/v1/pro/jobs/{job_id}/artifacts/mapbox_rgb",
+        f"/api/v1/pro/jobs/{job_id}/artifacts/sentinel_fc",
         headers=headers,
     )
     assert artifact.status_code == 200
@@ -146,15 +147,45 @@ def test_pro_job_calls_materialize_when_health_ok(
     assert bundle.headers["content-type"].startswith("application/zip")
     assert bundle.headers["x-nutonic-bundle-sha256"] == hashlib.sha256(bundle.content).hexdigest()
     with zipfile.ZipFile(io.BytesIO(bundle.content)) as zf:
-        assert sorted(zf.namelist()) == ["artifacts/mapbox_rgb.png", "pro_bundle_manifest.json"]
-        assert zf.read("artifacts/mapbox_rgb.png") == b"hello"
+        assert sorted(zf.namelist()) == ["artifacts/sentinel_fc.png", "pro_bundle_manifest.json"]
+        assert zf.read("artifacts/sentinel_fc.png") == b"hello"
         manifest = json.loads(zf.read("pro_bundle_manifest.json"))
     assert manifest["schema"] == "nutonic.pro.evidence_bundle.v1"
     assert manifest["job_id"] == job_id
-    assert manifest["on_device_payload"]["vlm_image_set"][0]["artifact_id"] == "mapbox_rgb"
-    assert manifest["artifacts"][0]["path"] == "artifacts/mapbox_rgb.png"
+    assert manifest["on_device_payload"]["vlm_image_set"][0]["artifact_id"] == "sentinel_fc"
+    assert manifest["artifacts"][0]["path"] == "artifacts/sentinel_fc.png"
     assert manifest["artifacts"][0]["sha256"] == hashlib.sha256(b"hello").hexdigest()
     assert manifest["artifacts"][0]["missing"] is False
+
+
+def test_pro_job_create_rejects_minimal_rgb(pro_client: TestClient) -> None:
+    headers = _auth_header(pro_client)
+    r = pro_client.post(
+        "/api/v1/pro/jobs",
+        headers=headers,
+        json={
+            "center_lat": 1.0,
+            "center_lon": 2.0,
+            "sentinel_fetch_mode": "MINIMAL_RGB",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_pro_job_create_rejects_mapbox_vlm_contract(pro_client: TestClient) -> None:
+    headers = _auth_header(pro_client)
+    r = pro_client.post(
+        "/api/v1/pro/jobs",
+        headers=headers,
+        json={
+            "center_lat": 1.0,
+            "center_lon": 2.0,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512",
+        },
+    )
+    assert r.status_code == 422
 
 
 def test_pro_vlm_model_manifest_uses_configured_contract_ids(
@@ -167,7 +198,7 @@ def test_pro_vlm_model_manifest_uses_configured_contract_ids(
     monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_SHA256", "A" * 64)
     monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_SIZE_BYTES", "42")
     monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_RUNTIME", "leap")
-    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS", "nutonic.pro.vlm.v1_512, nutonic.pro.vlm.v1_512_fc_scl")
+    monkeypatch.setenv("NUTONIC_PRO_VLM_MODEL_CONTRACT_IDS", "nutonic.pro.vlm.v1_512_s2_only")
 
     headers = _auth_header(pro_client)
     r = pro_client.get("/api/v1/pro/vlm/model-manifest", headers=headers)
@@ -176,7 +207,7 @@ def test_pro_vlm_model_manifest_uses_configured_contract_ids(
     body = r.json()
     assert body["model_bundle_id"] == "nutonic.pro.vlm.test"
     assert body["sha256"] == "a" * 64
-    assert body["contract_ids"] == ["nutonic.pro.vlm.v1_512", "nutonic.pro.vlm.v1_512_fc_scl"]
+    assert body["contract_ids"] == ["nutonic.pro.vlm.v1_512_s2_only"]
 
 
 def test_pro_vlm_model_manifest_can_serve_publish_time_local_bundle(

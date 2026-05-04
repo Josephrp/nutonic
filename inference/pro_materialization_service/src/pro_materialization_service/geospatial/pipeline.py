@@ -1,4 +1,4 @@
-"""Materialization: Mapbox + optional Sentinel-2 (P1–P2)."""
+"""Materialization: Sentinel-2 EO (+ optional TiM); Mapbox-backed VLM contracts are rejected."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
 import numpy as np
 from PIL import Image
 
@@ -27,15 +26,13 @@ from pro_materialization_service.geospatial.asset_version import (
 )
 from pro_materialization_service.geospatial.bbox import square_bbox_wgs84
 from pro_materialization_service.geospatial.mapbox_static import (
-    fetch_mapbox_static_png,
-    mapbox_access_token,
     mapbox_retry_count,
     mapbox_source_metadata,
     mapbox_timeout_seconds,
 )
 from pro_materialization_service.geospatial.s2_stac_load import apply_reflectance_scale, load_s2l2a_patch_np
 from pro_materialization_service.geospatial.tim_export import rgb_mapbox_npz_from_png, s2l2a_npz_from_stack
-from pro_materialization_service.geospatial.vlm_contracts import resolve_vlm_contract
+from pro_materialization_service.geospatial.vlm_contracts import VlmContract, resolve_vlm_contract
 from pro_materialization_service.geospatial.vlm_export import (
     cloud_mask_thumb_from_scl_png,
     false_color_swir_nir_red_png,
@@ -172,120 +169,43 @@ def _parse_interval_date(value: str) -> Any | None:
             return None
 
 
-def materialize(req: MaterializeRequest, *, client: httpx.Client | None = None) -> MaterializeResult:
+def materialize(req: MaterializeRequest) -> MaterializeResult:
     """Dispatch by ``sentinel_fetch_mode`` (``plans/2026-04-12-...`` §5.3)."""
     mode = SentinelFetchMode(req.sentinel_fetch_mode)
     profile = AnalysisProfile(req.analysis_profile)
+    tim_branch = TimBranch(req.tim_branch)
     profile_err = validate_profile_mode_matrix(
         analysis_profile=profile,
         sentinel_fetch_mode=mode,
-        tim_branch=TimBranch(req.tim_branch),
+        tim_branch=tim_branch,
         enable_tim=req.enable_tim,
     )
     if profile_err:
         raise ValueError(profile_err)
-    if mode == SentinelFetchMode.MINIMAL_RGB:
-        return materialize_rgb_mapbox(req, client=client)
-    return materialize_spectral_paths(req, client=client)
-
-
-def materialize_rgb_mapbox(
-    req: MaterializeRequest,
-    *,
-    client: httpx.Client | None = None,
-) -> MaterializeResult:
-    """``MINIMAL_RGB``: Mapbox pin → VLM PNG; optional ``RGB`` TiM NPZ."""
-    mode = SentinelFetchMode(req.sentinel_fetch_mode)
-    tim_branch = TimBranch(req.tim_branch)
-    err = validate_mode_matrix(sentinel_fetch_mode=mode, tim_branch=tim_branch, enable_tim=req.enable_tim)
-    if err:
-        raise ValueError(err)
-
-    token = mapbox_access_token()
-    if not token:
-        raise ValueError("MAPBOX_TOKEN_MISSING")
-
+    mode_err = validate_mode_matrix(sentinel_fetch_mode=mode, tim_branch=tim_branch, enable_tim=req.enable_tim)
+    if mode_err:
+        raise ValueError(mode_err)
     try:
         contract = resolve_vlm_contract(req.vlm_contract_id)
     except ValueError:
         raise ValueError("UNKNOWN_VLM_CONTRACT") from None
-
-    if _VLM_ROLES_NEED_S2 & set(contract.roles):
-        raise ValueError("VLM_CONTRACT_REQUIRES_SENTINEL_STACK")
-
-    mid = str(uuid.uuid4())
-    cache_key = compute_cache_key(req)
-    zoom = float(_clamp_zoom(req.mapbox_zoom))
-    mw = _clamp_mapbox_size(req.mapbox_size)
-    mh = mw
-
-    own_client = client is None
-    hc = httpx.Client() if own_client else client
-    assert hc is not None
-    try:
-        try:
-            policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
-            raw_png, attribution = fetch_mapbox_static_png(
-                hc,
-                lon=req.longitude,
-                lat=req.latitude,
-                zoom=zoom,
-                bearing=req.mapbox_bearing,
-                pitch=req.mapbox_pitch,
-                width=mw,
-                height=mh,
-                retina=req.retina,
-                token=token,
-                timeout_s=policy["mapbox_timeout_seconds"],
-                retry_count=policy["mapbox_retry_count"],
-            )
-        except httpx.HTTPStatusError as e:
-            raise ValueError(f"MAPBOX_HTTP_{e.response.status_code}") from e
-        except httpx.RequestError:
-            raise ValueError("MAPBOX_TRANSPORT_ERROR") from None
-    finally:
-        if own_client:
-            hc.close()
-
-    return _assemble_result(
-        req=req,
-        mid=mid,
-        cache_key=cache_key,
-        raw_mapbox_png=raw_png,
-        mapbox_attribution=attribution,
-        contract=contract,
-        zoom=zoom,
-        mw=mw,
-        mh=mh,
-        stac_meta=None,
-        s2_stack_for_tim=None,
-        scl_patch=None,
-        temporal_stac_meta=None,
-        temporal_stacks=None,
-    )
+    if "mapbox_rgb" in contract.roles:
+        raise ValueError("VLM_CONTRACT_INCLUDES_MAPBOX_RGB")
+    if mode == SentinelFetchMode.MINIMAL_RGB:
+        raise ValueError("MINIMAL_RGB_UNSUPPORTED_USE_TERRAMIND_SPECTRAL")
+    return materialize_spectral_paths(req, contract=contract)
 
 
 def materialize_spectral_paths(
     req: MaterializeRequest,
     *,
-    client: httpx.Client | None = None,
+    contract: VlmContract,
 ) -> MaterializeResult:
-    """``TERRAMIND_SPECTRAL`` / ``FULL_STAC``: Sentinel-2 stack (P2); Mapbox only if ``mapbox_rgb`` is in the contract."""
-    mode = SentinelFetchMode(req.sentinel_fetch_mode)
+    """``TERRAMIND_SPECTRAL`` / ``FULL_STAC``: Sentinel-2 stack (P2)."""
     tim_branch = TimBranch(req.tim_branch)
-    err = validate_mode_matrix(sentinel_fetch_mode=mode, tim_branch=tim_branch, enable_tim=req.enable_tim)
-    if err:
-        raise ValueError(err)
-
-    try:
-        contract = resolve_vlm_contract(req.vlm_contract_id)
-    except ValueError:
-        raise ValueError("UNKNOWN_VLM_CONTRACT") from None
-
     if req.enable_tim and tim_branch == TimBranch.RGB_MAPBOX and "mapbox_rgb" not in contract.roles:
         raise ValueError("TIM_RGB_REQUIRES_MAPBOX_VLM_CONTRACT")
 
-    needs_mapbox = "mapbox_rgb" in contract.roles
     raw_png = b""
     attribution = "none"
     zoom = float(_clamp_zoom(req.mapbox_zoom))
@@ -293,39 +213,6 @@ def materialize_spectral_paths(
     mh = mw
     mid = str(uuid.uuid4())
     cache_key = compute_cache_key(req)
-
-    if needs_mapbox:
-        token = mapbox_access_token()
-        if not token:
-            raise ValueError("MAPBOX_TOKEN_MISSING")
-
-        own_client = client is None
-        hc = httpx.Client() if own_client else client
-        assert hc is not None
-        try:
-            try:
-                policy = profile_materialization_policy(AnalysisProfile(req.analysis_profile))
-                raw_png, attribution = fetch_mapbox_static_png(
-                    hc,
-                    lon=req.longitude,
-                    lat=req.latitude,
-                    zoom=zoom,
-                    bearing=req.mapbox_bearing,
-                    pitch=req.mapbox_pitch,
-                    width=mw,
-                    height=mh,
-                    retina=req.retina,
-                    token=token,
-                    timeout_s=policy["mapbox_timeout_seconds"],
-                    retry_count=policy["mapbox_retry_count"],
-                )
-            except httpx.HTTPStatusError as e:
-                raise ValueError(f"MAPBOX_HTTP_{e.response.status_code}") from e
-            except httpx.RequestError:
-                raise ValueError("MAPBOX_TRANSPORT_ERROR") from None
-        finally:
-            if own_client:
-                hc.close()
 
     profile = AnalysisProfile(req.analysis_profile)
     profile_policy = profile_materialization_policy(profile)

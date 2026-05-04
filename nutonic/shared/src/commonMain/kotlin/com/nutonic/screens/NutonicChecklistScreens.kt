@@ -10,12 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +22,8 @@ import com.nutonic.nutonicClientVersionLabel
 import com.nutonic.style.NutonicGhostButton
 import com.nutonic.style.NutonicGlassCard
 import com.nutonic.style.NutonicPrimaryButton
+import com.nutonic.style.nutonicOnSurfaceMuted
+import com.nutonic.style.nutonicOutlinedTextFieldColors
 
 @Composable
 fun ChecklistScreenChrome(
@@ -43,7 +41,7 @@ fun ChecklistScreenChrome(
         Text(
             text = title,
             style = MaterialTheme.typography.h5,
-            color = MaterialTheme.colors.primary,
+            color = MaterialTheme.colors.primaryVariant,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
@@ -51,7 +49,7 @@ fun ChecklistScreenChrome(
         Text(
             text = supportText,
             style = MaterialTheme.typography.body2,
-            color = MaterialTheme.colors.onBackground,
+            color = nutonicOnSurfaceMuted(0.85f),
             textAlign = TextAlign.Center,
         )
         extra()
@@ -94,10 +92,11 @@ fun SplashScreen(
 
 @Composable
 fun RoleSelectionScreen(
+    displayName: String,
+    onDisplayNameChange: (String) -> Unit,
     selectedRole: String?,
     onSelectRole: (String) -> Unit,
     onContinue: () -> Unit,
-    onOpenOptionalAuth: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val protocolVersion = nutonicClientVersionLabel()
@@ -111,10 +110,19 @@ fun RoleSelectionScreen(
         }
     ChecklistScreenChrome(
         title = "Choose your role",
-        supportText = "Pick the protocol identity for this session.",
+        supportText = "Pick your display name and protocol identity for this session.",
         modifier = modifier,
         onBack = null,
         extra = {
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = onDisplayNameChange,
+                label = { Text("Display name") },
+                placeholder = { Text("Operative") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = nutonicOutlinedTextFieldColors(),
+            )
             Spacer(modifier = Modifier.height(12.dp))
             roles.forEach { (id, title, perk) ->
                 NutonicGlassCard(
@@ -155,12 +163,6 @@ fun RoleSelectionScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(modifier = Modifier.height(8.dp))
-            NutonicGhostButton(
-                text = "Sign in (optional)",
-                onClick = onOpenOptionalAuth,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Protocol version: $protocolVersion",
                 style = MaterialTheme.typography.caption,
@@ -195,67 +197,6 @@ fun GameRolePicker(
             }
         }
     }
-}
-
-@Composable
-fun AuthenticationScreen(
-    onSkip: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var identity by remember { mutableStateOf("") }
-    var credential by remember { mutableStateOf("") }
-    var statusLine by remember { mutableStateOf("Offline-friendly mode: sign-in is optional.") }
-    ChecklistScreenChrome(
-        title = "Authentication",
-        supportText = "Sign in to sync identity-backed features, or skip for local-first SCAN play.",
-        modifier = modifier,
-        onBack = null,
-        extra = {
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(
-                value = identity,
-                onValueChange = { identity = it },
-                label = { Text("Identity (email or handle)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = credential,
-                onValueChange = { credential = it },
-                label = { Text("Credential token (optional)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = statusLine,
-                style = MaterialTheme.typography.caption,
-                color = MaterialTheme.colors.onBackground,
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            NutonicPrimaryButton(
-                text = "Continue",
-                onClick = {
-                    statusLine =
-                        if (identity.isBlank()) {
-                            "Continuing without account sign-in."
-                        } else {
-                            "Identity saved for this session."
-                        }
-                    onSkip()
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            TextButton(
-                onClick = onSkip,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Skip for now")
-            }
-        },
-    )
 }
 
 @Composable

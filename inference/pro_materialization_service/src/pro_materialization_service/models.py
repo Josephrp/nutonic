@@ -15,7 +15,7 @@ class MaterializeRequest(BaseModel):
     max_cloud_cover: float = Field(default=30.0, ge=0.0, le=100.0)
     stac_url: str = Field(default="https://earth-search.aws.element84.com/v1", max_length=512)
     collection_id: str = Field(default="sentinel-2-l2a", max_length=128)
-    sentinel_fetch_mode: Literal["MINIMAL_RGB", "TERRAMIND_SPECTRAL", "FULL_STAC"] = "MINIMAL_RGB"
+    sentinel_fetch_mode: Literal["MINIMAL_RGB", "TERRAMIND_SPECTRAL", "FULL_STAC"] = "TERRAMIND_SPECTRAL"
     analysis_profile: Literal[
         "wildfire",
         "oceanscout_ship_detection",
@@ -28,9 +28,9 @@ class MaterializeRequest(BaseModel):
     mapbox_pitch: float = Field(default=0.0)
     mapbox_size: int = Field(default=640, ge=64, le=1280)
     retina: bool = False
-    vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512", max_length=128)
+    vlm_contract_id: str = Field(default="nutonic.pro.vlm.v1_512_s2_only", max_length=128)
     enable_tim: bool = False
-    tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "RGB_mapbox"
+    tim_branch: Literal["S2L2A_full", "RGB_mapbox"] = "S2L2A_full"
     scene_id_t0: str | None = Field(default=None, max_length=256)
     scene_id_t1: str | None = Field(default=None, max_length=256)
     scene_id_t2: str | None = Field(default=None, max_length=256)
@@ -83,4 +83,4 @@ class MaterializeStubOut(BaseModel):
     tim_input_branch: str
     cache_key: str
     vlm_roles: list[str] = Field(default_factory=list)
-    message: str = Field(default="Mapbox → VLM PNG (MINIMAL_RGB path).")
+    message: str = Field(default="Sentinel-2 VLM pack (TERRAMIND_SPECTRAL + s2_only contract).")

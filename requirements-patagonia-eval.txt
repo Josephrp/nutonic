@@ -1,0 +1,14 @@
+# Patagonia VLM + TiM E2E + STAC stills + HF dataset upload
+# Python >= 3.11. Run from the repository root.
+#
+# Recommended (reproducible, includes lockfile at tools/patagonia_eval/uv.lock):
+#   cd tools/patagonia_eval
+#   uv sync
+#   cd ../..
+#   uv run --project tools/patagonia_eval python tools/evaluate_vlm_patagonia_tim_e2e.py ...
+#
+# Pip alternative (editable TiM + extras pulls torch/terratorch/transformers/STAC stack):
+-e inference/terramind_tim_local[s2]
+httpx>=0.27.0
+python-dotenv>=1.0.1
+huggingface_hub>=0.35.0

@@ -29,7 +29,7 @@ android {
     }
     defaultConfig {
         applicationId = "com.nutonic.android"
-        minSdk = 26
+        minSdk = 31
         targetSdk = 35
         versionCode = nutonicVersionCode ?: 1
         versionName = nutonicVersionName ?: "1.0"

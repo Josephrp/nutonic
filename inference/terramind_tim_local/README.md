@@ -6,6 +6,8 @@ Optional **GPU/CPU** batch tool under `inference/*` (not the thin game `server/`
 
 **Authority:** `rules/06-server-vlm-tim-and-on-device-ml.md`, `rules/12-python-gradio-terramind-server.md`, `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` (Coordinates → `ai_lat` / `ai_lon` for catalog pipelines).
 
+**Default backbone:** NU:TONIC pins the largest TerraMind-1.0 TIM variant as ``nutonic_terramind_tim_local.tim_defaults.DEFAULT_TIM_MODEL_ID`` (**``terramind_v1_large_tim``**). Example YAMLs and the HF Space / Gradio demos use that unless you override ``model_id``.
+
 ## Install (separate venv recommended)
 
 ```bash

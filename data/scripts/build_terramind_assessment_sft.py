@@ -14,6 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
+_TIM_SRC = REPO_ROOT / "inference" / "terramind_tim_local" / "src"
+if str(_TIM_SRC) not in sys.path:
+    sys.path.insert(0, str(_TIM_SRC))
+
+from nutonic_terramind_tim_local.tim_defaults import DEFAULT_TIM_MODEL_ID
 
 from lfm_vl_sft_dataset.hf_upload import upload_dataset_folder
 from lfm_vl_sft_dataset.jsonl_format import write_jsonl
@@ -204,7 +209,7 @@ def main() -> int:
     p.add_argument("--stac-url", default="https://earth-search.aws.element84.com/v1")
     p.add_argument("--collection-id", default="sentinel-2-l2a")
 
-    p.add_argument("--tim-model-id", default="terramind_v1_tiny_tim")
+    p.add_argument("--tim-model-id", default=DEFAULT_TIM_MODEL_ID)
     p.add_argument("--tim-device", default="cpu")
 
     p.add_argument("--no-upload", action="store_true")

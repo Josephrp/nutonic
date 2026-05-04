@@ -5,6 +5,7 @@ from typing import Any
 import gradio as gr
 
 from nutonic_terramind_tim_local.space_api import health, tim_infer
+from nutonic_terramind_tim_local.tim_defaults import DEFAULT_TIM_MODEL_ID
 
 
 def _infer_from_json(req: dict[str, Any]) -> dict[str, Any]:
@@ -26,7 +27,7 @@ def build_gradio_blocks() -> gr.Blocks:
             value={
                 "analysis_profile": "brief_only",
                 "config": {
-                    "model_id": "terramind_v1_tiny_tim",
+                    "model_id": DEFAULT_TIM_MODEL_ID,
                     "pretrained": True,
                     "modalities": ["RGB"],
                     "tim_modalities": ["LULC", "location"],

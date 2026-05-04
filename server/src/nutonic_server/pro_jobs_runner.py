@@ -15,6 +15,8 @@ from nutonic_server.inference_client import InferenceClient, InferenceClientConf
 from nutonic_server.pro_jobs_store import ProJobRecord, ProJobStore
 from nutonic_server.settings import Settings
 
+PRO_JOB_VLM_CONTRACT_SENTINEL_ONLY = "nutonic.pro.vlm.v1_512_s2_only"
+
 
 @dataclass(frozen=True)
 class OriginProbe:
@@ -302,7 +304,7 @@ def _materialization_request(job: ProJobRecord) -> dict[str, Any]:
         "mapbox_zoom": params.get("mapbox_zoom", 12),
         "enable_tim": True if requires_spectral else params.get("enable_tim", False),
         "tim_branch": _profile_tim_branch(params.get("tim_branch"), job.analysis_profile),
-        "vlm_contract_id": params.get("vlm_contract_id", "nutonic.pro.vlm.v1_512"),
+        "vlm_contract_id": PRO_JOB_VLM_CONTRACT_SENTINEL_ONLY,
         "sentinel_fetch_mode": _profile_sentinel_fetch_mode(params.get("sentinel_fetch_mode"), job.analysis_profile),
         "analysis_profile": job.analysis_profile,
     }
@@ -319,13 +321,19 @@ def _profile_requires_spectral_tim(profile: str) -> bool:
 def _profile_tim_branch(raw: object, profile: str) -> str:
     if _profile_requires_spectral_tim(profile):
         return "S2L2A_full"
-    return str(raw or "RGB_mapbox")
+    cleaned = str(raw or "S2L2A_full").strip()
+    if cleaned == "RGB_mapbox":
+        return "S2L2A_full"
+    return cleaned if cleaned in ("S2L2A_full", "RGB_mapbox") else "S2L2A_full"
 
 
 def _profile_sentinel_fetch_mode(raw: object, profile: str) -> str:
     if _profile_requires_spectral_tim(profile):
         return "TERRAMIND_SPECTRAL"
-    return str(raw or "MINIMAL_RGB")
+    mode = str(raw or "TERRAMIND_SPECTRAL").strip()
+    if mode == "MINIMAL_RGB":
+        return "TERRAMIND_SPECTRAL"
+    return mode if mode in ("TERRAMIND_SPECTRAL", "FULL_STAC") else "TERRAMIND_SPECTRAL"
 
 
 def _brief_request(
@@ -454,7 +462,7 @@ def _artifact_contract(profile: str, role: str, artifact_id: str, mime_type: str
         return {
             "contract_id": f"pro.vlm_image.{_safe_artifact_id(role) or artifact_id}.v1",
             "category": "vlm_image",
-            "required_for_profile": role == "mapbox_rgb",
+            "required_for_profile": role == "sentinel_fc",
         }
     if mime_type == "application/geo+json":
         return {"contract_id": f"pro.{profile}.overlay.{artifact_id}.v1", "category": "overlay", "required_for_profile": False}

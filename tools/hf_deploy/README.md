@@ -8,7 +8,8 @@ The workflow **`.github/workflows/huggingface-deploy.yml`** runs **pytest**, the
    - `hf repo create <repo> --repo-type space --space_sdk <space_sdk> --exist-ok`
    - `hf upload <repo> <stagedir> . --repo-type space --delete "*"` (full mirror commit)
 3. Syncs **Space variables**, **secrets**, and **hardware** from **`tools/hf_deploy/profiles/<service>.yaml`** via **`HfApi`** (`add_space_variable`, `add_space_secret`, `request_space_hardware`). The Hub does not yet expose `hf spaces secret set`; add/update at runtime uses those APIs.
-4. Runs a post-deploy smoke test via **`tools/live_inference_smoke.py`** and uploads a JSON artifact (`hf-smoke-*`) per job.
+4. For **PRO materialization**, **`tools/hf_deploy/wait_for_space_runtime.py`** polls the Hub until the Space runtime stage settles on **RUNNING** after Docker build (avoids long blind retries in smoke).
+5. Runs a post-deploy smoke test via **`tools/live_inference_smoke.py`** and uploads a JSON artifact (`hf-smoke-*`) per job.
 
 Install locally:
 

@@ -25,7 +25,8 @@ First **five** ``geoguessr_poi_12`` POIs only (single-tree import; TiM uses ``fi
       --tim-image YOUR_DOCKERHUB/nutonic-hydration-tim:2026-04-18 \\
       --llm-image YOUR_DOCKERHUB/nutonic-hydration-llm:2026-04-18
 
-Use ``--skip-tim`` only if you intentionally omit the TiM job. See ``tools/hf_jobs/README.md`` for ``.env`` keys.
+Use ``--skip-tim`` only if you intentionally omit the TiM job. Pass ``--skip-mapbox-stills`` for Sentinel-2 STAC reference stills on the sv-lfm Job (no Mapbox Static API / ``MAPBOX_*`` secret).
+See ``tools/hf_jobs/README.md`` for ``.env`` keys and ``NUTONIC_STAC_*`` tuning.
 """
 
 from __future__ import annotations

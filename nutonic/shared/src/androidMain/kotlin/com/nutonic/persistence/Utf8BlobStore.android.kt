@@ -46,5 +46,11 @@ actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
 actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
     androidNutonicBlob("nutonic/guess-record-outbox.json")
 
+actual fun createSettingsBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/client-settings.json")
+
+actual fun createPlayerProgressBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/player-progress.json")
+
 actual fun createProVlmModelBlobStore(): Utf8BlobStore =
     androidNutonicBlob("nutonic/pro-vlm-model-cache.json")

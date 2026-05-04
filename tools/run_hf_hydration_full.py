@@ -246,6 +246,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Set NUTONIC_SKIP_GEO_HINTS=1 for sv-lfm / llm (skips geo_context + useful_hints; still runs Mapbox stills + batch).",
     )
     p.add_argument(
+        "--skip-mapbox-stills",
+        action="store_true",
+        help="Set NUTONIC_SKIP_MAPBOX_STILLS=1 on sv-lfm: placeholder JPEGs instead of Mapbox Static API (no MAPBOX_* secret).",
+    )
+    p.add_argument(
         "--shuffle-seed",
         type=int,
         default=None,
@@ -308,6 +313,11 @@ def main(argv: list[str] | None = None) -> int:
         env_common["NUTONIC_POI_LIMIT"] = str(args.poi_limit)
     if args.skip_geo_hints:
         env_common["NUTONIC_SKIP_GEO_HINTS"] = "1"
+    skip_mapbox_stills = args.skip_mapbox_stills or (
+        os.environ.get("NUTONIC_SKIP_MAPBOX_STILLS", "").strip() == "1"
+    )
+    if skip_mapbox_stills:
+        env_common["NUTONIC_SKIP_MAPBOX_STILLS"] = "1"
 
     env_sv_lfm = {
         **env_common,
@@ -316,6 +326,9 @@ def main(argv: list[str] | None = None) -> int:
         **inference_job_env.lfm_vl_hint_env_from_environ(),
         **inference_job_env.geo_pipeline_env_from_environ(),
     }
+    for k, v in os.environ.items():
+        if k.startswith("NUTONIC_STAC") and str(v).strip():
+            env_sv_lfm[k] = str(v).strip()
     env_llm = {
         **env_common,
         **({"NUTONIC_NARRATIVE_LLM_LIVE": "1"} if args.narrative_llm_live else {}),
@@ -415,8 +428,12 @@ def main(argv: list[str] | None = None) -> int:
     if "GOOGLE_MAPS_API_KEY" not in sv_secrets and "GOOGLE_STREETVIEW_API_KEY" not in sv_secrets:
         print("Need GOOGLE_MAPS_API_KEY or GOOGLE_STREETVIEW_API_KEY in env for sv-lfm Job.", file=sys.stderr)
         return 3
-    if "MAPBOX_ACCESS_TOKEN" not in sv_secrets and "MAPBOX_TOKEN" not in sv_secrets:
-        print("Need MAPBOX_ACCESS_TOKEN (or MAPBOX_TOKEN) in env for sv-lfm Job.", file=sys.stderr)
+    if not skip_mapbox_stills and "MAPBOX_ACCESS_TOKEN" not in sv_secrets and "MAPBOX_TOKEN" not in sv_secrets:
+        print(
+            "Need MAPBOX_ACCESS_TOKEN (or MAPBOX_TOKEN) in env for sv-lfm Job "
+            "(or pass --skip-mapbox-stills).",
+            file=sys.stderr,
+        )
         return 3
 
     tim_llm_secrets = _collect_secrets_for_tim_llm()

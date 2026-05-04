@@ -18,15 +18,20 @@ Environment (typical):
   ``CONTENT_VERSION`` — cache segment / run id (required).
   ``POIDATA_MOUNT`` — dataset mount path (default ``/mnt/poidata``).
   ``NUTONIC_HYDRATION_OUTPUT_DATASET`` — target dataset repo id for ``upload_folder``.
-  ``GOOGLE_MAPS_API_KEY`` or ``GOOGLE_STREETVIEW_API_KEY``, ``MAPBOX_ACCESS_TOKEN`` (sv-lfm).
+  ``GOOGLE_MAPS_API_KEY`` or ``GOOGLE_STREETVIEW_API_KEY`` (sv-lfm); ``MAPBOX_ACCESS_TOKEN`` unless
+  ``NUTONIC_SKIP_MAPBOX_STILLS=1``.
   ``HF_TOKEN`` — Hub token (injected via Job secret) for uploads.
   ``NUTONIC_POI_LIMIT`` — if set (positive int), import the first N POIs by sorted ``poi_*`` order and pass
   the same limit to the Street View batch. Values **≤12** use ``downloads/geoguessr_poi_12`` only; values
   **>12** require ``geoguessr_poi_120`` on the mount (NuTonic/poidata ships 12 POIs under ``geoguessr_poi_12``
   and the larger tree under ``geoguessr_poi_120``). No dual 120+12 merge in limited mode.
-  ``NUTONIC_SKIP_GEO_HINTS`` — if ``1``, skip ``build_poi_geo_context`` / ``compile_useful_hint_tiers``
+  ``NUTONIC_SKIP_GEO_HINTS`` — if ``1``, skip ``build_poi_geo_context`` / ``compile_useful_hint_tiers``.
   ``NUTONIC_GEO_CONTEXT_ALLOW_PARTIAL`` — if not ``0``/``false``/``no`` (default: allow), ``build_poi_geo_context`` is run with ``--allow-partial`` so one bad POI does not fail the Job.
-  (still runs Mapbox stills + batch without useful-hints injection).
+  (still runs reference stills + batch without useful-hints injection).
+  ``NUTONIC_SKIP_MAPBOX_STILLS`` — if ``1``, skip Mapbox Static API; reference stills come from
+  ``render_mapbox_still.py --stac-reference-stills`` (Sentinel-2 Earth Search STAC) by default.
+  Set ``NUTONIC_STAC_REFERENCE_STILLS=0`` for gray ``--placeholder-stills`` instead.
+  ``MAPBOX_ACCESS_TOKEN`` not required when skipping Mapbox.
   ``NUTONIC_POIDATA_REPO`` — dataset id for fallback ``snapshot_download`` (default ``NuTonic/poidata``).
   ``NUTONIC_NO_POIDATA_SNAPSHOT`` — if ``1``, do not pull missing trees from Hub (fail fast instead).
   ``NUTONIC_SKIP_CREATE_OUTPUT_DATASET`` — if ``1``, do not ``create_repo`` before upload (Hub 404 if missing).
@@ -125,6 +130,16 @@ def _limited_catalog_poi_root() -> Path:
 
 def _skip_geo_hints() -> bool:
     return os.environ.get("NUTONIC_SKIP_GEO_HINTS", "").strip() == "1"
+
+
+def _skip_mapbox_stills() -> bool:
+    return os.environ.get("NUTONIC_SKIP_MAPBOX_STILLS", "").strip() == "1"
+
+
+def _use_stac_reference_stills() -> bool:
+    """When skipping Mapbox, prefer Sentinel-2 STAC previews unless explicitly disabled."""
+    v = os.environ.get("NUTONIC_STAC_REFERENCE_STILLS", "1").strip().lower()
+    return v not in ("0", "false", "no")
 
 
 def _geo_context_allow_partial_argv() -> list[str]:
@@ -665,7 +680,9 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
     if not (os.environ.get("GOOGLE_MAPS_API_KEY") or os.environ.get("GOOGLE_STREETVIEW_API_KEY")):
         print("entrypoint sv-lfm: missing GOOGLE_MAPS_API_KEY / GOOGLE_STREETVIEW_API_KEY", file=sys.stderr)
         return 2
-    if not (os.environ.get("MAPBOX_ACCESS_TOKEN") or os.environ.get("MAPBOX_TOKEN")):
+    if not _skip_mapbox_stills() and not (
+        os.environ.get("MAPBOX_ACCESS_TOKEN") or os.environ.get("MAPBOX_TOKEN")
+    ):
         print("entrypoint sv-lfm: missing MAPBOX_ACCESS_TOKEN (or MAPBOX_TOKEN)", file=sys.stderr)
         return 2
 
@@ -752,6 +769,14 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
     else:
         hints_dir.mkdir(parents=True, exist_ok=True)
     still_meta = REPO_ROOT / "data" / "cache" / cv / "build_stills"
+    if _skip_mapbox_stills():
+        still_extra = (
+            ["--stac-reference-stills"]
+            if _use_stac_reference_stills()
+            else ["--placeholder-stills"]
+        )
+    else:
+        still_extra = ["--allow-network"]
     _run_script(
         [
             py,
@@ -760,7 +785,7 @@ def mode_sv_lfm(cv: str, *, pano_port: int, lfm_port: int) -> int:
             str(REPO_ROOT / "data" / "catalog"),
             "--meta-dir",
             str(still_meta),
-            "--allow-network",
+            *still_extra,
         ]
     )
 

@@ -25,9 +25,12 @@ class WorldMapGameplayUiTest {
 
         rule.onNodeWithTag("worldMapGameplayRoot").assertIsDisplayed()
         rule.onNodeWithTag("worldMapViewport").assertIsDisplayed()
+        rule.onNodeWithTag("worldMapHudExpandButton").performClick()
         rule.onNodeWithTag("worldMapHudCard").assertIsDisplayed()
         rule.onNodeWithTag("worldMapReferenceStillCard").assertIsDisplayed()
+        rule.onNodeWithTag("worldMapAssistExpandButton").assertIsDisplayed().performClick()
         rule.onNodeWithTag("worldMapAssistDock").assertIsDisplayed()
+        rule.onNodeWithTag("worldMapGuessHandleButton").assertIsDisplayed().performClick()
         rule.onNodeWithTag("worldMapGuessModal").assertIsDisplayed()
 
         rule.onNodeWithTag("worldMapGuessCollapseButton").performClick()

@@ -6,7 +6,7 @@ content_version: nutonic.tim_local.hf_job.poi12_first5.v1
 paths:
   repo_root: /workspace
 
-model_id: terramind_v1_base_tim
+model_id: terramind_v1_large_tim
 pretrained: true
 merge_method: mean
 

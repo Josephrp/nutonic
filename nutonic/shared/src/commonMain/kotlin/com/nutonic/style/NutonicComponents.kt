@@ -7,10 +7,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Card
+import androidx.compose.material.ContentAlpha
+import androidx.compose.material.LocalContentColor
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -29,8 +33,10 @@ fun NutonicGlassCard(
         border = BorderStroke(width = 1.dp, color = NutonicColors.primary.copy(alpha = 0.12f)),
         elevation = 0.dp,
     ) {
-        androidx.compose.foundation.layout.Column(modifier = Modifier.padding(12.dp)) {
-            content()
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colors.onBackground) {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.padding(12.dp)) {
+                content()
+            }
         }
     }
 }
@@ -80,3 +86,18 @@ fun NutonicGhostButton(
         Text(text)
     }
 }
+
+/** Explicit colors so typed text stays readable on dark surfaces (e.g. Compose Web `input` styling). */
+@Composable
+fun nutonicOutlinedTextFieldColors() =
+    TextFieldDefaults.outlinedTextFieldColors(
+        textColor = MaterialTheme.colors.onSurface,
+        disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+        cursorColor = MaterialTheme.colors.primaryVariant,
+        focusedBorderColor = MaterialTheme.colors.primary,
+        unfocusedBorderColor = MaterialTheme.colors.primary.copy(alpha = 0.45f),
+        disabledBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+        focusedLabelColor = MaterialTheme.colors.primary,
+        unfocusedLabelColor = nutonicOnSurfaceMuted(),
+        placeholderColor = nutonicOnSurfaceMuted(0.55f),
+    )

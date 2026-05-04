@@ -32,6 +32,7 @@ class WorldMapGameplayPersistenceTest {
                 )
             }
         }
+        rule.onNodeWithTag("worldMapGuessHandleButton").performClick()
         rule.onNodeWithTag("worldMapSearchField").performTextInput("Paris")
         rule.onNodeWithTag("worldMapSearchButton").performClick()
         rule.onNodeWithTag("worldMapSubmitGuessButton").performClick()

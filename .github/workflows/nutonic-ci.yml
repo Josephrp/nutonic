@@ -22,6 +22,7 @@ on:
       - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
       - ".github/workflows/nutonic-release.yml"
+      - ".github/workflows/nutonic-android-tester-build.yml"
       - "rules/**"
 
 concurrency:
@@ -148,7 +149,17 @@ jobs:
           echo "MAPS_API_KEY=CI_STUB" >> local.properties
 
       - name: Assemble debug APK
-        run: ./gradlew --no-configuration-cache :androidApp:assembleDebug
+        env:
+          DEMO_ORIGIN: ${{ vars.NUTONIC_DEMO_SERVER_ORIGIN }}
+        run: |
+          set -euo pipefail
+          ARGS=(--no-configuration-cache :androidApp:assembleDebug)
+          if [ -n "${DEMO_ORIGIN:-}" ]; then
+            O="${DEMO_ORIGIN%%/}"
+            echo "Using -PnutonicServerOrigin=$O (repo variable NUTONIC_DEMO_SERVER_ORIGIN)"
+            ARGS+=(-PnutonicServerOrigin="$O")
+          fi
+          ./gradlew "${ARGS[@]}"
 
       - uses: actions/upload-artifact@v4
         with:

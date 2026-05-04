@@ -10,15 +10,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.Card
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,7 +43,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.nutonic.api.ApiResult
 import com.nutonic.api.CacheManifestDocument
+import com.nutonic.api.CommunityLeaderboardPostBody
 import com.nutonic.api.GuessRecordIn
+import com.nutonic.api.GuessRecordOut
 import com.nutonic.api.ManifestRoundLocation
 import com.nutonic.api.NutonicApiClient
 import com.nutonic.api.RankedClue
@@ -70,6 +78,7 @@ import com.nutonic.map.MapViewport
 import com.nutonic.map.SelfGuessMarker
 import com.nutonic.filter.PlatformContext
 import com.nutonic.filter.getPlatformContext
+import com.nutonic.progress.PlayerProgressRepository
 import com.nutonic.map.ViewportBounds
 import com.nutonic.resources.Res
 import com.nutonic.settings.ClientSettings
@@ -146,6 +155,7 @@ fun WorldMapGameplayDetail(
     localLeaderboardRepository: LocalNonRankedLeaderboardRepository? = null,
     nutonicApiClient: NutonicApiClient? = null,
     guessRecordOutboxRepository: GuessRecordOutboxRepository? = null,
+    playerProgressRepository: PlayerProgressRepository? = null,
     proOverlayGuessRepository: ProOverlayGuessRepository? = null,
     /** When set, local truth/score HUD is suppressed until server [postRankedRoundSubmit] resolves (W6). */
     rankedSession: RankedPlaySession? = null,
@@ -154,6 +164,9 @@ fun WorldMapGameplayDetail(
     val showTimer = clientSettings?.showTimer != false
     val showScorePreview = clientSettings?.showScorePreview != false
     val showCoordinateReadout = clientSettings?.showCoordinateReadout != false
+    val displayHandle =
+        (clientSettings?.displayName ?: "").trim().ifBlank { "Operative" }.take(32)
+    val wirePlayerRole = (playerRole ?: clientSettings?.playerRole ?: "HUMAN").uppercase()
 
     val scope = rememberCoroutineScope()
     var manifestSnapshot by remember { mutableStateOf<CacheManifestDocument?>(null) }
@@ -275,9 +288,14 @@ fun WorldMapGameplayDetail(
     var searchField by remember { mutableStateOf(TextFieldValue("")) }
     var gameplayStatus by remember { mutableStateOf("Tap the map or search a location, then submit one guess.") }
     var guessRecordRemoteStatus by remember { mutableStateOf<String?>(null) }
+    var serverGuessAck by remember { mutableStateOf<GuessRecordOut?>(null) }
+    var communityPostedForRound by remember { mutableStateOf<String?>(null) }
 
-    var guessModalExpanded by remember { mutableStateOf(true) }
+    var guessModalExpanded by remember { mutableStateOf(false) }
+    var hudExpanded by remember { mutableStateOf(false) }
+    var referenceStillExpanded by remember { mutableStateOf(true) }
     var narrativeOverlayOpen by remember { mutableStateOf(false) }
+    var assistDockExpanded by remember { mutableStateOf(false) }
     var streetAssistExpanded by remember { mutableStateOf(false) }
     var usefulHintsExpanded by remember { mutableStateOf(false) }
     var revealAssistExpanded by remember { mutableStateOf(false) }
@@ -286,6 +304,11 @@ fun WorldMapGameplayDetail(
     var userNarrativeText by remember { mutableStateOf(TextFieldValue("")) }
     var revealedHintTier by remember { mutableStateOf(0) }
     var roundInstanceId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(roundInstanceId) {
+        serverGuessAck = null
+        communityPostedForRound = null
+    }
 
     val roundStartedMs = remember { Clock.System.now().toEpochMilliseconds() }
     var nowMs by remember { mutableStateOf(roundStartedMs) }
@@ -453,7 +476,7 @@ fun WorldMapGameplayDetail(
             aiMarker?.let { haversineKm(it, groundTruth) }
         }
 
-    LaunchedEffect(lockedGuess, roundInstanceId, localLeaderboardRepository, rankedForUi) {
+    LaunchedEffect(lockedGuess, roundInstanceId, localLeaderboardRepository, rankedForUi, playerProgressRepository) {
         val guess = lockedGuess
         val rid = roundInstanceId
         val repo = localLeaderboardRepository
@@ -464,13 +487,13 @@ fun WorldMapGameplayDetail(
         val humanKm = haversineKm(guess, truth)
         val humanScore = scoreFromDistanceKm(humanKm)
         val aiKm = aiMarker?.let { haversineKm(it, groundTruth) }
-        val role = (playerRole ?: "HUMAN").uppercase()
         repo.appendRow(
             LocalNonRankedLeaderboardRow(
                 roundInstanceId = rid,
                 mapId = mapId,
                 locationId = locationId,
-                playerRole = role,
+                playerRole = wirePlayerRole,
+                displayHandle = displayHandle,
                 matchupType = "HUMAN_VS_AI",
                 humanDistanceKm = humanKm,
                 humanScorePoints = humanScore,
@@ -480,6 +503,11 @@ fun WorldMapGameplayDetail(
                 savedAtEpochMs = Clock.System.now().toEpochMilliseconds(),
                 rulesetVersion = playableLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
             ),
+        )
+        playerProgressRepository?.recordNonRankedRoundComplete(
+            mapId = mapId,
+            scorePoints = humanScore,
+            nowEpochMs = Clock.System.now().toEpochMilliseconds(),
         )
     }
 
@@ -495,6 +523,8 @@ fun WorldMapGameplayDetail(
         guessesRecordEnabled,
         rankedForUi,
         guessRecordOutboxRepository,
+        displayHandle,
+        wirePlayerRole,
     ) {
         val guess = lockedGuess
         val rid = roundInstanceId
@@ -509,6 +539,7 @@ fun WorldMapGameplayDetail(
             guessRecordRemoteStatus = "Saved locally; sync queue unavailable."
             return@LaunchedEffect
         }
+        val pts = scoreFromDistanceKm(km)
         val idem = "guess-record|$rid"
         val body =
             GuessRecordIn(
@@ -518,9 +549,73 @@ fun WorldMapGameplayDetail(
                 guessLon = guess.longitude,
                 clientDistanceKm = km,
                 rulesetVersion = playableLocation?.rulesetVersion ?: stillLocation?.rulesetVersion,
+                displayHandle = displayHandle,
+                scorePoints = pts,
+                playerRole = wirePlayerRole,
             )
         outbox.enqueueOrReplace(mapId, idem, body)
-        guessRecordRemoteStatus = outbox.flushPending(api)
+        val summary = outbox.flushPending(api, matchRoundInstanceId = rid)
+        guessRecordRemoteStatus = summary.message
+        summary.acknowledgedRecord?.let { serverGuessAck = it }
+    }
+
+    LaunchedEffect(
+        lockedGuess,
+        roundInstanceId,
+        mapId,
+        scorePoints,
+        distanceKm,
+        nutonicApiClient,
+        rankedForUi,
+        clientSettings?.allowOptionalCommunitySync,
+        displayHandle,
+        wirePlayerRole,
+    ) {
+        if (rankedForUi != null) {
+            return@LaunchedEffect
+        }
+        if (clientSettings?.allowOptionalCommunitySync != true) {
+            return@LaunchedEffect
+        }
+        if (lockedGuess == null) {
+            return@LaunchedEffect
+        }
+        val rid = roundInstanceId ?: return@LaunchedEffect
+        if (communityPostedForRound == rid) {
+            return@LaunchedEffect
+        }
+        val pts = scorePoints ?: return@LaunchedEffect
+        val kb = distanceKm ?: return@LaunchedEffect
+        val api = nutonicApiClient ?: return@LaunchedEffect
+        val flags =
+            when (val c = api.getConfig()) {
+                is ApiResult.Ok -> c.value.features
+                else -> return@LaunchedEffect
+            }
+        if (!flags.communityLbPost) {
+            return@LaunchedEffect
+        }
+        val tok =
+            when (val t = api.postAuthToken()) {
+                is ApiResult.Ok -> t.value.accessToken
+                else -> return@LaunchedEffect
+            }
+        when (
+            api.postLeaderboard(
+                mapId,
+                CommunityLeaderboardPostBody(
+                    displayHandle = displayHandle,
+                    playerRole = wirePlayerRole,
+                    scorePoints = pts,
+                    distanceKm = kb,
+                ),
+                tok,
+                idempotencyKey = "community|$rid",
+            )
+        ) {
+            is ApiResult.Ok -> communityPostedForRound = rid
+            else -> Unit
+        }
     }
 
     var hideSuccessOverlay by remember(mapId) { mutableStateOf(false) }
@@ -567,9 +662,14 @@ fun WorldMapGameplayDetail(
                 mapId = mapId,
                 mapTitle = mapTitle,
                 locationId = locationId,
+                operatorDisplayName = displayHandle,
                 scorePoints = scorePoints,
                 distanceKm = distanceKm,
+                aiDistanceToTruthKm = aiVsTruthKm,
+                rankedOutcome = rankedServerOutcome,
                 serverVerified = rankedServerOutcome != null,
+                telemetryAck = serverGuessAck,
+                syncStatusLine = guessRecordRemoteStatus,
                 platformContext = platformContext,
                 onDismiss = { hideSuccessOverlay = true },
                 modifier =
@@ -684,24 +784,64 @@ fun WorldMapGameplayDetail(
                     },
                 )
 
-                GameplayHudCard(
-                    elapsedSeconds = elapsedSeconds,
-                    remainingSeconds = remainingSeconds,
-                    scorePoints = scorePoints,
-                    distanceKm = distanceKm,
-                    aiDistanceToTruthKm = if (lockedGuess != null) aiVsTruthKm else null,
-                    showTimer = showTimer,
-                    showScorePreview = showScorePreview,
-                    modifier = Modifier.align(Alignment.TopStart).padding(10.dp),
-                )
+                if (hudExpanded) {
+                    Box(modifier = Modifier.align(Alignment.TopStart).padding(10.dp)) {
+                        GameplayHudCard(
+                            elapsedSeconds = elapsedSeconds,
+                            remainingSeconds = remainingSeconds,
+                            scorePoints = scorePoints,
+                            distanceKm = distanceKm,
+                            aiDistanceToTruthKm = if (lockedGuess != null) aiVsTruthKm else null,
+                            showTimer = showTimer,
+                            showScorePreview = showScorePreview,
+                            modifier = Modifier.align(Alignment.TopStart),
+                        )
+                        IconButton(
+                            onClick = { hudExpanded = false },
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .testTag("worldMapHudCollapseButton"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Collapse status",
+                                tint = MaterialTheme.colors.primary,
+                            )
+                        }
+                    }
+                } else {
+                    OutlinedButton(
+                        onClick = { hudExpanded = true },
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .padding(10.dp)
+                                .testTag("worldMapHudExpandButton"),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Status", color = MaterialTheme.colors.onBackground)
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colors.primary,
+                                modifier = Modifier.padding(start = 4.dp).size(18.dp),
+                            )
+                        }
+                    }
+                }
 
                 ReferenceStillCard(
                     referenceStill = referenceStill,
                     loadFailed = referenceStillFailed,
+                    expanded = referenceStillExpanded,
+                    onExpandedChange = { referenceStillExpanded = it },
                     modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 10.dp),
                 )
 
                 AssistDock(
+                    dockExpanded = assistDockExpanded,
+                    onDockExpandedChange = { assistDockExpanded = it },
                     streetviewPack = stillLocation?.streetviewHintPack,
                     streetviewNarrative = stillLocation?.streetviewAssistNarrative,
                     streetAssistExpanded = streetAssistExpanded,
@@ -962,6 +1102,7 @@ private fun GameplayHudCard(
     showScorePreview: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val fg = MaterialTheme.colors.onBackground
     Card(
         modifier = modifier.width(220.dp).testTag("worldMapHudCard"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.9f),
@@ -974,24 +1115,31 @@ private fun GameplayHudCard(
                 Text(
                     "Sector time (not scored): elapsed ${elapsedSeconds}s",
                     style = MaterialTheme.typography.body2,
+                    color = fg,
                 )
-                Text("Sector time (not scored): ${remainingSeconds}s", style = MaterialTheme.typography.body2)
+                Text(
+                    "Sector time (not scored): ${remainingSeconds}s",
+                    style = MaterialTheme.typography.body2,
+                    color = fg,
+                )
             }
             if (showScorePreview && scorePoints != null && distanceKm != null) {
-                Text("Distance: ${distanceKm.format(2)} km", style = MaterialTheme.typography.caption)
-                Text("Score: $scorePoints", style = MaterialTheme.typography.caption)
+                Text("Distance: ${distanceKm.format(2)} km", style = MaterialTheme.typography.caption, color = fg)
+                Text("Score: $scorePoints", style = MaterialTheme.typography.caption, color = fg)
                 if (aiDistanceToTruthKm != null) {
                     Text(
                         "AI vs truth: ${aiDistanceToTruthKm.format(2)} km",
                         style = MaterialTheme.typography.caption,
+                        color = fg,
                     )
                 }
             } else if (!showScorePreview) {
-                Text("Score preview hidden in settings.", style = MaterialTheme.typography.caption)
+                Text("Score preview hidden in settings.", style = MaterialTheme.typography.caption, color = fg)
             } else {
                 Text(
                     "Submit one guess to resolve distance and score (ranked: server verifies).",
                     style = MaterialTheme.typography.caption,
+                    color = fg,
                 )
             }
         }
@@ -1002,8 +1150,11 @@ private fun GameplayHudCard(
 private fun ReferenceStillCard(
     referenceStill: ImageBitmap?,
     loadFailed: Boolean,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val fg = MaterialTheme.colors.onBackground
     Card(
         modifier = modifier.width(230.dp).testTag("worldMapReferenceStillCard"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.92f),
@@ -1011,40 +1162,61 @@ private fun ReferenceStillCard(
         shape = RoundedCornerShape(12.dp),
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Reference still", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
-            if (referenceStill != null) {
-                Image(
-                    bitmap = referenceStill,
-                    contentDescription = "Bundled map reference still",
-                    modifier = Modifier.fillMaxWidth().height(128.dp).background(NutonicColors.stillImageMatte),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(128.dp)
-                            .background(NutonicColors.stillImagePlaceholder, shape = RoundedCornerShape(8.dp)),
-                    contentAlignment = Alignment.Center,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Reference still", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+                IconButton(
+                    onClick = { onExpandedChange(!expanded) },
+                    modifier = Modifier.testTag("worldMapReferenceStillToggle"),
                 ) {
-                    Text(
-                        text = if (loadFailed) "Still unavailable (bundle/resource miss)" else "Loading still…",
-                        style = MaterialTheme.typography.caption,
-                        color = NutonicColors.onStillImagePlaceholder,
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Collapse reference still" else "Expand reference still",
+                        tint = MaterialTheme.colors.primary,
                     )
                 }
             }
-            Text(
-                "Primary clue layer for SCAN. Guess modal remains independent and collapsible.",
-                style = MaterialTheme.typography.caption,
-            )
+            if (expanded) {
+                if (referenceStill != null) {
+                    Image(
+                        bitmap = referenceStill,
+                        contentDescription = "Bundled map reference still",
+                        modifier = Modifier.fillMaxWidth().height(128.dp).background(NutonicColors.stillImageMatte),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(128.dp)
+                                .background(NutonicColors.stillImagePlaceholder, shape = RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (loadFailed) "Still unavailable (bundle/resource miss)" else "Loading still…",
+                            style = MaterialTheme.typography.caption,
+                            color = NutonicColors.onStillImagePlaceholder,
+                        )
+                    }
+                }
+                Text(
+                    "Primary clue for this round. Open the guess panel when you are ready to submit.",
+                    style = MaterialTheme.typography.caption,
+                    color = fg,
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun AssistDock(
+    dockExpanded: Boolean,
+    onDockExpandedChange: (Boolean) -> Unit,
     streetviewPack: List<StreetviewHintItem>?,
     streetviewNarrative: String?,
     streetAssistExpanded: Boolean,
@@ -1061,14 +1233,58 @@ private fun AssistDock(
     onPeerRevealToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (!dockExpanded) {
+        OutlinedButton(
+            onClick = { onDockExpandedChange(true) },
+            modifier =
+                modifier
+                    .width(260.dp)
+                    .testTag("worldMapAssistExpandButton"),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Assists", color = MaterialTheme.colors.onBackground)
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = "Expand assists",
+                    tint = MaterialTheme.colors.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        return
+    }
+
     Card(
-        modifier = modifier.width(260.dp).testTag("worldMapAssistDock"),
+        modifier =
+            modifier
+                .width(260.dp)
+                .testTag("worldMapAssistDock"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.9f),
         shape = RoundedCornerShape(12.dp),
         elevation = 4.dp,
     ) {
         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Assist panels", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Assist panels", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
+                IconButton(
+                    onClick = { onDockExpandedChange(false) },
+                    modifier = Modifier.testTag("worldMapAssistDockCollapseButton"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "Collapse assist dock",
+                        tint = MaterialTheme.colors.primary,
+                    )
+                }
+            }
             if (nonRankedBlocked) {
                 Text(
                     "Assists are hidden until catalog data is available for this map.",
@@ -1155,9 +1371,21 @@ private fun AssistSection(
     onExpandedChange: (Boolean) -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val fg = MaterialTheme.colors.onBackground
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedButton(onClick = { onExpandedChange(!expanded) }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (expanded) "$title (hide)" else "$title (show)")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(title, color = fg)
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colors.primary,
+                )
+            }
         }
         if (expanded) {
             content()
@@ -1193,10 +1421,17 @@ private fun GuessModal(
         elevation = 5.dp,
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Guess modal", style = MaterialTheme.typography.subtitle2, color = MaterialTheme.colors.primary)
-                TextButton(modifier = Modifier.testTag("worldMapGuessCollapseButton"), onClick = { onExpandedChange(false) }) {
-                    Text("Collapse")
+                IconButton(
+                    modifier = Modifier.testTag("worldMapGuessCollapseButton"),
+                    onClick = { onExpandedChange(false) },
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowDown,
+                        contentDescription = "Collapse guess panel",
+                        tint = MaterialTheme.colors.primary,
+                    )
                 }
             }
 
@@ -1234,9 +1469,14 @@ private fun GuessModal(
                             "Current guess: none"
                         },
                     style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
                 )
             } else {
-                Text("Current guess is set on-map (coordinate readout hidden).", style = MaterialTheme.typography.caption)
+                Text(
+                    "Current guess is set on-map (coordinate readout hidden).",
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onBackground,
+                )
             }
             Text(
                 text = "Single primary submit per round.",

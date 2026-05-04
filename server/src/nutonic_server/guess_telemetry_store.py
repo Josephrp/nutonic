@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING, Callable
 
-from sqlalchemy import Column, Float, Integer, MetaData, String, Table, insert, select
+from sqlalchemy import Column, Float, Integer, MetaData, String, Table, insert, select, text
+
+from nutonic_server.schemas import GuessRecordOut
 
 if TYPE_CHECKING:
-    from sqlalchemy.engine import Engine
+    from sqlalchemy.engine import Connection, Engine
 
 metadata = MetaData()
 
@@ -25,6 +27,9 @@ guess_telemetry_rows = Table(
     Column("client_distance_km", Float, nullable=True),
     Column("ruleset_version", String(128), nullable=True),
     Column("session_id", String(128), nullable=True),
+    Column("display_handle", String(64), nullable=True),
+    Column("score_points", Integer, nullable=True),
+    Column("player_role", String(32), nullable=True),
 )
 
 guess_idempotency = Table(
@@ -46,6 +51,9 @@ class GuessTelemetryIn:
     client_distance_km: float | None = None
     ruleset_version: str | None = None
     session_id: str | None = None
+    display_handle: str | None = None
+    score_points: int | None = None
+    player_role: str | None = None
 
 
 class GuessTelemetryStore:
@@ -56,14 +64,48 @@ class GuessTelemetryStore:
 
     def initialize_schema(self) -> None:
         metadata.create_all(self._engine)
+        self._migrate_legacy_sqlite()
+
+    def _migrate_legacy_sqlite(self) -> None:
+        stmts = [
+            "ALTER TABLE guess_telemetry_rows ADD COLUMN display_handle VARCHAR(64)",
+            "ALTER TABLE guess_telemetry_rows ADD COLUMN score_points INTEGER",
+            "ALTER TABLE guess_telemetry_rows ADD COLUMN player_role VARCHAR(32)",
+        ]
+        try:
+            with self._engine.begin() as conn:
+                for stmt in stmts:
+                    try:
+                        conn.execute(text(stmt))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _row_ack(self, conn: Connection, row_id: int) -> GuessRecordOut:
+        row = conn.execute(
+            select(
+                guess_telemetry_rows.c.id,
+                guess_telemetry_rows.c.client_distance_km,
+                guess_telemetry_rows.c.score_points,
+                guess_telemetry_rows.c.display_handle,
+            ).where(guess_telemetry_rows.c.id == row_id),
+        ).mappings().one()
+        return GuessRecordOut(
+            id=int(row["id"]),
+            recorded=True,
+            distance_km=row["client_distance_km"],
+            score_points=row["score_points"],
+            display_handle=row["display_handle"],
+        )
 
     def record(
         self,
         row: GuessTelemetryIn,
         *,
         idempotency_key: str | None,
-    ) -> int:
-        """Insert telemetry row; idempotent repeat returns same row id."""
+    ) -> GuessRecordOut:
+        """Insert telemetry row; idempotent repeat returns the same acknowledgement payload."""
         key = idempotency_key.strip() if idempotency_key and idempotency_key.strip() else None
         with self._lock:
             with self._engine.begin() as conn:
@@ -72,10 +114,10 @@ class GuessTelemetryStore:
                         select(guess_idempotency.c.row_id).where(
                             guess_idempotency.c.map_id == row.map_id,
                             guess_idempotency.c.idempotency_key == key,
-                        )
+                        ),
                     ).scalar_one_or_none()
                     if hit is not None:
-                        return int(hit)
+                        return self._row_ack(conn, int(hit))
 
                 rid = conn.execute(
                     insert(guess_telemetry_rows)
@@ -88,8 +130,11 @@ class GuessTelemetryStore:
                         client_distance_km=row.client_distance_km,
                         ruleset_version=row.ruleset_version,
                         session_id=row.session_id,
+                        display_handle=row.display_handle,
+                        score_points=row.score_points,
+                        player_role=row.player_role,
                     )
-                    .returning(guess_telemetry_rows.c.id)
+                    .returning(guess_telemetry_rows.c.id),
                 ).scalar_one()
                 if key:
                     conn.execute(
@@ -97,10 +142,10 @@ class GuessTelemetryStore:
                             map_id=row.map_id,
                             idempotency_key=key,
                             row_id=rid,
-                        )
+                        ),
                     )
                 self._sync_after_write()
-                return int(rid)
+                return self._row_ack(conn, int(rid))
 
     def _sync_after_write(self) -> None:
         if self._on_write is None:

@@ -7,12 +7,18 @@ import com.nutonic.api.ProJobStatusOut
 import com.nutonic.api.ProVlmImageRef
 import com.nutonic.api.ProVlmModelManifest
 import com.nutonic.persistence.Utf8BlobStore
+import com.nutonic.pro.ProModelPromptContract
+import com.nutonic.pro.allProArtifactRefsForJob
 import com.nutonic.persistence.createProVlmModelBlobStore
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -20,15 +26,23 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.kotlincrypto.hash.sha2.SHA256
 
-private const val DEFAULT_MODEL_BUNDLE_ID = "nutonic.pro.vlm.remote.v1"
-private const val DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512"
+private const val DEFAULT_MODEL_BUNDLE_ID = "NuTonic/lspace"
+private const val DEFAULT_CONTRACT_ID = "nutonic.pro.vlm.v1_512_s2_only"
 private const val MAX_PROMPT_CHARS = 500
 
 private val ProVlmJson =
     Json {
         ignoreUnknownKeys = true
         explicitNulls = false
+    }
+
+/** Pretty JSON for server ``vlm_prompt_injection`` (run_manifest / tim_summary can be large). */
+private val VlmPromptInjectJson =
+    Json {
+        prettyPrint = true
+        ignoreUnknownKeys = true
     }
 
 sealed class ProVlmStatus {
@@ -102,6 +116,8 @@ class ProOnDeviceVlmCoordinator(
         job: ProJobStatusOut,
         userAsk: String = "",
         onStatus: (ProVlmStatus) -> Unit,
+        /** Invoked with decoded model output and the same image bytes fed to the engine (for UI overlays). */
+        onInferenceComplete: ((ProVlmResult, List<ProVlmPreparedImage>) -> Unit)? = null,
     ): ProVlmStatus {
         var failure: String? = null
         var ready: ProVlmStatus.Ready? = null
@@ -158,7 +174,11 @@ class ProOnDeviceVlmCoordinator(
             onStatus(ProVlmStatus.LoadingModel)
             onStatus(ProVlmStatus.Inferencing)
             when (val result = engine.run(input)) {
-                is ProOnDeviceVlmRunResult.Ok -> ready = ProVlmStatus.Ready(parseVlmOutput(result.text, checkNotNull(model)))
+                is ProOnDeviceVlmRunResult.Ok -> {
+                    val parsed = parseVlmOutput(result.text, checkNotNull(model))
+                    onInferenceComplete?.invoke(parsed, images.toList())
+                    ready = ProVlmStatus.Ready(parsed)
+                }
                 is ProOnDeviceVlmRunResult.Unsupported -> failure = result.reason
                 is ProOnDeviceVlmRunResult.Failed -> failure = result.reason
             }
@@ -168,47 +188,178 @@ class ProOnDeviceVlmCoordinator(
         return out.also(onStatus)
     }
 
-    @Suppress("NestedBlockDepth")
     private suspend fun prepareModel(
         preferredModelBundleId: String?,
         onStatus: (ProVlmStatus) -> Unit,
     ): ApiResult<ProVlmCacheRecord> {
         val cached = modelCache.load()?.takeIf { preferredModelBundleId == null || it.modelBundleId == preferredModelBundleId }
-        val cachedBytes = cached?.let { loadCachedProVlmModelBytes(it) ?: loadBundledProVlmModelBytes(it) }
-        if (cached != null && cachedBytes != null) {
-            engine.prepareModel(cachedBytes, cached)
+        prepareModelFromCache(cached)?.let { return it }
+        return prepareModelFromManifest(preferredModelBundleId, onStatus)
+    }
+
+    private suspend fun prepareModelFromCache(
+        cached: ProVlmCacheRecord?,
+    ): ApiResult<ProVlmCacheRecord>? {
+        if (cached == null) return null
+        tryPrepareCachedLeapStub(cached)?.let { return it }
+        tryPrepareCachedLeapEngine(cached)?.let { return it }
+        return tryPrepareCachedBundledOrVerified(cached)
+    }
+
+    private suspend fun tryPrepareCachedLeapStub(
+        cached: ProVlmCacheRecord,
+    ): ApiResult<ProVlmCacheRecord>? {
+        val stubEngine = engine as? DeterministicProOnDeviceVlmEngine
+        if (!cached.runtime.equals("leap", ignoreCase = true) ||
+            stubEngine == null ||
+            !stubEngine.stubPrepareAllowed
+        ) {
+            return null
+        }
+        return try {
+            stubEngine.prepareModel(cached, null)
+            ApiResult.Ok(cached)
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: "Web VLM stub prepare failed")
+        }
+    }
+
+    private suspend fun tryPrepareCachedLeapEngine(
+        cached: ProVlmCacheRecord,
+    ): ApiResult<ProVlmCacheRecord>? {
+        if (!cached.runtime.equals("leap", ignoreCase = true) || !supportsLiquidLeapOnDeviceVlm()) {
+            return null
+        }
+        return try {
+            engine.prepareModel(cached, null)
+            ApiResult.Ok(cached)
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: "Liquid Leap VLM prepare failed")
+        }
+    }
+
+    private suspend fun tryPrepareCachedBundledOrVerified(
+        cached: ProVlmCacheRecord,
+    ): ApiResult<ProVlmCacheRecord>? {
+        val bundledBytes = loadBundledProVlmModelBytes(cached)
+        if (bundledBytes != null) {
+            engine.prepareModel(cached, bundledBytes)
             return ApiResult.Ok(cached)
         }
-        val result: ApiResult<ProVlmCacheRecord> =
-            run {
-                val manifestResult = apiClient.getProVlmModelManifest(bearerAccessToken)
-                val manifest = (manifestResult as? ApiResult.Ok)?.value
-                if (manifest == null) {
-                    when (manifestResult) {
-                        is ApiResult.HttpFailure -> manifestResult
-                        is ApiResult.NetworkFailure -> manifestResult
-                        is ApiResult.Ok -> ApiResult.NetworkFailure("Unable to parse model manifest")
-                    }
-                } else if (preferredModelBundleId != null && manifest.modelBundleId != preferredModelBundleId) {
-                    ApiResult.NetworkFailure(
-                        "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
+        if (proVlmVerifiedBundleExists(cached)) {
+            engine.prepareModel(cached, null)
+            return ApiResult.Ok(cached)
+        }
+        return null
+    }
+
+    private suspend fun prepareModelFromManifest(
+        preferredModelBundleId: String?,
+        onStatus: (ProVlmStatus) -> Unit,
+    ): ApiResult<ProVlmCacheRecord> {
+        val manifestResult = apiClient.getProVlmModelManifest(bearerAccessToken)
+        val manifest = (manifestResult as? ApiResult.Ok)?.value
+        if (manifest == null) {
+            return when (manifestResult) {
+                is ApiResult.HttpFailure -> manifestResult
+                is ApiResult.NetworkFailure -> manifestResult
+                is ApiResult.Ok -> ApiResult.NetworkFailure("Unable to parse model manifest")
+            }
+        }
+        if (preferredModelBundleId != null && manifest.modelBundleId != preferredModelBundleId) {
+            return ApiResult.NetworkFailure(
+                "Server advertised ${manifest.modelBundleId}, but job requested $preferredModelBundleId",
+            )
+        }
+        return if (manifest.runtime.equals("leap", ignoreCase = true)) {
+            prepareLeapRuntimeFromManifest(manifest)
+        } else {
+            downloadNonLeapModelFromManifest(manifest, onStatus)
+        }
+    }
+
+    private suspend fun prepareLeapRuntimeFromManifest(
+        manifest: ProVlmModelManifest,
+    ): ApiResult<ProVlmCacheRecord> {
+        if (supportsLiquidLeapOnDeviceVlm()) {
+            val record =
+                ProVlmCacheRecord(
+                    modelBundleId = manifest.modelBundleId,
+                    revision = manifest.revision,
+                    sha256 = manifest.sha256.lowercase(),
+                    sizeBytes = manifest.sizeBytes,
+                    runtime = manifest.runtime,
+                )
+            modelCache.save(record)
+            return try {
+                engine.prepareModel(record, null)
+                ApiResult.Ok(record)
+            } catch (e: Exception) {
+                ApiResult.NetworkFailure(e.message ?: "Liquid Leap VLM initialization failed")
+            }
+        }
+        val leapStub = engine as? DeterministicProOnDeviceVlmEngine
+        if (leapStub != null && leapStub.stubPrepareAllowed) {
+            val record =
+                ProVlmCacheRecord(
+                    modelBundleId = manifest.modelBundleId,
+                    revision = manifest.revision,
+                    sha256 = manifest.sha256.lowercase(),
+                    sizeBytes = manifest.sizeBytes,
+                    runtime = manifest.runtime,
+                )
+            modelCache.save(record)
+            return try {
+                leapStub.prepareModel(record, null)
+                ApiResult.Ok(record)
+            } catch (e: Exception) {
+                ApiResult.NetworkFailure(e.message ?: "Web VLM stub prepare failed")
+            }
+        }
+        return ApiResult.NetworkFailure(
+            "Liquid Leap on-device VLM is not available on this target (use Android, iOS, or desktop).",
+        )
+    }
+
+    private suspend fun downloadNonLeapModelFromManifest(
+        manifest: ProVlmModelManifest,
+        onStatus: (ProVlmStatus) -> Unit,
+    ): ApiResult<ProVlmCacheRecord> =
+        withContext(Dispatchers.Default) {
+            val digest = SHA256()
+            val writer =
+                ProVlmModelCacheWriter(
+                    manifest.modelBundleId,
+                    manifest.revision,
+                )
+            if (!writer.open()) {
+                return@withContext ApiResult.NetworkFailure(
+                    "Cannot prepare on-device model cache on this platform.",
+                )
+            }
+            try {
+                val dl =
+                    apiClient.downloadAuthenticatedStreaming(
+                        manifest.downloadUrl,
+                        bearerAccessToken,
+                        onProgress = { received, total ->
+                            onStatus(ProVlmStatus.DownloadingModel(received, total))
+                        },
+                        onChunk = { buf, off, len ->
+                            digest.update(buf, off, len)
+                            writer.write(buf, off, len)
+                        },
                     )
-                } else {
-                    val bytesResult =
-                        apiClient.getProVlmModelBytes(
-                            manifest.downloadUrl,
-                            bearerAccessToken,
-                        ) { received, total -> onStatus(ProVlmStatus.DownloadingModel(received, total)) }
-                    val bytes = (bytesResult as? ApiResult.Ok)?.value
-                    if (bytes == null) {
-                        when (bytesResult) {
-                            is ApiResult.HttpFailure -> bytesResult
-                            is ApiResult.NetworkFailure -> bytesResult
-                            is ApiResult.Ok -> ApiResult.NetworkFailure("Model bytes were empty")
-                        }
-                    } else {
-                        val verification = verifyModelBytes(manifest, bytes)
-                        if (verification == null) {
+                when (dl) {
+                    is ApiResult.Ok -> {
+                        val shaHex = digestToHexLowercase(digest.digest())
+                        val verification =
+                            verifyDownloadedModel(manifest, dl.value, shaHex)
+                        if (verification != null) {
+                            writer.abort()
+                            ApiResult.NetworkFailure(verification)
+                        } else {
+                            writer.commit()
                             val record =
                                 ProVlmCacheRecord(
                                     modelBundleId = manifest.modelBundleId,
@@ -217,18 +368,30 @@ class ProOnDeviceVlmCoordinator(
                                     sizeBytes = manifest.sizeBytes,
                                     runtime = manifest.runtime,
                                 )
-                            saveCachedProVlmModelBytes(record, bytes)
                             modelCache.save(record)
-                            engine.prepareModel(bytes, record)
+                            engine.prepareModel(record, null)
                             ApiResult.Ok(record)
-                        } else {
-                            ApiResult.NetworkFailure(verification)
                         }
                     }
+
+                    is ApiResult.HttpFailure -> {
+                        writer.abort()
+                        dl
+                    }
+
+                    is ApiResult.NetworkFailure -> {
+                        writer.abort()
+                        dl
+                    }
                 }
+            } catch (e: CancellationException) {
+                writer.abort()
+                throw e
+            } catch (e: Exception) {
+                writer.abort()
+                ApiResult.NetworkFailure(e.message ?: "model download failed")
             }
-        return result
-    }
+        }
 
     private suspend fun fetchImageBytes(
         job: ProJobStatusOut,
@@ -274,9 +437,13 @@ sealed class ProOnDeviceVlmRunResult {
 }
 
 interface ProOnDeviceVlmEngine {
+    /**
+     * @param bundleBytes when non-null, bundle payload held in memory (bundled assets only).
+     * When null, [proVlmVerifiedBundleExists] must be true (disk cache after streaming download).
+     */
     suspend fun prepareModel(
-        bytes: ByteArray,
         cacheRecord: ProVlmCacheRecord,
+        bundleBytes: ByteArray? = null,
     )
 
     suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult
@@ -284,43 +451,87 @@ interface ProOnDeviceVlmEngine {
 
 class DeterministicProOnDeviceVlmEngine(
     private val runtimeName: String,
+    /** Kotlin/JS: allow manifest-only prepare and demo overlay boxes (no Liquid Leap artifact). */
+    private val allowPrepareWithoutVerifiedBundle: Boolean = false,
 ) : ProOnDeviceVlmEngine {
+    /** True when [allowPrepareWithoutVerifiedBundle] is enabled (web preview path). */
+    val stubPrepareAllowed: Boolean get() = allowPrepareWithoutVerifiedBundle
+
     private var prepared: ProVlmCacheRecord? = null
 
     override suspend fun prepareModel(
-        bytes: ByteArray,
         cacheRecord: ProVlmCacheRecord,
+        bundleBytes: ByteArray?,
     ) {
         prepared = cacheRecord
-        require(bytes.isNotEmpty()) { "Model bundle is empty" }
+        when {
+            bundleBytes != null -> require(bundleBytes.isNotEmpty()) { "Model bundle is empty" }
+            allowPrepareWithoutVerifiedBundle -> Unit
+            else ->
+                require(proVlmVerifiedBundleExists(cacheRecord)) {
+                    "Model bundle is missing or empty"
+                }
+        }
     }
 
     override suspend fun run(input: ProVlmPreparedInput): ProOnDeviceVlmRunResult {
         val model = prepared ?: input.model
-        val roles = input.images.map { it.role.ifBlank { "image" } }.distinct().take(4)
+        val stubBoxes =
+            if (allowPrepareWithoutVerifiedBundle) {
+                listOf(
+                    ProVlmBoundingBox(
+                        label = "preview",
+                        bbox = listOf(0.08, 0.08, 0.42, 0.38),
+                        confidence = 0.75,
+                    ),
+                    ProVlmBoundingBox(
+                        label = "preview",
+                        bbox = listOf(0.52, 0.42, 0.92, 0.88),
+                        confidence = 0.65,
+                    ),
+                )
+            } else {
+                emptyList()
+            }
         val caption =
-            buildString {
-                append("Local PRO analysis reviewed ")
-                append(input.images.size)
-                append(if (input.images.size == 1) " image" else " images")
-                if (roles.isNotEmpty()) {
-                    append(" (")
-                    append(roles.joinToString())
-                    append(")")
+            if (allowPrepareWithoutVerifiedBundle) {
+                buildString {
+                    append(
+                        "Preview — full Liquid Leap inference runs on Android, iOS, or desktop. ",
+                    )
+                    append(input.images.size)
+                    append(if (input.images.size == 1) " image (demo overlays)." else " images (demo overlays).")
                 }
-                append(" with ")
-                append(runtimeName)
-                append(". Treat findings as decision support tied to the server-provided evidence bundle.")
+            } else {
+                buildString {
+                    val roles = input.images.map { it.role.ifBlank { "image" } }.distinct().take(4)
+                    append(input.prompt.take(1500))
+                    if (roles.isNotEmpty()) {
+                        append(" | image_roles=")
+                        append(roles.joinToString(","))
+                    }
+                    append(" | ")
+                    append(input.images.size)
+                    append(if (input.images.size == 1) " image" else " images")
+                    append(" · ")
+                    append(runtimeName)
+                    append(" (non-neural stub — Android uses Liquid Leap).")
+                }
             }
         return ProOnDeviceVlmRunResult.Ok(
             ProVlmJson.encodeToString(
                 ProVlmResult.serializer(),
                 ProVlmResult(
                     caption = caption,
-                    boxes = emptyList(),
+                    boxes = stubBoxes,
                     modelBundleId = model.modelBundleId,
                     revision = model.revision,
-                    source = "on_device_vlm_verified_bundle",
+                    source =
+                        if (allowPrepareWithoutVerifiedBundle) {
+                            "on_device_vlm_web_preview"
+                        } else {
+                            "on_device_vlm_verified_bundle"
+                        },
                 ),
             ),
         )
@@ -338,6 +549,33 @@ expect suspend fun saveCachedProVlmModelBytes(
     bytes: ByteArray,
 )
 
+private fun promptInjectionValueText(
+    key: String,
+    element: JsonElement,
+): String {
+    val maxChars =
+        when (key) {
+            "run_manifest", "tim_summary" -> 12_000
+            "tim_context_block" -> 14_000
+            "product" -> 2_000
+            else -> 1_200
+        }
+    val encoded =
+        when {
+            element is JsonPrimitive && element.isString -> element.content
+            else -> VlmPromptInjectJson.encodeToString(JsonElement.serializer(), element)
+        }
+    return encoded.take(maxChars)
+}
+
+private val vlmPromptInjectionKeyOrder =
+    listOf(
+        "product",
+        "tim_context_block",
+        "run_manifest",
+        "tim_summary",
+    )
+
 fun buildPrompt(
     promptInjection: JsonObject?,
     userAsk: String,
@@ -347,17 +585,27 @@ fun buildPrompt(
             .filterNot { it.code < 32 && it != '\n' && it != '\t' }
             .take(MAX_PROMPT_CHARS)
     val injected =
-        promptInjection
-            ?.entries
-            ?.sortedBy { it.key }
-            ?.joinToString("\n") { (key, value) -> "$key: ${value.toString().take(600)}" }
-            .orEmpty()
+        promptInjection?.let { obj ->
+            val seen = mutableSetOf<String>()
+            val ordered =
+                buildList {
+                    for (k in vlmPromptInjectionKeyOrder) {
+                        if (k in obj && seen.add(k)) add(k)
+                    }
+                    for (k in obj.keys.sorted()) {
+                        if (seen.add(k)) add(k)
+                    }
+                }
+            ordered.joinToString("\n\n") { key ->
+                val value = obj[key] ?: return@joinToString ""
+                "$key:\n${promptInjectionValueText(key, value)}"
+            }
+        }.orEmpty()
     return listOf(
-        "You are NU:TONIC PRO local vision. Describe the provided EO image set.",
-        "Return a concise caption followed by strict JSON with key `boxes`.",
-        "Each box must be `{label,bbox,confidence}` with bbox normalized [x1,y1,x2,y2] in 0..1.",
+        ProModelPromptContract.ON_DEVICE_VLM_USER_INSTRUCTION_LINES,
         injected,
         safeAsk.takeIf { it.isNotBlank() }?.let { "User ask: $it" }.orEmpty(),
+        ProModelPromptContract.ASSESSMENT_TASK_FOOTER,
     ).filter { it.isNotBlank() }.joinToString("\n")
 }
 
@@ -383,22 +631,32 @@ fun parseVlmOutput(
     )
 }
 
-fun verifyModelBytes(
+private fun digestToHexLowercase(digestBytes: ByteArray): String =
+    digestBytes.joinToString("") { b -> (b.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+fun verifyDownloadedModel(
     manifest: ProVlmModelManifest,
-    bytes: ByteArray,
+    downloadedByteCount: Long,
+    sha256HexLowercase: String,
 ): String? {
     val expected = manifest.sha256.trim().lowercase()
-    val actual = sha256Hex(bytes)
     return when {
-        manifest.sizeBytes >= 0 && bytes.size.toLong() != manifest.sizeBytes ->
+        manifest.sizeBytes >= 0 && downloadedByteCount != manifest.sizeBytes ->
             "Downloaded model size mismatch for ${manifest.modelBundleId}"
         expected.isBlank() -> "Model manifest is missing sha256"
-        actual != expected -> "Downloaded model sha256 mismatch for ${manifest.modelBundleId}"
+        sha256HexLowercase != expected ->
+            "Downloaded model sha256 mismatch for ${manifest.modelBundleId}"
         manifest.contractIds.isEmpty() -> "Model manifest is missing supported contract ids"
-        DEFAULT_CONTRACT_ID !in manifest.contractIds -> "Model manifest does not support $DEFAULT_CONTRACT_ID"
+        DEFAULT_CONTRACT_ID !in manifest.contractIds ->
+            "Model manifest does not support $DEFAULT_CONTRACT_ID"
         else -> null
     }
 }
+
+fun verifyModelBytes(
+    manifest: ProVlmModelManifest,
+    bytes: ByteArray,
+): String? = verifyDownloadedModel(manifest, bytes.size.toLong(), sha256Hex(bytes))
 
 expect fun sha256Hex(bytes: ByteArray): String
 

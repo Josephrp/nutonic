@@ -8,12 +8,15 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.delay
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
@@ -412,21 +415,111 @@ class NutonicApiClient(
         bearerAccessToken: String,
         onChunk: (receivedBytes: Long, totalBytes: Long?) -> Unit = { _, _ -> },
     ): ApiResult<ByteArray> {
-        val path = downloadUrl.trim()
-        if (path.isBlank()) {
-            return ApiResult.NetworkFailure("Model download URL is blank")
-        }
         val url =
-            if (path.startsWith("http://") || path.startsWith("https://")) {
-                path
-            } else {
-                originTrimmed.trimEnd('/') + "/" + path.trimStart('/')
-            }
+            nutonicAbsoluteAssetUrl(downloadUrl)
+                ?: return ApiResult.NetworkFailure("Model download URL is blank")
         onChunk(0, null)
         return getAuthenticatedBytes(url, bearerAccessToken).also { result ->
             if (result is ApiResult.Ok) {
                 onChunk(result.value.size.toLong(), result.value.size.toLong())
             }
+        }
+    }
+
+    /**
+     * Streams an authenticated GET body without buffering the full payload in memory.
+     * Used for large PRO VLM bundles (multi‑GiB) where `getAuthenticatedBytes` would exhaust the heap.
+     */
+    suspend fun downloadAuthenticatedStreaming(
+        downloadUrl: String,
+        bearerAccessToken: String,
+        onProgress: (receivedBytes: Long, totalBytes: Long?) -> Unit,
+        onChunk: suspend (ByteArray, Int, Int) -> Unit,
+    ): ApiResult<Long> {
+        val url =
+            nutonicAbsoluteAssetUrl(downloadUrl)
+                ?: return ApiResult.NetworkFailure("Model download URL is blank")
+        return try {
+            val response: HttpResponse =
+                http.get(url) {
+                    nutonicAuthHeaders(url, bearerAccessToken)
+                }
+            if (response.status.isSuccess()) {
+                consumeAuthenticatedStreamingBody(response, onProgress, onChunk)
+            } else {
+                ApiResult.HttpFailure(
+                    response.status.value,
+                    stubUserMessageForStatus(response.status.value, null),
+                    null,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+    }
+
+    private suspend fun consumeAuthenticatedStreamingBody(
+        response: HttpResponse,
+        onProgress: (receivedBytes: Long, totalBytes: Long?) -> Unit,
+        onChunk: suspend (ByteArray, Int, Int) -> Unit,
+    ): ApiResult<Long> {
+        val channel = response.bodyAsChannel()
+        val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        val buffer = ByteArray(STREAM_BUFFER_BYTES)
+        var received = 0L
+        onProgress(0L, total)
+        while (true) {
+            val read = channel.readAvailable(buffer, 0, buffer.size)
+            if (read == -1) break
+            if (read > 0) {
+                onChunk(buffer, 0, read)
+                received += read.toLong()
+                onProgress(received, total)
+            }
+        }
+        return ApiResult.Ok(received)
+    }
+
+    internal fun nutonicAbsoluteAssetUrl(assetPathOrUrl: String): String? {
+        val raw = assetPathOrUrl.trim()
+        if (raw.isBlank()) {
+            return null
+        }
+        return if (raw.startsWith("http://") || raw.startsWith("https://")) {
+            raw
+        } else {
+            originTrimmed.trimEnd('/') + "/" + raw.trimStart('/')
+        }
+    }
+
+    /**
+     * Hugging Face / CDN downloads must not carry session Bearer tokens (and need long timeouts).
+     * Only attach Nutonic auth for same-origin URLs as [originTrimmed].
+     */
+    private fun shouldAttachNutonicBearer(resolvedAbsoluteUrl: String): Boolean {
+        val trimmed = resolvedAbsoluteUrl.trim()
+        val absolute =
+            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                trimmed
+            } else {
+                nutonicAbsoluteAssetUrl(trimmed) ?: return true
+            }
+        val origin = Url(originTrimmed)
+        val target = Url(absolute)
+        return origin.protocol == target.protocol &&
+            origin.host.lowercase() == target.host.lowercase() &&
+            origin.port == target.port
+    }
+
+    private fun HttpRequestBuilder.nutonicAuthHeaders(
+        resolvedAbsoluteUrl: String,
+        bearerAccessToken: String,
+    ) {
+        header(HttpHeaders.UserAgent, NUTONIC_HTTP_USER_AGENT)
+        if (shouldAttachNutonicBearer(resolvedAbsoluteUrl)) {
+            header("Authorization", "Bearer $bearerAccessToken")
         }
     }
 
@@ -471,7 +564,7 @@ class NutonicApiClient(
         try {
             val response: HttpResponse =
                 http.get(url) {
-                    header("Authorization", "Bearer $bearerAccessToken")
+                    nutonicAuthHeaders(url, bearerAccessToken)
                 }
             when {
                 response.status.isSuccess() -> ApiResult.Ok(response.body())
@@ -564,6 +657,11 @@ class NutonicApiClient(
                 )
             }
         }
+
+    private companion object {
+        private const val STREAM_BUFFER_BYTES = 256 * 1024
+        private const val NUTONIC_HTTP_USER_AGENT = "Nutonic/1.0"
+    }
 }
 
 private val terminalProJobStatuses = setOf("completed", "failed", "cancelled")

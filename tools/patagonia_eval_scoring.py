@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from evaluate_vlm_patagonia import EvalTarget, _match_terms, _score_caption
+from patagonia_eval_tim_alignment import score_tim_alignment
 
 
 @dataclass(frozen=True)
@@ -15,6 +16,18 @@ class ScoreWeights:
     lexical: float = 0.22
     grounding: float = 0.48
     structured: float = 0.30
+    """Optional composite weight for ``score_tim_alignment`` (0 keeps legacy behavior)."""
+    tim_alignment: float = 0.0
+
+
+SCORE_WEIGHT_PRESETS: dict[str, ScoreWeights] = {
+    # Legacy single composite (TiM integration not weighted separately).
+    "default": ScoreWeights(0.22, 0.48, 0.30, 0.0),
+    # Emphasize optical ↔ SCL agreement (typical ``no_tim`` prompts).
+    "optical_focus": ScoreWeights(0.20, 0.53, 0.27, 0.0),
+    # Reward synthesis with injected TiM JSON (typical ``tim`` prompts).
+    "tim_integration": ScoreWeights(0.18, 0.38, 0.27, 0.17),
+}
 
 
 @dataclass(frozen=True)
@@ -361,11 +374,13 @@ def score_patagonia_multimodal(
     pass_metric: str = "composite",
     grounding_label_mode: str = "canonical",
     grounding_policy: GroundingPolicy | None = None,
+    tim_compact: dict[str, Any] | None = None,
+    analysis_profile: str = "",
 ) -> dict[str, Any]:
     """
     Compute lexical, grounding, structured, composite; guardrails from ``EvalTarget``.
 
-    ``score_mode``: lexical | grounding | structured | composite | all
+    ``score_mode``: lexical | grounding | structured | tim_alignment | composite | all
     ``pass_metric``: which scalar drives ``passed`` (default composite; falls back if unavailable).
     """
     w = weights or ScoreWeights()
@@ -400,6 +415,11 @@ def score_patagonia_multimodal(
     if _is_marine_target(target):
         ship_score, ship_diag = ship_plausibility_score(caption)
 
+    tim_score, tim_diag = score_tim_alignment(
+        caption, tim_compact, analysis_profile=(analysis_profile or target.category or "").strip()
+    )
+    ta_weight_effective = float(w.tim_alignment) if tim_score is not None else 0.0
+
     forbidden_penalty = 0.25 * len(f_hits)
     claim_penalty = 0.08 * len(c_hits)
     guardrail = max(0.0, 1.0 - forbidden_penalty - claim_penalty)
@@ -409,12 +429,21 @@ def score_patagonia_multimodal(
         g_eff = float(gr_score)
         if ship_score is not None:
             g_eff *= float(ship_score)
-        comp_raw = w.lexical * lex + w.grounding * g_eff + w.structured * st_score
+        sum_w = float(w.lexical + w.grounding + w.structured + ta_weight_effective)
+        sum_w = sum_w if sum_w > 1e-9 else 1.0
+        comp_raw = (
+            float(w.lexical) * lex + float(w.grounding) * g_eff + float(w.structured) * st_score
+        )
+        if ta_weight_effective > 0 and tim_score is not None:
+            comp_raw += ta_weight_effective * float(tim_score)
+        comp_raw = comp_raw / sum_w
     else:
-        # Renormalize lexical + structured when grounding missing
-        z = w.lexical + w.structured
+        # Renormalize lexical + structured (+ optional TiM alignment) when grounding missing
+        z = float(w.lexical + w.structured + ta_weight_effective)
         z = z if z > 1e-6 else 1.0
-        comp_raw = (w.lexical / z) * lex + (w.structured / z) * st_score
+        comp_raw = (float(w.lexical) / z) * lex + (float(w.structured) / z) * st_score
+        if ta_weight_effective > 0 and tim_score is not None:
+            comp_raw += (ta_weight_effective / z) * float(tim_score)
 
     composite = max(0.0, min(1.0, comp_raw * guardrail))
 
@@ -425,6 +454,8 @@ def score_patagonia_multimodal(
         primary = float(gr_score) if gr_score is not None else 0.0
     elif mode == "structured":
         primary = st_score
+    elif mode == "tim_alignment":
+        primary = float(tim_score) if tim_score is not None else 0.0
     elif mode in ("composite", "all"):
         primary = composite
     else:
@@ -437,6 +468,8 @@ def score_patagonia_multimodal(
         passed = (float(gr_score) if gr_score is not None else 0.0) >= threshold
     elif pm == "structured":
         passed = st_score >= threshold
+    elif pm == "tim_alignment":
+        passed = (float(tim_score) if tim_score is not None else 0.0) >= threshold
     else:
         passed = composite >= threshold
 
@@ -456,7 +489,17 @@ def score_patagonia_multimodal(
             "diagnostics": ship_diag,
         },
         "structured": {"score": round(st_score, 4), "checks": st_checks},
+        "tim_alignment": {
+            "score": None if tim_score is None else round(float(tim_score), 4),
+            "diagnostics": tim_diag,
+            "weight_effective": round(ta_weight_effective, 4),
+        },
         "composite": round(composite, 4),
         "guardrail_factor": round(guardrail, 4),
-        "weights_applied": {"lexical": w.lexical, "grounding": w.grounding, "structured": w.structured},
+        "weights_applied": {
+            "lexical": w.lexical,
+            "grounding": w.grounding,
+            "structured": w.structured,
+            "tim_alignment": ta_weight_effective,
+        },
     }

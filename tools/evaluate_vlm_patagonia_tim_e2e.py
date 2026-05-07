@@ -14,8 +14,12 @@ Outputs a publishable run directory containing:
   ``NUTONIC_PATAGONIA_EVAL_ENABLE_HTTP=1`` to use URL env resolution
 - aggregate JSON + Markdown summary
 - **Multi-mode scoring** (``--score-mode``): legacy **lexical** checks, **grounding** vs Sentinel-2 SCL
-  reference boxes (COG-aligned still refresh), **structured** checklist for production-style outputs,
-  and **composite** (default) combining them with guardrails
+  reference boxes (COG-aligned still refresh), **structured** checklist, optional **tim_alignment**
+  (TiM JSON integration heuristic orthogonal to SCL), and **composite** (default) with guardrails.
+- **Gold modes**: ``--gold-mode state`` (single-date SCL components, default) or ``delta`` (bi-temporal SCL XOR
+  change regions when STAC yields two sufficiently separated acquisitions; falls back to state on failure).
+- **Contrastive TiM** (optional): ``--contrastive-tim-flip`` runs a second TiM prompt with negated modality
+  numeric samples to probe caption sensitivity to TiM JSON.
 
 The local TiM path reuses `inference/terramind_tim_local` directly; no TiM
 remote service is required. Use ``--skip-local-vlm`` for HTTP-only evals on deployed Spaces.
@@ -70,7 +74,8 @@ from evaluate_vlm_patagonia import (  # noqa: E402
     write_patagonia_eval_still,
     write_patagonia_per_model_artifacts,
 )
-from patagonia_eval_scoring import ScoreWeights, score_patagonia_multimodal  # noqa: E402
+from patagonia_eval_scoring import SCORE_WEIGHT_PRESETS, ScoreWeights, score_patagonia_multimodal  # noqa: E402
+from patagonia_eval_tim_contrast import contrast_caption_responsiveness, flip_tim_modality_numeric_samples  # noqa: E402
 from patagonia_eval_sft_prompts import (  # noqa: E402
     PRODUCTION_ANALYSIS_SYSTEM,
     build_production_no_tim_user_prompt,
@@ -109,6 +114,44 @@ def _write_json(path: Path, obj: Any) -> None:
     path.write_text(_json_dumps(obj, pretty=True) + "\n", encoding="utf-8")
 
 
+def _score_weight_presets_for_meta() -> dict[str, dict[str, float]]:
+    return {
+        name: {
+            "lexical": float(w.lexical),
+            "grounding": float(w.grounding),
+            "structured": float(w.structured),
+            "tim_alignment": float(w.tim_alignment),
+        }
+        for name, w in SCORE_WEIGHT_PRESETS.items()
+    }
+
+
+def _judge_pack_row(r: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "target_id": r.get("target_id"),
+        "model_name": r.get("model_name"),
+        "tim_injected": r.get("tim_injected"),
+        "analysis_profile": r.get("analysis_profile"),
+        "composite_weight_preset_resolved": r.get("composite_weight_preset_resolved"),
+        "tim_compact": r.get("tim_compact"),
+        "caption": r.get("caption"),
+        "contrastive_pair_group": r.get("contrastive_pair_group"),
+        "contrastive_arm": r.get("contrastive_arm"),
+        "contrastive_responsiveness_vs_flip": r.get("contrastive_responsiveness_vs_flip"),
+        "contrastive_error": r.get("contrastive_error"),
+        "scores": {
+            "primary": r.get("score"),
+            "lexical": r.get("lexical_score"),
+            "grounding": r.get("grounding_score"),
+            "structured": r.get("structured_score"),
+            "tim_alignment": r.get("tim_alignment_score"),
+            "composite": r.get("composite_score"),
+            "ship_plausibility": r.get("ship_plausibility_score"),
+        },
+        "error": r.get("error"),
+    }
+
+
 def _append_jsonl(path: Path, obj: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -141,7 +184,12 @@ def _resolve_pass_metric(score_mode: str, pass_metric_cli: str) -> str:
     if pm not in ("", "auto"):
         return pm
     sm = score_mode.strip().lower()
-    return {"lexical": "lexical", "grounding": "grounding", "structured": "structured"}.get(sm, "composite")
+    return {
+        "lexical": "lexical",
+        "grounding": "grounding",
+        "structured": "structured",
+        "tim_alignment": "tim_alignment",
+    }.get(sm, "composite")
 
 
 def _needs_stac_gold_refresh(args: argparse.Namespace) -> bool:
@@ -153,11 +201,39 @@ def _needs_stac_gold_refresh(args: argparse.Namespace) -> bool:
     return sm in ("grounding", "composite", "all")
 
 
-def _build_score_weights(args: argparse.Namespace) -> ScoreWeights:
-    w = getattr(args, "score_weight", None)
-    if isinstance(w, (list, tuple)) and len(w) == 3:
-        return ScoreWeights(lexical=float(w[0]), grounding=float(w[1]), structured=float(w[2]))
-    return ScoreWeights()
+def _gold_contract_tags(args: argparse.Namespace) -> list[str]:
+    if getattr(args, "no_stac_gold", False) or args.still_source != "stac":
+        return []
+    if not _needs_stac_gold_refresh(args):
+        return []
+    gm = (getattr(args, "gold_mode", "state") or "state").strip().lower()
+    if gm == "delta":
+        return ["sentinel2_scl_bitemporal_delta", "sentinel2_late_rgb_chip"]
+    return ["sentinel2_scl_connected_components_chip"]
+
+
+def _composite_preset_label(args: argparse.Namespace, *, tim_injected: bool) -> str:
+    w_cli = getattr(args, "score_weight", None)
+    if isinstance(w_cli, (list, tuple)) and len(w_cli) == 3:
+        return "explicit_cli"
+    pr = (getattr(args, "composite_weight_preset", None) or "auto").strip().lower()
+    if pr == "auto":
+        return "tim_integration" if tim_injected else "optical_focus"
+    return pr if pr in SCORE_WEIGHT_PRESETS else "default"
+
+
+def _build_score_weights(args: argparse.Namespace, *, tim_injected: bool) -> ScoreWeights:
+    """Resolve composite weights; explicit ``--score-weight`` fixes lexical/grounding/structured (TiM weight stays 0)."""
+    w_cli = getattr(args, "score_weight", None)
+    preset_arg = (getattr(args, "composite_weight_preset", None) or "auto").strip().lower()
+
+    if isinstance(w_cli, (list, tuple)) and len(w_cli) == 3:
+        return ScoreWeights(lexical=float(w_cli[0]), grounding=float(w_cli[1]), structured=float(w_cli[2]), tim_alignment=0.0)
+
+    preset_name = preset_arg
+    if preset_name == "auto":
+        preset_name = "tim_integration" if tim_injected else "optical_focus"
+    return SCORE_WEIGHT_PRESETS.get(preset_name) or SCORE_WEIGHT_PRESETS["default"]
 
 
 def _build_grounding_policy(args: argparse.Namespace):
@@ -176,6 +252,10 @@ def _apply_full_scoring(
     args: argparse.Namespace,
     gold_boxes: list[dict[str, Any]] | None,
     pass_metric_resolved: str,
+    *,
+    tim_injected: bool,
+    tim_compact: dict[str, Any] | None,
+    analysis_profile: str,
 ) -> dict[str, Any]:
     mode = args.score_mode.strip().lower()
     if mode == "all":
@@ -185,11 +265,13 @@ def _apply_full_scoring(
         target,
         threshold=args.score_threshold,
         gold_boxes=gold_boxes,
-        weights=_build_score_weights(args),
+        weights=_build_score_weights(args, tim_injected=tim_injected),
         score_mode=mode,
         pass_metric=pass_metric_resolved,
         grounding_label_mode=str(getattr(args, "grounding_label_mode", "canonical") or "canonical"),
         grounding_policy=_build_grounding_policy(args),
+        tim_compact=tim_compact if tim_injected else None,
+        analysis_profile=analysis_profile,
     )
     # Store the scalar that drove pass/fail so we can sweep thresholds without re-running inference.
     pass_value: float | None = None
@@ -199,8 +281,13 @@ def _apply_full_scoring(
         pass_value = None if scored["grounding"]["score"] is None else float(scored["grounding"]["score"])
     elif pass_metric_resolved == "structured":
         pass_value = float(scored["structured"]["score"])
+    elif pass_metric_resolved == "tim_alignment":
+        ta = scored.get("tim_alignment") or {}
+        pv = ta.get("score")
+        pass_value = None if pv is None else float(pv)
     else:
         pass_value = float(scored["composite"])
+    ta_block = scored.get("tim_alignment") or {}
     return {
         "score": scored["score"],
         "passed": scored["passed"],
@@ -216,7 +303,9 @@ def _apply_full_scoring(
         "grounding_score": scored["grounding"]["score"],
         "ship_plausibility_score": scored.get("ship_plausibility", {}).get("score"),
         "structured_score": scored["structured"]["score"],
+        "tim_alignment_score": ta_block.get("score"),
         "composite_score": scored["composite"],
+        "composite_weight_preset_resolved": _composite_preset_label(args, tim_injected=tim_injected),
         "scoring": scored,
     }
 
@@ -273,8 +362,11 @@ def _refresh_stills_with_stac_cog_gold(
     data_scripts = REPO_ROOT / "data" / "scripts"
     if str(data_scripts) not in sys.path:
         sys.path.insert(0, str(data_scripts))
-    from patagonia_eval_gold import gold_boxes_from_scl
-    from stac_reference_still import fetch_sentinel_cog_rgb_scl_matched
+    from patagonia_eval_gold import gold_boxes_from_scl, gold_boxes_from_scl_delta
+    from stac_reference_still import (
+        fetch_sentinel_bitemporal_cog_rgb_scl_delta,
+        fetch_sentinel_cog_rgb_scl_matched,
+    )
 
     gold_dir = out_dir / "gold"
     gold_dir.mkdir(parents=True, exist_ok=True)
@@ -282,8 +374,84 @@ def _refresh_stills_with_stac_cog_gold(
     st_raw = (args.stac_still_url or "").strip() or None
     coll = (args.stac_still_collection or "").strip() or None
     dt_raw = (args.stac_still_datetime or "").strip() or None
+    gold_mode = (getattr(args, "gold_mode", "state") or "state").strip().lower()
+    min_sep = float(getattr(args, "gold_min_temporal_separation_days", 21.0))
 
     for t in targets:
+        sidecar: dict[str, Any] = {"target_id": t.target_id, "gold_mode_requested": gold_mode}
+
+        def _single_date_fallback(reason_key: str):
+            rgb2, scl2, meta2 = fetch_sentinel_cog_rgb_scl_matched(
+                t.lat,
+                t.lon,
+                width_px=int(args.mapbox_size),
+                height_px=int(args.mapbox_size),
+                stac_url=st_raw,
+                collection=coll,
+                bbox_half_km=float(args.stac_still_bbox_half_km),
+                max_cloud=float(args.stac_still_max_cloud),
+                max_items=int(args.stac_still_max_items),
+                datetime_range=dt_raw,
+            )
+            sidecar[f"{reason_key}_fallback"] = "single_date_state_gold"
+            sidecar["gold_mode_effective"] = "state"
+            return rgb2, scl2, meta2
+
+        if gold_mode == "delta":
+            rgb, scl_early, scl_late, meta = fetch_sentinel_bitemporal_cog_rgb_scl_delta(
+                t.lat,
+                t.lon,
+                width_px=int(args.mapbox_size),
+                height_px=int(args.mapbox_size),
+                stac_url=st_raw,
+                collection=coll,
+                bbox_half_km=float(args.stac_still_bbox_half_km),
+                max_cloud=float(args.stac_still_max_cloud),
+                max_items=int(args.stac_still_max_items),
+                datetime_range=dt_raw,
+                min_temporal_separation_days=min_sep,
+            )
+            sidecar["stac_pair_meta"] = meta
+            if rgb is not None and scl_early is not None and scl_late is not None and meta.get("ok_delta"):
+                boxes = gold_boxes_from_scl_delta(scl_early, scl_late, category=t.category)
+                sidecar["gold_mode_effective"] = "delta"
+                if not boxes:
+                    boxes = gold_boxes_from_scl(scl_late, category=t.category)
+                    sidecar["delta_fallback"] = "empty_delta_mask_used_state_on_late_scl"
+                p = Path(target_records[t.target_id]["image_path"])
+                rgb.save(p)
+                target_records[t.target_id]["image_sha256"] = _sha256_bytes(p.read_bytes())
+                prov = target_records[t.target_id].setdefault("still_provenance", {})
+                if isinstance(prov, dict):
+                    prov["cog_scl_gold_refresh"] = True
+                    prov["stac_gold_item_id"] = meta.get("late_item_id") or meta.get("item_id")
+                    prov["stac_gold_bitemporal"] = True
+                gold_by_id[t.target_id] = boxes
+                sidecar["gold_boxes"] = boxes
+                _write_json(gold_dir / f"{t.target_id}.json", sidecar)
+                continue
+
+            sidecar["delta_failure_reason"] = meta.get("reason", "delta_fetch_failed")
+            rgb, scl, meta = _single_date_fallback("delta")
+            sidecar["stac_pair_meta"] = meta
+            if rgb is not None and scl is not None:
+                p = Path(target_records[t.target_id]["image_path"])
+                rgb.save(p)
+                target_records[t.target_id]["image_sha256"] = _sha256_bytes(p.read_bytes())
+                prov = target_records[t.target_id].setdefault("still_provenance", {})
+                if isinstance(prov, dict):
+                    prov["cog_scl_gold_refresh"] = True
+                    prov["stac_gold_item_id"] = meta.get("item_id")
+                boxes = gold_boxes_from_scl(scl, category=t.category)
+                gold_by_id[t.target_id] = boxes
+                sidecar["gold_boxes"] = boxes
+            else:
+                gold_by_id[t.target_id] = None
+                sidecar["gold_boxes"] = None
+                sidecar["reason"] = meta.get("reason", "cog_pair_failed")
+            _write_json(gold_dir / f"{t.target_id}.json", sidecar)
+            continue
+
         rgb, scl, meta = fetch_sentinel_cog_rgb_scl_matched(
             t.lat,
             t.lon,
@@ -296,7 +464,8 @@ def _refresh_stills_with_stac_cog_gold(
             max_items=int(args.stac_still_max_items),
             datetime_range=dt_raw,
         )
-        sidecar = {"target_id": t.target_id, "stac_pair_meta": meta}
+        sidecar["stac_pair_meta"] = meta
+        sidecar["gold_mode_effective"] = "state"
         if rgb is not None and scl is not None:
             p = Path(target_records[t.target_id]["image_path"])
             rgb.save(p)
@@ -482,11 +651,13 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "lexical_sum": 0.0,
                 "grounding_sum": 0.0,
                 "ship_sum": 0.0,
+                "tim_align_sum": 0.0,
                 "structured_sum": 0.0,
                 "composite_sum": 0.0,
                 "lexical_n": 0,
                 "grounding_n": 0,
                 "ship_n": 0,
+                "tim_align_n": 0,
                 "structured_n": 0,
                 "composite_n": 0,
             },
@@ -506,6 +677,9 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         if r.get("ship_plausibility_score") is not None:
             cur["ship_sum"] += float(r["ship_plausibility_score"])
             cur["ship_n"] += 1
+        if r.get("tim_alignment_score") is not None:
+            cur["tim_align_sum"] += float(r["tim_alignment_score"])
+            cur["tim_align_n"] += 1
         if r.get("structured_score") is not None:
             cur["structured_sum"] += float(r["structured_score"])
             cur["structured_n"] += 1
@@ -527,6 +701,8 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             cur["mean_structured_score"] = round(cur["structured_sum"] / cur["structured_n"], 4)
         if cur.get("composite_n", 0) > 0:
             cur["mean_composite_score"] = round(cur["composite_sum"] / cur["composite_n"], 4)
+        if cur.get("tim_align_n", 0) > 0:
+            cur["mean_tim_alignment_score"] = round(cur["tim_align_sum"] / cur["tim_align_n"], 4)
         for k in (
             "lexical_sum",
             "lexical_n",
@@ -534,12 +710,41 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "grounding_n",
             "ship_sum",
             "ship_n",
+            "tim_align_sum",
+            "tim_align_n",
             "structured_sum",
             "structured_n",
             "composite_sum",
             "composite_n",
         ):
             cur.pop(k, None)
+    return out
+
+
+def _summarize_variant_pairs(summary_by_model: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """When ``local_vlm_variants`` is ``both``, compare ``model`` vs ``model_no_tim``."""
+    out: dict[str, dict[str, Any]] = {}
+    for name, s_nt in summary_by_model.items():
+        if not str(name).endswith("_no_tim"):
+            continue
+        base = str(name)[: -len("_no_tim")]
+        s_tim = summary_by_model.get(base)
+        if not isinstance(s_tim, dict) or not isinstance(s_nt, dict):
+            continue
+        key = f"{base}_tim_vs_no_tim"
+        out[key] = {
+            "tim_variant": base,
+            "no_tim_variant": str(name),
+            "delta_mean_primary": round(float(s_tim.get("mean_score", 0.0)) - float(s_nt.get("mean_score", 0.0)), 4),
+            "delta_mean_composite": round(
+                float(s_tim.get("mean_composite_score") or 0.0) - float(s_nt.get("mean_composite_score") or 0.0),
+                4,
+            ),
+            "delta_mean_grounding": _delta_optional_mean(s_tim, s_nt, "mean_grounding_score"),
+            "delta_mean_tim_alignment": _delta_optional_mean(s_tim, s_nt, "mean_tim_alignment_score"),
+            "tim_summary": {"mean_score": s_tim.get("mean_score"), "pass_rate": s_tim.get("pass_rate")},
+            "no_tim_summary": {"mean_score": s_nt.get("mean_score"), "pass_rate": s_nt.get("pass_rate")},
+        }
     return out
 
 
@@ -570,6 +775,17 @@ def _summary_metric_cell(summary_row: dict[str, Any], key: str) -> str:
     return f"{float(v):.3f}" if v is not None else "—"
 
 
+def _delta_optional_mean(a: dict[str, Any], b: dict[str, Any], field: str) -> float | None:
+    av = a.get(field)
+    bv = b.get(field)
+    if av is None or bv is None:
+        return None
+    try:
+        return round(float(av) - float(bv), 4)
+    except (TypeError, ValueError):
+        return None
+
+
 def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
     meta = payload["meta"]
     lines = [
@@ -579,16 +795,26 @@ def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
         f"Scoring: `{meta.get('score_mode', '')}` · pass metric: `{meta.get('pass_metric_resolved', '')}` · "
         f"threshold `{meta.get('score_threshold', '')}`",
         "",
+        "## What this run measures",
+        "",
+        "- **Optical / SCL alignment**: grounding IoU vs Sentinel-2 scene-class reference boxes (single-acquisition **state**, not TiM-predicted change).",
+        "- **Lexical probes**: curated keyword groups per AOI (`EvalTarget.expected_any`), not STAC item metadata text.",
+        "- **TiM alignment** (when TiM is injected): heuristic checks that the caption engages TiM themes and separates model-shaped signals from pure optics — orthogonal to SCL IoU.",
+        "- **Gold mode**: `state` = single-date SCL; `delta` = bi-temporal SCL XOR regions when STAC provides two spaced acquisitions (see `gold/*.json` sidecars).",
+        "- **Contrastive TiM**: rows named `*_tim_contrast_flip` negate modality numeric samples to expose caption sensitivity to TiM JSON.",
+        "- **Composite**: weighted blend (preset-controlled); `--composite-weight-preset auto` uses **tim_integration** weights for TiM prompts and **optical_focus** for image-only rows.",
+        "",
         "## Summary",
         "",
-        "| Model | Targets | Errors | Pass Rate | Mean (primary) | Mean Lex | Mean Grd | Mean Ship | Mean Str | Mean Comp |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Model | Targets | Errors | Pass Rate | Mean (primary) | Mean Lex | Mean Grd | Mean Ship | Mean TiM | Mean Str | Mean Comp |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, s in payload["summary_by_model"].items():
         lines.append(
             f"| {name} | {s['n']} | {s['errors']} | {s['pass_rate']:.3f} | {s['mean_score']:.3f} | "
             f"{_summary_metric_cell(s, 'mean_lexical_score')} | {_summary_metric_cell(s, 'mean_grounding_score')} | "
-            f"{_summary_metric_cell(s, 'mean_ship_plausibility_score')} | {_summary_metric_cell(s, 'mean_structured_score')} | "
+            f"{_summary_metric_cell(s, 'mean_ship_plausibility_score')} | {_summary_metric_cell(s, 'mean_tim_alignment_score')} | "
+            f"{_summary_metric_cell(s, 'mean_structured_score')} | "
             f"{_summary_metric_cell(s, 'mean_composite_score')} |"
         )
     lines.extend(["", "## Artifacts", ""])
@@ -598,6 +824,20 @@ def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
     lines.append("- `tim/tim_export.jsonl`: local TiM outputs")
     lines.append("- `images/`: cached reference stills (STAC or Mapbox)")
     lines.append("- `gold/`: Sentinel-2 SCL-derived reference boxes (when STAC COG pair succeeded)")
+    lines.append("- `judge_pack.jsonl`: optional rubric export when using `--write-judge-pack`")
+    if payload.get("summary_tim_vs_no_tim"):
+        lines.extend(["", "## TiM vs image-only (paired models)", ""])
+        lines.append("| Pair | Δ primary | Δ composite | Δ grounding | Δ TiM align |")
+        lines.append("|---|---:|---:|---:|---:|")
+        for pk, row in payload["summary_tim_vs_no_tim"].items():
+            if not isinstance(row, dict):
+                continue
+            dg = row.get("delta_mean_grounding")
+            dt = row.get("delta_mean_tim_alignment")
+            lines.append(
+                f"| `{pk}` | {row.get('delta_mean_primary', '')} | {row.get('delta_mean_composite', '')} | "
+                f"{dg if dg is not None else '—'} | {dt if dt is not None else '—'} |"
+            )
 
     sweep = payload.get("threshold_sweep")
     if isinstance(sweep, dict) and sweep:
@@ -646,6 +886,7 @@ def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
             lines.append(
                 f"- Primary score: `{r['score']}` · passed: `{r['passed']}` · "
                 f"lex `{r.get('lexical_score', '')}` · grd `{r.get('grounding_score', '')}` · "
+                f"tim `{r.get('tim_alignment_score', '')}` · "
                 f"str `{r.get('structured_score', '')}` · comp `{r.get('composite_score', '')}`"
             )
             lines.append(f"- Hits: `{', '.join(r.get('expected_hits') or [])}`")
@@ -696,9 +937,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     p.add_argument(
         "--score-mode",
-        choices=("lexical", "grounding", "structured", "composite", "all"),
+        choices=("lexical", "grounding", "structured", "tim_alignment", "composite", "all"),
         default="composite",
-        help="primary reported score: composite (default) mixes lexical+SCL IoU+structured; 'all' same as composite with full breakdown.",
+        help="Primary reported score: composite mixes lexical+SCL IoU+structured (+ optional TiM alignment weight); "
+        "tim_alignment reports TiM integration heuristic only.",
     )
     p.add_argument(
         "--grounding-label-mode",
@@ -722,7 +964,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--pass-metric",
         default="auto",
-        help="What drives pass/fail: auto (follows score-mode), lexical, grounding, structured, or composite.",
+        help="What drives pass/fail: auto (follows score-mode), lexical, grounding, structured, tim_alignment, or composite.",
+    )
+    p.add_argument(
+        "--composite-weight-preset",
+        choices=("auto", "default", "optical_focus", "tim_integration"),
+        default="auto",
+        help="Composite lexical/grounding/structured/tim_alignment weights: auto picks tim_integration for TiM prompts "
+        "and optical_focus for image-only rows; default matches legacy 0.22/0.48/0.30/0.",
     )
     p.add_argument(
         "--score-weight",
@@ -730,7 +979,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         metavar=("LEX", "GRD", "STR"),
         default=None,
-        help="Composite weights when SCL gold exists (default 0.22 0.48 0.30).",
+        help="Override composite LEX/GRD/STR (TiM alignment weight forced to 0).",
     )
     p.add_argument(
         "--threshold-sweep",
@@ -744,6 +993,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--no-stac-gold",
         action="store_true",
         help="Do not replace stills with COG RGB+SCL pair or write gold/ (lexical+structured only for composite).",
+    )
+    p.add_argument(
+        "--gold-mode",
+        choices=("state", "delta"),
+        default="state",
+        help="Reference boxes: single-date SCL components (state) or bi-temporal SCL XOR change regions (delta). "
+        "Delta requires two acquisitions ≥ --gold-min-temporal-separation-days apart (falls back to state).",
+    )
+    p.add_argument(
+        "--gold-min-temporal-separation-days",
+        type=float,
+        default=21.0,
+        help="Minimum days between early and late STAC items when --gold-mode delta.",
+    )
+    p.add_argument(
+        "--write-judge-pack",
+        action="store_true",
+        help="Write judge_pack.jsonl (prompt-side TiM JSON + caption + scores) for human/LLM rubric evaluation.",
     )
     p.add_argument(
         "--endpoint",
@@ -791,6 +1058,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "HF model id for TiM-in-prompt eval (repeatable). If omitted, runs finetune vs base "
             "from patagonia_comparison_hf_model_ids() (NuTonic/lspace vs LiquidAI/LFM2.5-VL-450M)."
         ),
+    )
+    p.add_argument(
+        "--contrastive-tim-flip",
+        action="store_true",
+        help="After each TiM local-VLM run, run a second pass with negated tim_modality numeric samples "
+        "and record responsiveness vs baseline caption (behavioral TiM sensitivity probe).",
     )
     p.add_argument(
         "--local-vlm-variants",
@@ -956,7 +1229,20 @@ def main(argv: list[str] | None = None) -> int:
                     rec["caption"] = infer.caption
                     rec["model_id"] = infer.model_id
                     gb = gold_by_id.get(t.target_id)
-                    rec.update(_apply_full_scoring(infer.caption, t, args, gb, pass_metric_resolved))
+                    rec["analysis_profile"] = ""
+                    rec["tim_compact"] = None
+                    rec.update(
+                        _apply_full_scoring(
+                            infer.caption,
+                            t,
+                            args,
+                            gb,
+                            pass_metric_resolved,
+                            tim_injected=False,
+                            tim_compact=None,
+                            analysis_profile="",
+                        )
+                    )
                 except Exception as exc:  # noqa: BLE001
                     rec["error"] = f"{type(exc).__name__}: {exc}"
                 results.append(rec)
@@ -976,6 +1262,9 @@ def main(argv: list[str] | None = None) -> int:
         model, processor = _load_local_vlm(hf_id, device=args.local_vlm_device, dtype=args.local_vlm_dtype)
         try:
             for t in targets:
+                tim_row = tim_by_id.get(t.target_id) or {}
+                profile_eff = str(tim_row.get("analysis_profile") or _target_profile(t)).strip()
+                tim_compact = compact_tim_for_production_prompt(tim_row)
                 image_path = Path(target_records[t.target_id]["image_path"])
                 gb = gold_by_id.get(t.target_id)
 
@@ -987,6 +1276,8 @@ def main(argv: list[str] | None = None) -> int:
                         "model_kind": "local_transformers_tim_prompt",
                         "image_path": str(image_path),
                         "tim_injected": True,
+                        "analysis_profile": profile_eff,
+                        "tim_compact": tim_compact,
                     }
                     try:
                         caption = _local_vlm_caption(
@@ -998,13 +1289,78 @@ def main(argv: list[str] | None = None) -> int:
                             system_text=PRODUCTION_ANALYSIS_SYSTEM,
                         )
                         rec_tim["caption"] = caption
-                        rec_tim.update(_apply_full_scoring(caption, t, args, gb, pass_metric_resolved))
+                        rec_tim.update(
+                            _apply_full_scoring(
+                                caption,
+                                t,
+                                args,
+                                gb,
+                                pass_metric_resolved,
+                                tim_injected=True,
+                                tim_compact=tim_compact,
+                                analysis_profile=profile_eff,
+                            )
+                        )
+                        if getattr(args, "contrastive_tim_flip", False):
+                            pair_group = f"{t.target_id}::{model_name}"
+                            rec_tim["contrastive_pair_group"] = pair_group
+                            rec_tim["contrastive_arm"] = "baseline_tim_compact"
+                            try:
+                                compact_flip = flip_tim_modality_numeric_samples(tim_compact)
+                                prompt_flip = build_production_tim_user_prompt(
+                                    analysis_profile=profile_eff,
+                                    tim_compact_json=compact_flip,
+                                )
+                                caption_flip = _local_vlm_caption(
+                                    model,
+                                    processor,
+                                    image_path=image_path,
+                                    prompt=prompt_flip,
+                                    max_new_tokens=args.max_new_tokens,
+                                    system_text=PRODUCTION_ANALYSIS_SYSTEM,
+                                )
+                                resp, diag = contrast_caption_responsiveness(caption, caption_flip)
+                                rec_tim["contrastive_responsiveness_vs_flip"] = resp
+                                rec_tim["contrastive_responsiveness_diag"] = diag
+
+                                rec_cf: dict[str, Any] = {
+                                    "target_id": t.target_id,
+                                    "model_name": f"{model_name}_tim_contrast_flip",
+                                    "model_id": hf_id,
+                                    "model_kind": "local_transformers_tim_contrast_flip",
+                                    "image_path": str(image_path),
+                                    "tim_injected": True,
+                                    "analysis_profile": profile_eff,
+                                    "tim_compact": compact_flip,
+                                    "contrastive_pair_group": pair_group,
+                                    "contrastive_arm": "negated_tim_modality_samples",
+                                }
+                                rec_cf["caption"] = caption_flip
+                                rec_cf.update(
+                                    _apply_full_scoring(
+                                        caption_flip,
+                                        t,
+                                        args,
+                                        gb,
+                                        pass_metric_resolved,
+                                        tim_injected=True,
+                                        tim_compact=compact_flip,
+                                        analysis_profile=profile_eff,
+                                    )
+                                )
+                                rec_cf["contrastive_responsiveness_vs_flip"] = resp
+                                rec_cf["contrastive_responsiveness_diag"] = diag
+                                results.append(rec_cf)
+                                _append_jsonl(predictions_path, rec_cf)
+                            except Exception as cexc:  # noqa: BLE001
+                                rec_tim["contrastive_error"] = f"{type(cexc).__name__}: {cexc}"
                     except Exception as exc:  # noqa: BLE001
                         rec_tim["error"] = f"{type(exc).__name__}: {exc}"
                     results.append(rec_tim)
                     _append_jsonl(predictions_path, rec_tim)
 
                 if args.local_vlm_variants in ("no_tim", "both"):
+                    prof_nt = _target_profile(t)
                     rec_nt = {
                         "target_id": t.target_id,
                         "model_name": f"{model_name}_no_tim",
@@ -1012,6 +1368,8 @@ def main(argv: list[str] | None = None) -> int:
                         "model_kind": "local_transformers_no_tim_prompt",
                         "image_path": str(image_path),
                         "tim_injected": False,
+                        "analysis_profile": prof_nt,
+                        "tim_compact": None,
                     }
                     try:
                         caption = _local_vlm_caption(
@@ -1023,7 +1381,18 @@ def main(argv: list[str] | None = None) -> int:
                             system_text=PRODUCTION_ANALYSIS_SYSTEM,
                         )
                         rec_nt["caption"] = caption
-                        rec_nt.update(_apply_full_scoring(caption, t, args, gb, pass_metric_resolved))
+                        rec_nt.update(
+                            _apply_full_scoring(
+                                caption,
+                                t,
+                                args,
+                                gb,
+                                pass_metric_resolved,
+                                tim_injected=False,
+                                tim_compact=None,
+                                analysis_profile=prof_nt,
+                            )
+                        )
                     except Exception as exc:  # noqa: BLE001
                         rec_nt["error"] = f"{type(exc).__name__}: {exc}"
                     results.append(rec_nt)
@@ -1040,6 +1409,19 @@ def main(argv: list[str] | None = None) -> int:
             except Exception:
                 pass
 
+    judge_pack_path: str | None = None
+    if args.write_judge_pack:
+        jp = out_dir / "judge_pack.jsonl"
+        if jp.exists():
+            jp.unlink()
+        for r in results:
+            _append_jsonl(jp, _judge_pack_row(r))
+        judge_pack_path = str(jp.resolve())
+
+    gold_contract = _gold_contract_tags(args)
+
+    summary_by_model = _summarize(results)
+
     payload = {
         "meta": {
             "generated_at_utc": dt.datetime.now(dt.UTC).isoformat(),
@@ -1050,10 +1432,29 @@ def main(argv: list[str] | None = None) -> int:
             "pass_metric_resolved": pass_metric_resolved,
             "threshold_sweep": _parse_threshold_sweep(args.threshold_sweep),
             "stac_gold_refresh": bool(_needs_stac_gold_refresh(args)),
+            "composite_weight_preset": getattr(args, "composite_weight_preset", "auto"),
+            "score_weight_presets": _score_weight_presets_for_meta(),
+            "evaluation_hypotheses": {
+                "optical_scl_state": "Grounding IoU vs single-acquisition SCL-derived boxes (scene state, not TiM change truth).",
+                "optical_scl_delta": "When --gold-mode delta, grounding targets bi-temporal SCL disagreement regions (falls back to state).",
+                "tim_integration_heuristic": "tim_alignment scores caption linkage to injected TiM JSON / profile_analytics.",
+                "tim_contrastive_flip": "Optional second pass with negated modality samples measures caption responsiveness (not correctness).",
+                "lexical_vocabulary": "Keyword groups probe visible vocabulary per AOI (EvalTarget.expected_any).",
+            },
+            "gold_mode": getattr(args, "gold_mode", "state"),
+            "gold_min_temporal_separation_days": float(getattr(args, "gold_min_temporal_separation_days", 21.0)),
+            "contrastive_tim_flip": bool(getattr(args, "contrastive_tim_flip", False)),
+            "gold_contract": gold_contract,
+            "judge_pack_path": judge_pack_path,
             "score_weights": (
-                {"lexical": float(args.score_weight[0]), "grounding": float(args.score_weight[1]), "structured": float(args.score_weight[2])}
+                {
+                    "lexical": float(args.score_weight[0]),
+                    "grounding": float(args.score_weight[1]),
+                    "structured": float(args.score_weight[2]),
+                    "tim_alignment": 0.0,
+                }
                 if getattr(args, "score_weight", None) is not None
-                else {"lexical": 0.22, "grounding": 0.48, "structured": 0.30}
+                else {"lexical": 0.22, "grounding": 0.48, "structured": 0.30, "tim_alignment": 0.0}
             ),
             "grounding_label_mode": args.grounding_label_mode,
             "grounding_policy": {
@@ -1082,14 +1483,16 @@ def main(argv: list[str] | None = None) -> int:
                     "TiM runs in-process (run_tim_batch_export); VLM runs locally by default (Transformers) "
                     "with TiM JSON in the prompt. Local VLM uses SFT-aligned production_analysis system + user "
                     "layout (see patagonia_eval_sft_prompts). Scoring: multimodal (lexical + SCL IoU grounding + "
-                    "structured checklist + composite). Override ids with NUTONIC_PATAGONIA_EVAL_*_MODEL_ID. "
+                    "structured + optional tim_alignment + composite). Presets: --composite-weight-preset auto "
+                    "(tim_integration vs optical_focus per row). Override ids with NUTONIC_PATAGONIA_EVAL_*_MODEL_ID. "
                     "Optional HTTP /v1/infer: --endpoint or NUTONIC_PATAGONIA_EVAL_ENABLE_HTTP=1."
                 ),
             },
             "vlm_prompt_style": "sft_production_analysis",
         },
         "targets": target_records,
-        "summary_by_model": _summarize(results),
+        "summary_by_model": summary_by_model,
+        "summary_tim_vs_no_tim": _summarize_variant_pairs(summary_by_model),
         "summary_by_model_by_category": _summarize_by_category(results, target_records=target_records),
         "threshold_sweep": {},
         "results": results,
@@ -1118,6 +1521,12 @@ def main(argv: list[str] | None = None) -> int:
                 "score_mode": payload["meta"].get("score_mode"),
                 "pass_metric_resolved": payload["meta"].get("pass_metric_resolved"),
                 "score_threshold": payload["meta"].get("score_threshold"),
+                "composite_weight_preset": payload["meta"].get("composite_weight_preset"),
+                "evaluation_hypotheses": payload["meta"].get("evaluation_hypotheses"),
+                "gold_contract": payload["meta"].get("gold_contract"),
+                "gold_mode": payload["meta"].get("gold_mode"),
+                "contrastive_tim_flip": payload["meta"].get("contrastive_tim_flip"),
+                "judge_pack_path": payload["meta"].get("judge_pack_path"),
             },
             indent=2,
             ensure_ascii=False,

@@ -145,6 +145,8 @@ class EvalTarget:
     claim_risk_any: tuple[str, ...] = ()
     min_words: int = 18
     visual_difficulty: str = "medium"
+    # Optional UX/report tags (e.g. ``optical_probe``, ``tim_synthesis``); does not affect scoring unless wired.
+    lexical_hypothesis_tags: tuple[str, ...] = ()
 
 
 @dataclass
@@ -201,6 +203,7 @@ def default_patagonia_targets() -> list[EvalTarget]:
             ),
             claim_risk_any=("los alerces", "national park", "unesco", "chubut", "argentina"),
             visual_difficulty="medium",
+            lexical_hypothesis_tags=("optical_probe", "forest_lake"),
         ),
         EvalTarget(
             target_id="pat_nahuel_huapi",

@@ -11,6 +11,9 @@ MIN_AREA_FRACTION = 0.015
 # Minimum component size; if all components are smaller, fall back to a bbox over the full mask.
 MIN_COMPONENT_FRACTION = 0.01
 MAX_COMPONENTS_PER_ROLE = 2
+# Change masks are often sparse — slightly lower floor than single-date masks.
+DELTA_MIN_AREA_FRACTION = 0.008
+DELTA_MIN_COMPONENT_FRACTION = 0.004
 
 # ESA SCL classes used for coarse semantics (L2A).
 SCL_WATER = 6
@@ -152,3 +155,83 @@ def gold_boxes_from_scl(scl_hw: np.ndarray, *, category: str) -> list[dict[str, 
                 }
             )
     return out
+
+
+def gold_boxes_from_scl_delta(
+    scl_early_hw: np.ndarray,
+    scl_late_hw: np.ndarray,
+    *,
+    category: str,
+) -> list[dict[str, Any]]:
+    """
+    Bounding boxes over pixels where **membership in each coarse role** differs between two dates.
+
+    Uses XOR of role masks (same chip geometry after resampling). Boxes use ``source`` tagged as
+    delta-derived so callers can distinguish from single-date state gold.
+    """
+    if scl_early_hw.shape != scl_late_hw.shape:
+        return []
+
+    roles = CATEGORY_GOLD_ROLES.get(category.strip().lower(), ("water", "vegetation"))
+    out: list[dict[str, Any]] = []
+    h, w = scl_early_hw.shape
+
+    for role in roles:
+        mask_e = _mask_for_role(scl_early_hw, role)
+        mask_l = _mask_for_role(scl_late_hw, role)
+        change = mask_e ^ mask_l
+        total_frac = float(np.count_nonzero(change)) / float(h * w)
+        if total_frac < DELTA_MIN_AREA_FRACTION:
+            continue
+
+        comps = _largest_components(change, max_components=MAX_COMPONENTS_PER_ROLE)
+        emitted = 0
+        for cm in comps:
+            comp_frac = float(np.count_nonzero(cm)) / float(h * w)
+            if comp_frac < DELTA_MIN_COMPONENT_FRACTION:
+                continue
+            bb = _bbox_xyxy_from_mask_delta(cm, h, w)
+            if bb is None:
+                continue
+            out.append(
+                {
+                    "label": role,
+                    "bbox": [bb[0], bb[1], bb[2], bb[3]],
+                    "source": "sentinel2_scl_delta_component",
+                    "area_fraction": round(comp_frac, 5),
+                    "area_fraction_total": round(total_frac, 5),
+                }
+            )
+            emitted += 1
+            if emitted >= MAX_COMPONENTS_PER_ROLE:
+                break
+
+        if emitted == 0:
+            bb = _bbox_xyxy_from_mask_delta(change, h, w)
+            if bb is None:
+                continue
+            out.append(
+                {
+                    "label": role,
+                    "bbox": [bb[0], bb[1], bb[2], bb[3]],
+                    "source": "sentinel2_scl_delta_fallback_fullmask",
+                    "area_fraction": round(total_frac, 5),
+                    "area_fraction_total": round(total_frac, 5),
+                }
+            )
+
+    return out
+
+
+def _bbox_xyxy_from_mask_delta(mask: np.ndarray, h: int, w: int) -> tuple[float, float, float, float] | None:
+    ys, xs = np.where(mask)
+    if xs.size == 0:
+        return None
+    frac = float(xs.size) / float(h * w)
+    if frac < DELTA_MIN_AREA_FRACTION:
+        return None
+    x1 = float(xs.min()) / float(w)
+    y1 = float(ys.min()) / float(h)
+    x2 = float(xs.max() + 1) / float(w)
+    y2 = float(ys.max() + 1) / float(h)
+    return (_clamp01(x1), _clamp01(y1), _clamp01(x2), _clamp01(y2))

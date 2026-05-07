@@ -188,6 +188,32 @@ def read_visual_and_scl_chips_from_urls(
         return None, None
 
 
+def read_scl_chip_from_url(
+    *,
+    scl_href: str,
+    lon: float,
+    lat: float,
+    out_w: int,
+    out_h: int,
+) -> np.ndarray | None:
+    """Resampled SCL chip at ``(lon, lat)`` (same geographic logic as paired RGB+SCL reader)."""
+    if rasterio is None:
+        return None
+    scl_u = _rio_open_url(scl_href)
+    try:
+        with rasterio.Env(OGR_HTTP_UNSAFE_SSL="YES", GDAL_HTTP_TIMEOUT=180):
+            with rasterio.open(scl_u) as src_s:
+                win_s = _point_chip_window(src_s, lon, lat)
+                if win_s is None:
+                    return None
+                scl_raw = src_s.read(1, window=win_s).astype(np.uint8)
+                scl_img = Image.fromarray(scl_raw, mode="L")
+                scl_rs = ImageOps.contain(scl_img, (out_w, out_h))
+                return np.asarray(scl_rs, dtype=np.uint8)
+    except Exception:
+        return None
+
+
 def find_visual_cog_href(item: Any) -> str | None:
     """Prefer true-color COG / JP2 over thumbnails when pairing with SCL."""
     for key in ("visual", "overview"):
@@ -315,6 +341,119 @@ def fetch_sentinel_cog_rgb_scl_matched(
 
     meta["reason"] = "no_cog_visual_scl_pair"
     return None, None, meta
+
+
+def fetch_sentinel_bitemporal_cog_rgb_scl_delta(
+    lat: float,
+    lon: float,
+    *,
+    width_px: int,
+    height_px: int,
+    stac_url: str | None = None,
+    collection: str | None = None,
+    bbox_half_km: float | None = None,
+    max_cloud: float | None = None,
+    max_items: int | None = None,
+    datetime_range: str | None = None,
+    min_temporal_separation_days: float = 21.0,
+) -> tuple[Image.Image | None, np.ndarray | None, np.ndarray | None, dict[str, Any]]:
+    """
+    **Late** acquisition RGB+SCL (display chip) plus **early** SCL chip for delta / change-style gold.
+
+    Selects two STAC items with valid COG visual+SCL, earliest vs latest datetime in the search window,
+    requiring at least ``min_temporal_separation_days`` between them.
+    """
+    from pystac_client import Client
+
+    stac_url_resolved = (stac_url or "").strip() or (os.environ.get("NUTONIC_STAC_STILL_URL") or "").strip()
+    stac_url_resolved = stac_url_resolved or "https://earth-search.aws.element84.com/v1"
+    collection_resolved = (collection or "").strip() or (os.environ.get("NUTONIC_STAC_STILL_COLLECTION") or "").strip()
+    collection_resolved = collection_resolved or "sentinel-2-l2a"
+    half_km = bbox_half_km
+    if half_km is None:
+        half_km = float((os.environ.get("NUTONIC_STAC_STILL_BBOX_HALF_KM") or "12.0").strip())
+    max_cloud_resolved = max_cloud
+    if max_cloud_resolved is None:
+        max_cloud_resolved = float((os.environ.get("NUTONIC_STAC_STILL_MAX_CLOUD") or "85.0").strip())
+    max_items_resolved = max_items
+    if max_items_resolved is None:
+        max_items_resolved = int((os.environ.get("NUTONIC_STAC_STILL_MAX_ITEMS") or "30").strip())
+    dt_raw = (datetime_range or "").strip()
+    if not dt_raw:
+        dt_raw = (os.environ.get("NUTONIC_STAC_STILL_DATETIME") or "").strip()
+    datetime_range_resolved = dt_raw if dt_raw else _default_datetime_window()
+
+    bbox = bbox_around_point(lon, lat, half_km)
+    client = Client.open(stac_url_resolved)
+    search = client.search(
+        collections=[collection_resolved],
+        bbox=list(bbox),
+        datetime=datetime_range_resolved,
+        max_items=max_items_resolved,
+        query={"eo:cloud_cover": {"lt": max_cloud_resolved}},
+    )
+    items = [it for it in search.items() if it.datetime is not None]
+    meta: dict[str, Any] = {
+        "stac_url": stac_url_resolved,
+        "collection": collection_resolved,
+        "strategy": "bitemporal_scl_delta",
+        "ok_delta": False,
+    }
+    if len(items) < 2:
+        meta["reason"] = "need_two_items"
+        return None, None, None, meta
+
+    paired: list[Any] = []
+    for it in items:
+        if find_visual_cog_href(it) and find_scl_cog_href(it):
+            paired.append(it)
+    if len(paired) < 2:
+        meta["reason"] = "need_two_cog_pairs"
+        return None, None, None, meta
+
+    paired.sort(key=lambda it: it.datetime)
+    early_item = paired[0]
+    late_item = paired[-1]
+    sep_days = abs((late_item.datetime - early_item.datetime).total_seconds()) / 86400.0
+    meta["temporal_separation_days"] = round(sep_days, 3)
+    meta["early_item_id"] = early_item.id
+    meta["early_datetime"] = str(early_item.datetime)
+    meta["late_item_id"] = late_item.id
+    meta["late_datetime"] = str(late_item.datetime)
+
+    if sep_days < float(min_temporal_separation_days):
+        meta["reason"] = "temporal_gap_too_small"
+        meta["min_temporal_separation_days"] = float(min_temporal_separation_days)
+        return None, None, None, meta
+
+    v_late = find_visual_cog_href(late_item)
+    s_late = find_scl_cog_href(late_item)
+    s_early = find_scl_cog_href(early_item)
+    if not v_late or not s_late or not s_early:
+        meta["reason"] = "missing_hrefs"
+        return None, None, None, meta
+
+    rgb, scl_late = read_visual_and_scl_chips_from_urls(
+        visual_href=v_late,
+        scl_href=s_late,
+        lon=lon,
+        lat=lat,
+        out_w=width_px,
+        out_h=height_px,
+    )
+    scl_early = read_scl_chip_from_url(scl_href=s_early, lon=lon, lat=lat, out_w=width_px, out_h=height_px)
+
+    meta["eo:cloud_cover_late"] = late_item.properties.get("eo:cloud_cover")
+    meta["eo:cloud_cover_early"] = early_item.properties.get("eo:cloud_cover")
+
+    if rgb is None or scl_late is None or scl_early is None:
+        meta["reason"] = "chip_read_failed"
+        return rgb, scl_late, scl_early, meta
+
+    meta["ok_delta"] = True
+    meta["item_id"] = late_item.id
+    meta["datetime"] = str(late_item.datetime)
+    return rgb, scl_early, scl_late, meta
 
 
 def image_from_stac_item(

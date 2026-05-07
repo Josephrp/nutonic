@@ -179,6 +179,59 @@ def _box_area(bb: tuple[float, float, float, float]) -> float:
     return max(0.0, float(x2 - x1)) * max(0.0, float(y2 - y1))
 
 
+def _is_marine_target(target: EvalTarget) -> bool:
+    c = (target.category or "").strip().lower()
+    return "marine" in c or "oceanscout" in c or "chokepoint" in c
+
+
+def _is_ship_label(label: str) -> bool:
+    s = (label or "").strip().lower()
+    return any(k in s for k in ("ship", "vessel", "boat", "trawler"))
+
+
+def ship_plausibility_score(caption: str, *, box_soft_area: float = 0.02, box_hard_area: float = 0.08) -> tuple[float, dict[str, Any]]:
+    """
+    Heuristic for Oceanscout-like outputs when we lack ship truth labels.
+
+    - If no ship/vessel boxes: score 1.0 (abstention is plausible in most tiles)
+    - If ship boxes exist: reward *small* boxes; penalize large area boxes and many boxes.
+    """
+    preds = parse_predicted_boxes(caption)
+    ship_boxes: list[tuple[float, float, float, float]] = []
+    for p in preds:
+        lab = str(p.get("label") or "")
+        if not _is_ship_label(lab):
+            continue
+        bb = p.get("bbox")
+        if not isinstance(bb, list) or len(bb) != 4:
+            continue
+        try:
+            ship_boxes.append(tuple(float(x) for x in bb))
+        except (TypeError, ValueError):
+            continue
+    if not ship_boxes:
+        return 1.0, {"ship_box_count": 0, "reason": "no_ship_boxes"}
+    per: list[float] = []
+    for bb in ship_boxes:
+        a = _box_area(bb)
+        if a <= box_soft_area:
+            per.append(1.0)
+        elif a >= box_hard_area:
+            per.append(0.0)
+        else:
+            # Linear falloff between soft and hard
+            per.append(float(1.0 - (a - box_soft_area) / max(1e-6, (box_hard_area - box_soft_area))))
+    score = float(sum(per) / max(1, len(per)))
+    # Mild penalty for spamming ship boxes
+    if len(ship_boxes) > 3:
+        score *= max(0.0, 1.0 - 0.12 * float(len(ship_boxes) - 3))
+    return max(0.0, min(1.0, score)), {
+        "ship_box_count": len(ship_boxes),
+        "ship_box_areas": [round(_box_area(bb), 5) for bb in ship_boxes[:10]],
+        "score_raw_mean": round(float(sum(per) / max(1, len(per))), 4),
+    }
+
+
 def grounding_score_vs_gold(
     caption: str,
     gold_boxes: list[dict[str, Any]],
@@ -342,12 +395,21 @@ def score_patagonia_multimodal(
 
     st_score, st_checks = structured_task_score(caption, target)
 
+    ship_score = None
+    ship_diag: dict[str, Any] | None = None
+    if _is_marine_target(target):
+        ship_score, ship_diag = ship_plausibility_score(caption)
+
     forbidden_penalty = 0.25 * len(f_hits)
     claim_penalty = 0.08 * len(c_hits)
     guardrail = max(0.0, 1.0 - forbidden_penalty - claim_penalty)
 
     if grounding_usable and gr_score is not None:
-        comp_raw = w.lexical * lex + w.grounding * float(gr_score) + w.structured * st_score
+        # For marine tiles, down-weight region-IoU gaming by gating grounding with ship plausibility.
+        g_eff = float(gr_score)
+        if ship_score is not None:
+            g_eff *= float(ship_score)
+        comp_raw = w.lexical * lex + w.grounding * g_eff + w.structured * st_score
     else:
         # Renormalize lexical + structured when grounding missing
         z = w.lexical + w.structured
@@ -388,6 +450,10 @@ def score_patagonia_multimodal(
             "score": None if gr_score is None else round(float(gr_score), 4),
             "gold_available": grounding_usable,
             "diagnostics": gr_diag,
+        },
+        "ship_plausibility": {
+            "score": None if ship_score is None else round(float(ship_score), 4),
+            "diagnostics": ship_diag,
         },
         "structured": {"score": round(st_score, 4), "checks": st_checks},
         "composite": round(composite, 4),

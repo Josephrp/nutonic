@@ -214,6 +214,7 @@ def _apply_full_scoring(
         "word_count": scored["lexical"]["word_count"],
         "lexical_score": scored["lexical"]["score"],
         "grounding_score": scored["grounding"]["score"],
+        "ship_plausibility_score": scored.get("ship_plausibility", {}).get("score"),
         "structured_score": scored["structured"]["score"],
         "composite_score": scored["composite"],
         "scoring": scored,
@@ -480,10 +481,12 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
                 "score_sum": 0.0,
                 "lexical_sum": 0.0,
                 "grounding_sum": 0.0,
+                "ship_sum": 0.0,
                 "structured_sum": 0.0,
                 "composite_sum": 0.0,
                 "lexical_n": 0,
                 "grounding_n": 0,
+                "ship_n": 0,
                 "structured_n": 0,
                 "composite_n": 0,
             },
@@ -500,6 +503,9 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         if r.get("grounding_score") is not None:
             cur["grounding_sum"] += float(r["grounding_score"])
             cur["grounding_n"] += 1
+        if r.get("ship_plausibility_score") is not None:
+            cur["ship_sum"] += float(r["ship_plausibility_score"])
+            cur["ship_n"] += 1
         if r.get("structured_score") is not None:
             cur["structured_sum"] += float(r["structured_score"])
             cur["structured_n"] += 1
@@ -515,6 +521,8 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             cur["mean_lexical_score"] = round(cur["lexical_sum"] / cur["lexical_n"], 4)
         if cur.get("grounding_n", 0) > 0:
             cur["mean_grounding_score"] = round(cur["grounding_sum"] / cur["grounding_n"], 4)
+        if cur.get("ship_n", 0) > 0:
+            cur["mean_ship_plausibility_score"] = round(cur["ship_sum"] / cur["ship_n"], 4)
         if cur.get("structured_n", 0) > 0:
             cur["mean_structured_score"] = round(cur["structured_sum"] / cur["structured_n"], 4)
         if cur.get("composite_n", 0) > 0:
@@ -524,6 +532,8 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "lexical_n",
             "grounding_sum",
             "grounding_n",
+            "ship_sum",
+            "ship_n",
             "structured_sum",
             "structured_n",
             "composite_sum",
@@ -571,14 +581,15 @@ def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
         "",
         "## Summary",
         "",
-        "| Model | Targets | Errors | Pass Rate | Mean (primary) | Mean Lex | Mean Grd | Mean Str | Mean Comp |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Model | Targets | Errors | Pass Rate | Mean (primary) | Mean Lex | Mean Grd | Mean Ship | Mean Str | Mean Comp |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name, s in payload["summary_by_model"].items():
         lines.append(
             f"| {name} | {s['n']} | {s['errors']} | {s['pass_rate']:.3f} | {s['mean_score']:.3f} | "
             f"{_summary_metric_cell(s, 'mean_lexical_score')} | {_summary_metric_cell(s, 'mean_grounding_score')} | "
-            f"{_summary_metric_cell(s, 'mean_structured_score')} | {_summary_metric_cell(s, 'mean_composite_score')} |"
+            f"{_summary_metric_cell(s, 'mean_ship_plausibility_score')} | {_summary_metric_cell(s, 'mean_structured_score')} | "
+            f"{_summary_metric_cell(s, 'mean_composite_score')} |"
         )
     lines.extend(["", "## Artifacts", ""])
     lines.append("- `report.json`: full machine-readable report")

@@ -6,8 +6,9 @@ from typing import Any
 
 import numpy as np
 
-# Minimum fraction of chip pixels for a semantic mask to yield a gold box (avoid speckle).
+# Minimum fraction of chip pixels for a semantic mask to yield any gold (avoid speckle).
 MIN_AREA_FRACTION = 0.015
+# Minimum component size; if all components are smaller, fall back to a bbox over the full mask.
 MIN_COMPONENT_FRACTION = 0.01
 MAX_COMPONENTS_PER_ROLE = 2
 
@@ -136,4 +137,18 @@ def gold_boxes_from_scl(scl_hw: np.ndarray, *, category: str) -> list[dict[str, 
             emitted += 1
             if emitted >= MAX_COMPONENTS_PER_ROLE:
                 break
+        if emitted == 0:
+            # Avoid `no_gold` when the class is present but fragmented. Use full-mask bbox.
+            bb = _bbox_xyxy_from_mask(mask)
+            if bb is None:
+                continue
+            out.append(
+                {
+                    "label": role,
+                    "bbox": [bb[0], bb[1], bb[2], bb[3]],
+                    "source": "sentinel2_scl_fallback_fullmask",
+                    "area_fraction": round(total_frac, 5),
+                    "area_fraction_total": round(total_frac, 5),
+                }
+            )
     return out

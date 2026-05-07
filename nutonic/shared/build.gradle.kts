@@ -88,7 +88,6 @@ kotlin {
         val iosMain by getting {
             dependencies {
                 implementation("io.ktor:ktor-client-darwin:$ktorVersion")
-                implementation("ai.liquid.leap:leap-sdk:0.10.2")
             }
         }
 

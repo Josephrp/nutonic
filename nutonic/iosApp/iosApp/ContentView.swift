@@ -17,6 +17,8 @@ struct ContentView: View {
 
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
+        // Must be called before MainViewController so shared can access iOS platform services.
+        Main_iosKt.NutonicInitIosServices(vlmBridge: LeapVlmBridge())
         let controller = Main_iosKt.MainViewController()
         controller.overrideUserInterfaceStyle = .light
         return controller

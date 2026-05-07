@@ -130,6 +130,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--max-workers", type=int, default=48)
     p.add_argument("--max-retries", type=int, default=12)
     p.add_argument("--progress-every", type=int, default=250)
+    p.add_argument(
+        "--max-failures",
+        type=int,
+        default=50,
+        help="Abort after this many hard download failures (0 = never abort; write failures list and continue).",
+    )
     p.add_argument("--hf-token", default=None, help="Override HF_TOKEN / HUGGING_FACE_HUB_TOKEN.")
     p.add_argument(
         "--also-download",
@@ -214,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         started = time.monotonic()
         done = 0
+        failures: list[tuple[str, str]] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
             futures = {
                 ex.submit(
@@ -228,15 +235,47 @@ def main(argv: list[str] | None = None) -> int:
                 for p in missing
             }
             for fut in concurrent.futures.as_completed(futures):
-                fut.result()
+                pth = futures[fut]
+                try:
+                    fut.result()
+                except Exception as exc:  # noqa: BLE001
+                    msg = f"{type(exc).__name__}: {exc}"
+                    failures.append((pth, msg))
+                    # Common "many small files" failure mode on Linux containers:
+                    # OSError: [Errno 24] Too many open files
+                    if isinstance(exc, OSError) and getattr(exc, "errno", None) == 24:
+                        print(
+                            "error: Too many open files (errno 24). Re-run with a smaller --max-workers "
+                            "(e.g. 8-16) or increase `ulimit -n` in the container.",
+                            flush=True,
+                        )
+                    print(f"  failed: {pth} -> {msg}", flush=True)
+                    if int(args.max_failures) > 0 and len(failures) >= int(args.max_failures):
+                        break
                 done += 1
                 if done == 1 or done % max(1, int(args.progress_every)) == 0 or done == len(missing):
                     elapsed = max(1e-6, time.monotonic() - started)
                     print(f"  progress: {done:,}/{len(missing):,} ({done/elapsed:.1f} files/s)", flush=True)
 
+        if failures:
+            fail_path = local_dir / "subset_download_failures.txt"
+            fail_path.write_text(
+                "\n".join(f"{p}\t{m}" for p, m in failures) + "\n",
+                encoding="utf-8",
+            )
+            print(
+                f"note: {len(failures)} file(s) failed; wrote {fail_path}. "
+                "You can simply re-run the same command to resume (already-downloaded files are skipped).",
+                flush=True,
+            )
+
     still_missing = [p for p in needed_list if not (local_dir / p).is_file()]
     if still_missing:
-        raise SystemExit(f"Subset download incomplete: {len(still_missing):,} missing; first={still_missing[:10]}")
+        raise SystemExit(
+            f"Subset download incomplete: {len(still_missing):,} missing; first={still_missing[:10]}. "
+            "Tip: if you saw transient HTTP errors / rate limits, re-run; if you saw 'Too many open files', "
+            "lower --max-workers (e.g. 8-16)."
+        )
 
     manifest = {
         "repo_id": args.repo_id,

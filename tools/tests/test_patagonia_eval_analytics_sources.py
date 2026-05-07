@@ -16,6 +16,7 @@ from patagonia_eval_analytics_sources import (  # noqa: E402
     build_procedural_analytics,
     fractions_from_dynamic_world_label,
     select_analytics,
+    sentinel_fractions_for_patagonia_chip,
     sentinel_fractions_from_scl,
 )
 
@@ -26,6 +27,19 @@ class TestAnalyticsSources(unittest.TestCase):
         fr = sentinel_fractions_from_scl(scl)
         self.assertAlmostEqual(fr.get(0, 0.0), 0.5, places=5)  # water
         self.assertAlmostEqual(fr.get(1, 0.0), 0.5, places=5)  # trees (from veg)
+
+    def test_marine_water_prior_when_strict_empty(self) -> None:
+        # All cloud/shadow classes — strict fractions empty; marine category gets water prior.
+        scl = np.full((4, 4), 9, dtype=np.uint8)
+        fr, tag = sentinel_fractions_for_patagonia_chip(scl, category="marine_reserve")
+        self.assertEqual(tag, "marine_water_prior")
+        self.assertAlmostEqual(fr.get(0, 0.0), 1.0, places=5)
+
+    def test_nonmarine_stays_empty_when_strict_empty(self) -> None:
+        scl = np.full((4, 4), 9, dtype=np.uint8)
+        fr, tag = sentinel_fractions_for_patagonia_chip(scl, category="andean_forest_lake")
+        self.assertEqual(tag, "empty")
+        self.assertEqual(fr, {})
 
     def test_dynamic_world_label_fractions(self) -> None:
         lbl = np.array([[0, 0, 1], [1, 8, 7]], dtype=np.uint8)

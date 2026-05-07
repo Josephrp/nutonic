@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,8 +15,56 @@ if str(REPO / "tools") not in sys.path:
 
 from patagonia_eval_dynamic_world import (  # noqa: E402
     chip_transform_web_mercator,
+    earth_engine_init_cached,
+    ee_project_id,
+    reset_earth_engine_init_cache,
     stac_meta_to_ee_filter_dates,
 )
+
+
+class TestEeProjectFromJson(unittest.TestCase):
+    def tearDown(self) -> None:
+        for k in (
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            "EE_SERVICE_ACCOUNT_KEY_PATH",
+            "GOOGLE_CLOUD_PROJECT",
+            "EE_PROJECT_ID",
+        ):
+            os.environ.pop(k, None)
+
+    def test_project_id_read_from_service_account_json(self) -> None:
+        payload = {
+            "type": "service_account",
+            "project_id": "radioshaq-test",
+            "private_key_id": "x",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nMII\n-----END PRIVATE KEY-----\n",
+            "client_email": "ee@test.iam.gserviceaccount.com",
+            "client_id": "1",
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump(payload, f)
+            path = f.name
+        try:
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
+            self.assertEqual(ee_project_id(), "radioshaq-test")
+        finally:
+            Path(path).unlink(missing_ok=True)
+
+
+class TestEarthEngineSkip(unittest.TestCase):
+    def tearDown(self) -> None:
+        os.environ.pop("NUTONIC_SKIP_EE_DYNAMIC_WORLD", None)
+        reset_earth_engine_init_cache()
+
+    def test_skip_env_short_circuits_without_ee(self) -> None:
+        os.environ["NUTONIC_SKIP_EE_DYNAMIC_WORLD"] = "1"
+        reset_earth_engine_init_cache()
+        ok, diag = earth_engine_init_cached()
+        self.assertFalse(ok)
+        self.assertEqual(diag.get("reason"), "skipped_env")
+        ok2, diag2 = earth_engine_init_cached()
+        self.assertFalse(ok2)
+        self.assertEqual(diag2.get("reason"), "skipped_env")
 
 
 class TestDynamicWorldHelpers(unittest.TestCase):

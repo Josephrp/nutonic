@@ -22,7 +22,25 @@ That calls Google Earth Engine (`GOOGLE/DYNAMICWORLD/V1`) for a **label** chip o
 - `dynamic_world_fractions` — class-id → fraction (same convention as procedural LULC inputs)
 - `dynamic_world_fetch` — diagnostics (`ok`, `reason`, EE tries, etc.)
 
-**Auth:** `earthengine authenticate` (or a service account) and a cloud project id via `EE_PROJECT_ID`, `GOOGLE_CLOUD_PROJECT`, `GEE_PROJECT`, or `EARTHENGINE_PROJECT`.
+**Auth (pick one):**
+
+1. **Headless / CI (recommended):** service account JSON + Earth Engine access — set `GOOGLE_APPLICATION_CREDENTIALS` (or `EE_SERVICE_ACCOUNT_KEY_PATH`) and a project id (`EE_PROJECT`, `GOOGLE_CLOUD_PROJECT`, `EE_PROJECT_ID`, …). The harness calls `lfm_vl_sft_dataset.ee_auth.initialize_earth_engine`, same as SFT dataset tooling.
+2. **Interactive:** `earthengine authenticate`, then ensure a project id is set if required.
+
+**Skip EE entirely:** `NUTONIC_SKIP_EE_DYNAMIC_WORLD=1` — no Dynamic World chip; sidecars record `dynamic_world_fetch.reason=skipped_env` (no repeated login errors). Failed login is **cached per process** after the first attempt so each target does not re-log the same `EEException`.
+
+**Remote host after `scp` of a service-account JSON:** the EE client does **not** auto-read `~/.config/gcloud/`; you must export:
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/radioshaq-ee.json
+# Optional if JSON contains project_id (tools now infer it): 
+# export GOOGLE_CLOUD_PROJECT=radioshaq
+chmod 600 "$GOOGLE_APPLICATION_CREDENTIALS"
+```
+
+The service account **email** must be allowed to use Earth Engine (Register a service account in the EE Cloud Console / legacy EE signup flow). Without that step, auth succeeds against Google but EE API calls can still fail.
+
+**Marine SCL prior:** if strict SCL→DW fractions are empty (e.g. heavy cloud) but `category` is a marine MPA class, the gold sidecar may set `sentinel_scl_fractions` to 100% DW water (`sentinel_scl_fractions_tag: marine_water_prior`) so `procedural_or_dw` does not return `no_inputs`.
 
 **Analytics:** use `--analytics-source dynamic_world` to require DW fractions when present (falls back to SCL-derived procedural fractions with resolved source `dynamic_world_fallback_scl`). Use `--analytics-source procedural_or_dw` to prefer healthy **TiM** JSON, else DW fractions, else SCL procedural.
 

@@ -442,7 +442,7 @@ def _refresh_stills_with_stac_cog_gold(
     data_scripts = REPO_ROOT / "data" / "scripts"
     if str(data_scripts) not in sys.path:
         sys.path.insert(0, str(data_scripts))
-    from patagonia_eval_analytics_sources import sentinel_fractions_from_scl
+    from patagonia_eval_analytics_sources import sentinel_fractions_for_patagonia_chip
     from patagonia_eval_gold import gold_boxes_from_scl, gold_boxes_from_scl_delta
     from stac_reference_still import (
         fetch_sentinel_bitemporal_cog_rgb_scl_delta,
@@ -506,8 +506,10 @@ def _refresh_stills_with_stac_cog_gold(
                 if not boxes:
                     boxes = gold_boxes_from_scl(scl_late, category=t.category)
                     sidecar["delta_fallback"] = "empty_delta_mask_used_state_on_late_scl"
-                fr = sentinel_fractions_from_scl(np.asarray(scl_late, dtype=np.uint8))
+                fr, fr_tag = sentinel_fractions_for_patagonia_chip(np.asarray(scl_late, dtype=np.uint8), category=t.category)
                 sidecar["sentinel_scl_fractions"] = {str(k): float(v) for k, v in fr.items()}
+                if fr_tag != "strict":
+                    sidecar["sentinel_scl_fractions_tag"] = fr_tag
                 _attach_dynamic_world_to_sidecar(sidecar, args, t, meta)
                 p = Path(target_records[t.target_id]["image_path"])
                 rgb.save(p)
@@ -536,8 +538,10 @@ def _refresh_stills_with_stac_cog_gold(
                 boxes = gold_boxes_from_scl(scl, category=t.category)
                 gold_by_id[t.target_id] = boxes
                 sidecar["gold_boxes"] = boxes
-                fr = sentinel_fractions_from_scl(np.asarray(scl, dtype=np.uint8))
+                fr, fr_tag = sentinel_fractions_for_patagonia_chip(np.asarray(scl, dtype=np.uint8), category=t.category)
                 sidecar["sentinel_scl_fractions"] = {str(k): float(v) for k, v in fr.items()}
+                if fr_tag != "strict":
+                    sidecar["sentinel_scl_fractions_tag"] = fr_tag
                 _attach_dynamic_world_to_sidecar(sidecar, args, t, meta)
             else:
                 gold_by_id[t.target_id] = None
@@ -571,8 +575,10 @@ def _refresh_stills_with_stac_cog_gold(
             boxes = gold_boxes_from_scl(scl, category=t.category)
             gold_by_id[t.target_id] = boxes
             sidecar["gold_boxes"] = boxes
-            fr = sentinel_fractions_from_scl(np.asarray(scl, dtype=np.uint8))
+            fr, fr_tag = sentinel_fractions_for_patagonia_chip(np.asarray(scl, dtype=np.uint8), category=t.category)
             sidecar["sentinel_scl_fractions"] = {str(k): float(v) for k, v in fr.items()}
+            if fr_tag != "strict":
+                sidecar["sentinel_scl_fractions_tag"] = fr_tag
             _attach_dynamic_world_to_sidecar(sidecar, args, t, meta)
         else:
             gold_by_id[t.target_id] = None
@@ -1366,7 +1372,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "During STAC gold refresh, fetch Google Dynamic World (Earth Engine) label chip aligned to the "
             "same footprint/datetime and store ``dynamic_world_fractions`` (+ ``dynamic_world_fetch``) in "
-            "``gold/<target_id>.json``. Requires EE auth and a project id (EE_PROJECT_ID / GOOGLE_CLOUD_PROJECT)."
+            "``gold/<target_id>.json``. Prefer service-account auth (``GOOGLE_APPLICATION_CREDENTIALS`` + project); "
+            "see ``patagonia_eval_dynamic_world`` / ``lfm_vl_sft_dataset.ee_auth``."
+        ),
+    )
+    p.add_argument(
+        "--no-fetch-dynamic-world",
+        action="store_true",
+        help=(
+            "Skip Earth Engine Dynamic World fetch (sets ``NUTONIC_SKIP_EE_DYNAMIC_WORLD=1``). "
+            "Use on CI without EE credentials to avoid auth noise in ``gold/*.json``. Mutually exclusive with "
+            "``--fetch-dynamic-world``."
         ),
     )
     p.add_argument(
@@ -1443,6 +1459,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     _load_dotenv()
     args = parse_args(argv)
+
+    if getattr(args, "fetch_dynamic_world", False) and getattr(args, "no_fetch_dynamic_world", False):
+        raise SystemExit("Choose at most one of --fetch-dynamic-world and --no-fetch-dynamic-world.")
+    if getattr(args, "no_fetch_dynamic_world", False):
+        os.environ["NUTONIC_SKIP_EE_DYNAMIC_WORLD"] = "1"
 
     cf_raw: list[str] = []
     for chunk in getattr(args, "counterfactuals", []) or []:

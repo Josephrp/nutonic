@@ -17,6 +17,13 @@ dependencies = [
     "huggingface_hub>=0.35.0",
 ]
 
+[project.optional-dependencies]
+# ``--fetch-dynamic-world`` / ``lfm_vl_sft_dataset.ee_auth`` / Dynamic World label download.
+ee = [
+    "earthengine-api>=1.4.0",
+    "google-auth>=2.29.0",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/nutonic_patagonia_eval"]
 

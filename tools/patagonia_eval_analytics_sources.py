@@ -76,6 +76,18 @@ _SCL_TO_DW: dict[int, int] = {
 }
 _SCL_VALID_DATA = (4, 5, 6, 11)
 
+# When cloud cover dominates, strict SCL→DW fractions can be empty (no class in 4,5,6,11).
+# Open-ocean / offshore AOIs still need a weak prior for procedural analytics + faithfulness.
+_MARINE_OPEN_WATER_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "marine_reserve",
+        "marine_reserve_offshore",
+        "marine_reserve_nearshore",
+        "marine_reserve_coastal",
+        "marine_reserve_nearshore_control",
+    }
+)
+
 
 DEFAULT_SYNTHETIC_ORACLE_YAML = REPO_ROOT / "tools" / "data" / "patagonia_synthetic_oracle.yaml"
 
@@ -100,6 +112,24 @@ def sentinel_fractions_from_scl(scl_chip_uint8: np.ndarray) -> dict[int, float]:
         if cnt > 0:
             out[dw_id] = out.get(dw_id, 0.0) + float(cnt) / float(n)
     return {cid: round(frac, 6) for cid, frac in out.items() if frac > 0}
+
+
+def sentinel_fractions_for_patagonia_chip(
+    scl_chip_uint8: np.ndarray,
+    *,
+    category: str,
+) -> tuple[dict[int, float], str]:
+    """Strict SCL collapse; if empty and category is open-water marine, use 100% DW **water** (id 0).
+
+    Returns ``(fractions, tag)`` where ``tag`` is ``strict``, ``marine_water_prior``, or ``empty``.
+    """
+    fr = sentinel_fractions_from_scl(scl_chip_uint8)
+    if fr:
+        return fr, "strict"
+    cat = (category or "").strip().lower()
+    if cat in _MARINE_OPEN_WATER_CATEGORIES:
+        return {0: 1.0}, "marine_water_prior"
+    return {}, "empty"
 
 
 def fractions_from_dynamic_world_label(label_chip_uint8: np.ndarray) -> dict[int, float]:

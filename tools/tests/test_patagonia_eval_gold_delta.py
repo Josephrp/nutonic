@@ -12,7 +12,7 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO / "tools") not in sys.path:
     sys.path.insert(0, str(REPO / "tools"))
 
-from patagonia_eval_gold import gold_boxes_from_scl_delta  # noqa: E402
+from patagonia_eval_gold import SCL_BARE, gold_boxes_from_scl, gold_boxes_from_scl_delta  # noqa: E402
 
 
 class TestGoldDelta(unittest.TestCase):
@@ -32,6 +32,14 @@ class TestGoldDelta(unittest.TestCase):
         water_boxes = [b for b in boxes if b["label"] == "water"]
         self.assertTrue(water_boxes)
         self.assertTrue(any("delta" in str(b.get("source", "")) for b in water_boxes))
+
+    def test_steppe_category_extracts_bare_state_gold(self) -> None:
+        h, w = 64, 64
+        scl = np.zeros((h, w), dtype=np.uint8)
+        scl[10:50, 10:50] = SCL_BARE
+        boxes = gold_boxes_from_scl(scl, category="steppe_annual_burn_context")
+        bare = [b for b in boxes if b["label"] == "bare"]
+        self.assertTrue(bare)
 
 
 if __name__ == "__main__":

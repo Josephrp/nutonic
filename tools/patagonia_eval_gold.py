@@ -26,12 +26,15 @@ CATEGORY_GOLD_ROLES: dict[str, tuple[str, ...]] = {
     "marine_reserve": ("water",),
     "marine_reserve_offshore": ("water",),
     "marine_reserve_nearshore": ("water", "vegetation"),
+    "marine_reserve_nearshore_control": ("water", "vegetation"),
     "marine_reserve_coastal": ("water", "vegetation"),
     "glacier_ice": ("snow_ice", "water"),
     "andean_forest_lake": ("water", "vegetation"),
     "urban_coastal_control": ("water", "vegetation"),
     "maritime_chokepoint_control": ("water", "vegetation"),
     "fjord_mountain_control": ("water", "snow_ice"),
+    "steppe_annual_burn_context": ("bare", "vegetation"),
+    "coastal_wetland": ("water", "vegetation"),
 }
 
 

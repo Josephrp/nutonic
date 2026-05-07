@@ -136,6 +136,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=50,
         help="Abort after this many hard download failures (0 = never abort; write failures list and continue).",
     )
+    p.add_argument(
+        "--include-root",
+        action="append",
+        default=["images/", "mapbox_stills/", "overlays/"],
+        help=(
+            "Only download referenced media paths under these repo roots (repeatable). "
+            "This avoids pulling optional `analysis_images/**` which may be missing for some rows."
+        ),
+    )
+    p.add_argument(
+        "--allow-missing-media",
+        action="store_true",
+        help="If set, missing referenced media files (404) are logged but do not fail the run.",
+    )
     p.add_argument("--hf-token", default=None, help="Override HF_TOKEN / HUGGING_FACE_HUB_TOKEN.")
     p.add_argument(
         "--also-download",
@@ -196,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
     for pth in extras:
         if (local_dir / pth).is_file():
             needed.add(pth)
+    include_roots = [str(r).strip().replace("\\", "/") for r in (args.include_root or []) if str(r).strip()]
     rows_left = int(args.max_rows)
     n_rows = 0
     n_refs = 0
@@ -204,7 +219,10 @@ def main(argv: list[str] | None = None) -> int:
             break
         n_rows += 1
         for rel in _message_image_paths(row):
-            needed.add(rel)
+            rel_norm = str(rel).strip().replace("\\", "/")
+            if include_roots and not any(rel_norm.startswith(root) for root in include_roots):
+                continue
+            needed.add(rel_norm)
             n_refs += 1
 
     needed_list = sorted(needed)
@@ -221,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         started = time.monotonic()
         done = 0
         failures: list[tuple[str, str]] = []
+        missing_media_404: list[str] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
             futures = {
                 ex.submit(
@@ -239,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     fut.result()
                 except Exception as exc:  # noqa: BLE001
+                    if isinstance(exc, FileNotFoundError):
+                        missing_media_404.append(pth)
+                        if args.allow_missing_media:
+                            continue
                     msg = f"{type(exc).__name__}: {exc}"
                     failures.append((pth, msg))
                     # Common "many small files" failure mode on Linux containers:
@@ -257,6 +280,11 @@ def main(argv: list[str] | None = None) -> int:
                     elapsed = max(1e-6, time.monotonic() - started)
                     print(f"  progress: {done:,}/{len(missing):,} ({done/elapsed:.1f} files/s)", flush=True)
 
+        if missing_media_404:
+            p404 = local_dir / "subset_missing_media_404.txt"
+            p404.write_text("\n".join(sorted(set(missing_media_404))) + "\n", encoding="utf-8")
+            print(f"note: {len(missing_media_404)} referenced file(s) were 404 on Hub; wrote {p404}.", flush=True)
+
         if failures:
             fail_path = local_dir / "subset_download_failures.txt"
             fail_path.write_text(
@@ -271,11 +299,19 @@ def main(argv: list[str] | None = None) -> int:
 
     still_missing = [p for p in needed_list if not (local_dir / p).is_file()]
     if still_missing:
-        raise SystemExit(
-            f"Subset download incomplete: {len(still_missing):,} missing; first={still_missing[:10]}. "
-            "Tip: if you saw transient HTTP errors / rate limits, re-run; if you saw 'Too many open files', "
-            "lower --max-workers (e.g. 8-16)."
-        )
+        if args.allow_missing_media:
+            print(
+                f"warning: {len(still_missing):,} referenced files still missing, but --allow-missing-media is set; "
+                f"continuing. First: {still_missing[:10]}",
+                flush=True,
+            )
+        else:
+            raise SystemExit(
+                f"Subset download incomplete: {len(still_missing):,} missing; first={still_missing[:10]}. "
+                "Tip: if these are under analysis_images/, rerun with default --include-root values "
+                "(images/, mapbox_stills/, overlays/) or explicitly set them. If you saw transient HTTP errors "
+                "/ rate limits, re-run; if you saw 'Too many open files', lower --max-workers (e.g. 8-16)."
+            )
 
     manifest = {
         "repo_id": args.repo_id,

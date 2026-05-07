@@ -178,9 +178,20 @@ def _apply_full_scoring(
         score_mode=mode,
         pass_metric=pass_metric_resolved,
     )
+    # Store the scalar that drove pass/fail so we can sweep thresholds without re-running inference.
+    pass_value: float | None = None
+    if pass_metric_resolved == "lexical":
+        pass_value = float(scored["lexical"]["score"])
+    elif pass_metric_resolved == "grounding":
+        pass_value = None if scored["grounding"]["score"] is None else float(scored["grounding"]["score"])
+    elif pass_metric_resolved == "structured":
+        pass_value = float(scored["structured"]["score"])
+    else:
+        pass_value = float(scored["composite"])
     return {
         "score": scored["score"],
         "passed": scored["passed"],
+        "pass_value": pass_value,
         "expected_groups_hit": scored["lexical"]["expected_groups_hit"],
         "expected_groups_total": scored["lexical"]["expected_groups_total"],
         "expected_hits": scored["lexical"]["expected_hits"],
@@ -194,6 +205,48 @@ def _apply_full_scoring(
         "composite_score": scored["composite"],
         "scoring": scored,
     }
+
+
+def _parse_threshold_sweep(arg: str) -> list[float]:
+    raw = (arg or "").strip()
+    if not raw:
+        return []
+    out: list[float] = []
+    for part in re.split(r"[,\s]+", raw):
+        p = part.strip()
+        if not p:
+            continue
+        try:
+            out.append(float(p))
+        except ValueError:
+            continue
+    # Stable unique thresholds
+    out2: list[float] = []
+    for x in sorted(set(out)):
+        if 0.0 <= x <= 1.0:
+            out2.append(float(x))
+    return out2
+
+
+def _summarize_for_threshold(results: list[dict[str, Any]], *, threshold: float) -> dict[str, dict[str, Any]]:
+    """Same as _summarize, but pass/fail is recomputed from per-row pass_value >= threshold."""
+    out: dict[str, dict[str, Any]] = {}
+    for r in results:
+        name = str(r["model_name"])
+        cur = out.setdefault(name, {"n": 0, "errors": 0, "passed": 0})
+        cur["n"] += 1
+        if r.get("error"):
+            cur["errors"] += 1
+            continue
+        pv = r.get("pass_value")
+        if pv is None:
+            # If this metric was unavailable for this row, treat as not passed.
+            continue
+        cur["passed"] += int(float(pv) >= float(threshold))
+    for cur in out.values():
+        scored = max(1, int(cur["n"]) - int(cur["errors"]))
+        cur["pass_rate"] = round(float(cur["passed"]) / scored, 4)
+    return out
 
 
 def _refresh_stills_with_stac_cog_gold(
@@ -499,6 +552,26 @@ def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
     lines.append("- `tim/tim_export.jsonl`: local TiM outputs")
     lines.append("- `images/`: cached reference stills (STAC or Mapbox)")
     lines.append("- `gold/`: Sentinel-2 SCL-derived reference boxes (when STAC COG pair succeeded)")
+
+    sweep = payload.get("threshold_sweep")
+    if isinstance(sweep, dict) and sweep:
+        lines.extend(["", "## Threshold sweep (pass_rate)", ""])
+        models = list(payload["summary_by_model"].keys())
+        if models:
+            lines.append("| Threshold | " + " | ".join(models) + " |")
+            lines.append("|---:|" + "|".join(["---:"] * len(models)) + "|")
+            for thr in sorted((float(k), k) for k in sweep.keys()):
+                k = thr[1]
+                row = sweep.get(k) or {}
+                cells: list[str] = []
+                for m in models:
+                    pr = None
+                    if isinstance(row, dict):
+                        mr = row.get(m)
+                        if isinstance(mr, dict):
+                            pr = mr.get("pass_rate")
+                    cells.append(f"{float(pr):.3f}" if pr is not None else "—")
+                lines.append(f"| {float(k):.2f} | " + " | ".join(cells) + " |")
     lines.extend(["", "## Per-Target Results", ""])
     for r in payload["results"]:
         lines.append(f"### {r['target_id']} · {r['model_name']}")
@@ -574,6 +647,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("LEX", "GRD", "STR"),
         default=None,
         help="Composite weights when SCL gold exists (default 0.22 0.48 0.30).",
+    )
+    p.add_argument(
+        "--threshold-sweep",
+        default="0.3,0.4,0.5,0.55,0.6",
+        help=(
+            "Comma/space-separated thresholds to compute pass-rate curves from the *same* run "
+            "(no extra inference). Uses pass_metric_resolved."
+        ),
     )
     p.add_argument(
         "--no-stac-gold",
@@ -833,6 +914,7 @@ def main(argv: list[str] | None = None) -> int:
             "score_mode": args.score_mode,
             "pass_metric": args.pass_metric,
             "pass_metric_resolved": pass_metric_resolved,
+            "threshold_sweep": _parse_threshold_sweep(args.threshold_sweep),
             "stac_gold_refresh": bool(_needs_stac_gold_refresh(args)),
             "score_weights": (
                 {"lexical": float(args.score_weight[0]), "grounding": float(args.score_weight[1]), "structured": float(args.score_weight[2])}
@@ -867,8 +949,12 @@ def main(argv: list[str] | None = None) -> int:
         },
         "targets": target_records,
         "summary_by_model": _summarize(results),
+        "threshold_sweep": {},
         "results": results,
     }
+    sweeps = payload["meta"].get("threshold_sweep") or []
+    if isinstance(sweeps, list) and sweeps:
+        payload["threshold_sweep"] = {str(t): _summarize_for_threshold(results, threshold=float(t)) for t in sweeps}
     _write_json(out_dir / "report.json", payload)
     write_patagonia_per_model_artifacts(
         out_dir,

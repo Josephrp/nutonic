@@ -302,6 +302,22 @@ def _refresh_stills_with_stac_cog_gold(
     return gold_by_id
 
 
+def _no_tim_prompt_text(*, category: str) -> str:
+    cat = (category or "").strip().lower()
+    # Keep this aligned with typical on-device captioning behavior: image-only, grounded, no TiM.
+    base = (
+        "Review the provided Sentinel-2 RGB satellite image. Describe visible surface cover and structure "
+        "using only what is observable in the image. State uncertainty and limitations where appropriate."
+    )
+    if "glacier" in cat or "ice" in cat:
+        return base + " Focus on snow/ice, glacier texture, and surrounding terrain/water."
+    if "marine" in cat or "water" in cat or "coast" in cat:
+        return base + " Focus on open water vs coast/islands/channels, and any visible human infrastructure."
+    if "urban" in cat or "port" in cat:
+        return base + " Focus on infrastructure patterns (roads, buildings, port/harbor shapes) and coast/water."
+    return base + " Focus on vegetation vs water vs bare ground, mountains/valleys, and major patterns."
+
+
 def _target_profile(target: EvalTarget) -> str:
     cat = target.category.lower()
     if "glacier" in cat:
@@ -708,6 +724,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "from patagonia_comparison_hf_model_ids() (NuTonic/lspace vs LiquidAI/LFM2.5-VL-450M)."
         ),
     )
+    p.add_argument(
+        "--local-vlm-variants",
+        choices=("tim", "no_tim", "both"),
+        default="both",
+        help=(
+            "Which local VLM runs to execute per model: "
+            "tim (TiM JSON injected), no_tim (image-only), or both (default)."
+        ),
+    )
     p.add_argument("--local-vlm-device", default="auto")
     p.add_argument("--local-vlm-dtype", default="bfloat16")
     p.add_argument("--max-new-tokens", type=int, default=220)
@@ -794,12 +819,14 @@ def main(argv: list[str] | None = None) -> int:
     tim_by_id = _run_local_tim(args, targets, out_dir, tim_device_effective=tim_device_effective)
 
     prompts_path = out_dir / "prompts.jsonl"
+    prompts_no_tim_path = out_dir / "prompts_no_tim.jsonl"
     predictions_path = out_dir / "predictions.jsonl"
-    for pth in (prompts_path, predictions_path):
+    for pth in (prompts_path, prompts_no_tim_path, predictions_path):
         if pth.exists():
             pth.unlink()
 
     prompt_by_id: dict[str, str] = {}
+    prompt_no_tim_by_id: dict[str, str] = {}
     for t in targets:
         tim_row = tim_by_id.get(t.target_id) or {}
         profile = str(tim_row.get("analysis_profile") or _target_profile(t)).strip()
@@ -815,6 +842,17 @@ def main(argv: list[str] | None = None) -> int:
                 "image_path": target_records[t.target_id]["image_path"],
                 "prompt": prompt,
                 "tim": compact_tim_for_production_prompt(tim_row),
+            },
+        )
+        prompt_no_tim = _no_tim_prompt_text(category=t.category)
+        prompt_no_tim_by_id[t.target_id] = prompt_no_tim
+        _append_jsonl(
+            prompts_no_tim_path,
+            {
+                "target_id": t.target_id,
+                "image_path": target_records[t.target_id]["image_path"],
+                "prompt": prompt_no_tim,
+                "tim": None,
             },
         )
 
@@ -870,30 +908,58 @@ def main(argv: list[str] | None = None) -> int:
         model, processor = _load_local_vlm(hf_id, device=args.local_vlm_device, dtype=args.local_vlm_dtype)
         try:
             for t in targets:
-                rec = {
-                    "target_id": t.target_id,
-                    "model_name": model_name,
-                    "model_id": hf_id,
-                    "model_kind": "local_transformers_tim_prompt",
-                    "image_path": target_records[t.target_id]["image_path"],
-                    "tim_injected": True,
-                }
-                try:
-                    caption = _local_vlm_caption(
-                        model,
-                        processor,
-                        image_path=Path(target_records[t.target_id]["image_path"]),
-                        prompt=prompt_by_id[t.target_id],
-                        max_new_tokens=args.max_new_tokens,
-                        system_text=PRODUCTION_ANALYSIS_SYSTEM,
-                    )
-                    rec["caption"] = caption
-                    gb = gold_by_id.get(t.target_id)
-                    rec.update(_apply_full_scoring(caption, t, args, gb, pass_metric_resolved))
-                except Exception as exc:  # noqa: BLE001
-                    rec["error"] = f"{type(exc).__name__}: {exc}"
-                results.append(rec)
-                _append_jsonl(predictions_path, rec)
+                image_path = Path(target_records[t.target_id]["image_path"])
+                gb = gold_by_id.get(t.target_id)
+
+                if args.local_vlm_variants in ("tim", "both"):
+                    rec_tim = {
+                        "target_id": t.target_id,
+                        "model_name": model_name,
+                        "model_id": hf_id,
+                        "model_kind": "local_transformers_tim_prompt",
+                        "image_path": str(image_path),
+                        "tim_injected": True,
+                    }
+                    try:
+                        caption = _local_vlm_caption(
+                            model,
+                            processor,
+                            image_path=image_path,
+                            prompt=prompt_by_id[t.target_id],
+                            max_new_tokens=args.max_new_tokens,
+                            system_text=PRODUCTION_ANALYSIS_SYSTEM,
+                        )
+                        rec_tim["caption"] = caption
+                        rec_tim.update(_apply_full_scoring(caption, t, args, gb, pass_metric_resolved))
+                    except Exception as exc:  # noqa: BLE001
+                        rec_tim["error"] = f"{type(exc).__name__}: {exc}"
+                    results.append(rec_tim)
+                    _append_jsonl(predictions_path, rec_tim)
+
+                if args.local_vlm_variants in ("no_tim", "both"):
+                    rec_nt = {
+                        "target_id": t.target_id,
+                        "model_name": f"{model_name}_no_tim",
+                        "model_id": hf_id,
+                        "model_kind": "local_transformers_no_tim_prompt",
+                        "image_path": str(image_path),
+                        "tim_injected": False,
+                    }
+                    try:
+                        caption = _local_vlm_caption(
+                            model,
+                            processor,
+                            image_path=image_path,
+                            prompt=prompt_no_tim_by_id[t.target_id],
+                            max_new_tokens=args.max_new_tokens,
+                            system_text=PRODUCTION_ANALYSIS_SYSTEM,
+                        )
+                        rec_nt["caption"] = caption
+                        rec_nt.update(_apply_full_scoring(caption, t, args, gb, pass_metric_resolved))
+                    except Exception as exc:  # noqa: BLE001
+                        rec_nt["error"] = f"{type(exc).__name__}: {exc}"
+                    results.append(rec_nt)
+                    _append_jsonl(predictions_path, rec_nt)
         finally:
             del model
             del processor
@@ -935,6 +1001,7 @@ def main(argv: list[str] | None = None) -> int:
             "http_endpoints": dict(endpoints),
             "http_enabled_via": ("cli" if args.endpoint else ("env" if http_from_env else None)),
             "local_vlm_runs": [{"model_name": n, "hf_model_id": mid} for n, mid in local_runs],
+            "local_vlm_variants": args.local_vlm_variants,
             "comparison_expectations": {
                 "expected_hf_models": patagonia_comparison_hf_model_ids(),
                 "notes": (

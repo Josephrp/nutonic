@@ -19,12 +19,14 @@ import argparse
 import concurrent.futures
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Iterable
 
 
 DEFAULT_REPO_ID = "NuTonic/sat-vl-sft-training-ready-v1"
+_SANITIZED_REPO_RE = re.compile(r"^(?P<ns>[A-Za-z0-9_.-]+)__(?P<repo>[A-Za-z0-9_.-]+)$")
 
 
 def _retryable(exc: Exception) -> bool:
@@ -115,6 +117,73 @@ def _download_one(
             time.sleep(min(120.0, 2.0**attempt))
 
 
+def _fallback_dataset_candidates(path_in_repo: str) -> list[tuple[str, str]]:
+    """
+    Some NuTonic "training-ready" datasets store media paths like:
+      images/<NAMESPACE__REPO>/s00000/poi_....png
+    even when those blobs actually live in the source dataset <NAMESPACE/REPO>.
+    This returns candidate (repo_id, filename) pairs to try when the main repo 404s.
+    """
+    norm = (path_in_repo or "").replace("\\", "/").lstrip("/")
+    parts = norm.split("/")
+    if len(parts) < 3:
+        return []
+    root, sanitized = parts[0], parts[1]
+    m = _SANITIZED_REPO_RE.match(sanitized)
+    if not m:
+        return []
+    ns = m.group("ns")
+    repo = m.group("repo")
+    alt_repo_id = f"{ns}/{repo}"
+    rest = "/".join(parts[2:])
+    # Common layouts to try in the source dataset
+    return [
+        (alt_repo_id, norm),  # identical path
+        (alt_repo_id, f"{root}/{rest}"),  # drop the sanitized repo folder
+        (alt_repo_id, rest),  # drop root as well (some repos store at top-level)
+    ]
+
+
+def _download_with_fallback(
+    *,
+    repo_id: str,
+    revision: str,
+    token: str | None,
+    local_dir: Path,
+    path_in_repo: str,
+    max_retries: int,
+) -> None:
+    try:
+        _download_one(
+            repo_id=repo_id,
+            revision=revision,
+            token=token,
+            local_dir=local_dir,
+            path_in_repo=path_in_repo,
+            max_retries=max_retries,
+        )
+        return
+    except FileNotFoundError:
+        pass
+
+    # Try pulling from the inferred source dataset repo.
+    for alt_repo_id, alt_filename in _fallback_dataset_candidates(path_in_repo):
+        try:
+            _download_one(
+                repo_id=alt_repo_id,
+                revision="main",
+                token=token,
+                local_dir=local_dir,
+                path_in_repo=alt_filename,
+                max_retries=max_retries,
+            )
+            return
+        except FileNotFoundError:
+            continue
+
+    raise FileNotFoundError(path_in_repo)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     p.add_argument("--repo-id", default=DEFAULT_REPO_ID)
@@ -178,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Downloading split JSONL first: {split_jsonl}", flush=True)
     for pth in must_get:
-        _download_one(
+        _download_with_fallback(
             repo_id=args.repo_id,
             revision=args.revision,
             token=token,
@@ -190,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     # Optional extras: best-effort (datasets may not have dataset_infos.json, etc.)
     for pth in extras:
         try:
-            _download_one(
+            _download_with_fallback(
                 repo_id=args.repo_id,
                 revision=args.revision,
                 token=token,
@@ -243,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, int(args.max_workers))) as ex:
             futures = {
                 ex.submit(
-                    _download_one,
+                    _download_with_fallback,
                     repo_id=args.repo_id,
                     revision=args.revision,
                     token=token,

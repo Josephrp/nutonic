@@ -17,6 +17,21 @@ class ScoreWeights:
     structured: float = 0.30
 
 
+@dataclass(frozen=True)
+class GroundingPolicy:
+    """
+    Heuristics to reduce gaming of SCL-region IoU.
+
+    - box_budget_max: max boxes before penalty
+    - box_budget_penalty_per_extra: multiplicative penalty per extra box
+    - oversize_penalty_strength: penalize predicted boxes that are much larger than the gold region
+    """
+
+    box_budget_max: int = 3
+    box_budget_penalty_per_extra: float = 0.08
+    oversize_penalty_strength: float = 0.75
+
+
 def iou_xyxy(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
     ax1, ay1, ax2, ay2 = a
     bx1, by1, bx2, by2 = b
@@ -159,11 +174,17 @@ def parse_predicted_boxes(text: str) -> list[dict[str, Any]]:
     return out
 
 
+def _box_area(bb: tuple[float, float, float, float]) -> float:
+    x1, y1, x2, y2 = bb
+    return max(0.0, float(x2 - x1)) * max(0.0, float(y2 - y1))
+
+
 def grounding_score_vs_gold(
     caption: str,
     gold_boxes: list[dict[str, Any]],
     *,
     label_mode: str = "canonical",
+    policy: GroundingPolicy | None = None,
 ) -> tuple[float, dict[str, Any]]:
     """
     Mean best IoU per gold box (label must match canonical class); 1.0 if no gold boxes.
@@ -175,8 +196,25 @@ def grounding_score_vs_gold(
 
     preds_raw = parse_predicted_boxes(caption)
     preds = _all_pred_boxes(caption)
-    diag: dict[str, Any] = {"pred_boxes": preds_raw, "gold_count": len(gold_boxes), "label_mode": label_mode}
+    pol = policy or GroundingPolicy()
+    diag: dict[str, Any] = {
+        "pred_boxes": preds_raw,
+        "gold_count": len(gold_boxes),
+        "label_mode": label_mode,
+        "policy": {
+            "box_budget_max": pol.box_budget_max,
+            "box_budget_penalty_per_extra": pol.box_budget_penalty_per_extra,
+            "oversize_penalty_strength": pol.oversize_penalty_strength,
+        },
+    }
     ious: list[float] = []
+
+    # Budget penalty: discourage emitting many boxes to maximize chance overlap.
+    n_boxes = len(preds_raw)
+    extra = max(0, n_boxes - int(pol.box_budget_max))
+    budget_factor = max(0.0, 1.0 - float(pol.box_budget_penalty_per_extra) * float(extra))
+    diag["pred_box_count"] = n_boxes
+    diag["box_budget_factor"] = round(budget_factor, 4)
 
     for g in gold_boxes:
         glabel = str(g.get("label") or "")
@@ -188,16 +226,52 @@ def grounding_score_vs_gold(
             gt = tuple(float(x) for x in gbb)
         except (TypeError, ValueError):
             continue
+        gold_area = float(g.get("area_fraction") or g.get("area_fraction_total") or 0.0)
         best = 0.0
+        best_diag: dict[str, Any] = {"best_pred_area": None, "best_iou_raw": 0.0, "oversize_factor": 1.0}
         if label_mode == "any":
             for pt, _lab in preds:
-                best = max(best, iou_xyxy(gt, pt))
+                raw = iou_xyxy(gt, pt)
+                if raw <= 0:
+                    continue
+                pred_area = _box_area(pt)
+                # Penalize predicted boxes much larger than gold region fraction.
+                # If gold_area is ~1.0 (open ocean), this factor is ~1 and does not penalize.
+                oversize = 1.0
+                if gold_area > 0 and pred_area > gold_area:
+                    ratio = gold_area / max(1e-6, pred_area)
+                    oversize = float(max(0.0, min(1.0, ratio ** float(pol.oversize_penalty_strength))))
+                eff = raw * oversize
+                if eff > best:
+                    best = eff
+                    best_diag = {
+                        "best_pred_area": round(pred_area, 5),
+                        "best_iou_raw": round(raw, 5),
+                        "oversize_factor": round(float(oversize), 5),
+                    }
         else:
             for pt, plab in preds:
                 if plab != canon_g:
                     continue
-                best = max(best, iou_xyxy(gt, pt))
-        ious.append(best)
+                raw = iou_xyxy(gt, pt)
+                if raw <= 0:
+                    continue
+                pred_area = _box_area(pt)
+                oversize = 1.0
+                if gold_area > 0 and pred_area > gold_area:
+                    ratio = gold_area / max(1e-6, pred_area)
+                    oversize = float(max(0.0, min(1.0, ratio ** float(pol.oversize_penalty_strength))))
+                eff = raw * oversize
+                if eff > best:
+                    best = eff
+                    best_diag = {
+                        "best_pred_area": round(pred_area, 5),
+                        "best_iou_raw": round(raw, 5),
+                        "oversize_factor": round(float(oversize), 5),
+                    }
+        ious.append(best * budget_factor)
+        best_diag["best_iou_effective"] = round(best * budget_factor, 5)
+        diag.setdefault("per_gold_best", []).append({**best_diag, "gold_label": canon_g, "gold_area": gold_area})
 
     mean_iou = float(sum(ious) / max(1, len(ious))) if ious else 0.0
     diag["per_gold_best_iou"] = ious
@@ -233,6 +307,7 @@ def score_patagonia_multimodal(
     score_mode: str = "composite",
     pass_metric: str = "composite",
     grounding_label_mode: str = "canonical",
+    grounding_policy: GroundingPolicy | None = None,
 ) -> dict[str, Any]:
     """
     Compute lexical, grounding, structured, composite; guardrails from ``EvalTarget``.
@@ -257,7 +332,10 @@ def score_patagonia_multimodal(
 
     grounding_usable = bool(gold_boxes) and len(gold_boxes) > 0
     gr_score, gr_diag = grounding_score_vs_gold(
-        caption, list(gold_boxes or []), label_mode=grounding_label_mode.strip().lower() or "canonical"
+        caption,
+        list(gold_boxes or []),
+        label_mode=grounding_label_mode.strip().lower() or "canonical",
+        policy=grounding_policy,
     )
     if not grounding_usable:
         gr_score = None  # type: ignore[assignment]

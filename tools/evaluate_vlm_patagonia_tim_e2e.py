@@ -160,6 +160,16 @@ def _build_score_weights(args: argparse.Namespace) -> ScoreWeights:
     return ScoreWeights()
 
 
+def _build_grounding_policy(args: argparse.Namespace):
+    from patagonia_eval_scoring import GroundingPolicy
+
+    return GroundingPolicy(
+        box_budget_max=int(getattr(args, "max_pred_boxes", 3)),
+        box_budget_penalty_per_extra=float(getattr(args, "box_budget_penalty_per_extra", 0.08)),
+        oversize_penalty_strength=float(getattr(args, "oversize_penalty_strength", 0.75)),
+    )
+
+
 def _apply_full_scoring(
     caption: str,
     target: EvalTarget,
@@ -179,6 +189,7 @@ def _apply_full_scoring(
         score_mode=mode,
         pass_metric=pass_metric_resolved,
         grounding_label_mode=str(getattr(args, "grounding_label_mode", "canonical") or "canonical"),
+        grounding_policy=_build_grounding_policy(args),
     )
     # Store the scalar that drove pass/fail so we can sweep thresholds without re-running inference.
     pass_value: float | None = None
@@ -522,6 +533,28 @@ def _summarize(results: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _summarize_by_category(
+    results: list[dict[str, Any]], *, target_records: dict[str, dict[str, Any]]
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Model -> category -> same summary fields as `_summarize`."""
+    buckets: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for r in results:
+        m = str(r.get("model_name") or "")
+        tid = str(r.get("target_id") or "")
+        cat = (
+            str(((target_records.get(tid) or {}).get("target") or {}).get("category") or "unknown")
+            .strip()
+            .lower()
+        )
+        buckets.setdefault(m, {}).setdefault(cat, []).append(r)
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for m, cats in buckets.items():
+        out[m] = {}
+        for cat, rows in cats.items():
+            out[m][cat] = _summarize(rows).get(m, {"n": len(rows), "errors": 0, "passed": 0, "pass_rate": 0.0, "mean_score": 0.0})
+    return out
+
+
 def _summary_metric_cell(summary_row: dict[str, Any], key: str) -> str:
     v = summary_row.get(key)
     return f"{float(v):.3f}" if v is not None else "—"
@@ -574,6 +607,25 @@ def _write_markdown(out_dir: Path, payload: dict[str, Any]) -> None:
                             pr = mr.get("pass_rate")
                     cells.append(f"{float(pr):.3f}" if pr is not None else "—")
                 lines.append(f"| {float(k):.2f} | " + " | ".join(cells) + " |")
+
+    by_cat = payload.get("summary_by_model_by_category")
+    if isinstance(by_cat, dict) and by_cat:
+        lines.extend(["", "## Breakdown by category (mean primary / pass_rate)", ""])
+        cats: list[str] = sorted({c for m in by_cat.values() if isinstance(m, dict) for c in m.keys()})
+        if cats:
+            lines.append("| Model | " + " | ".join(cats) + " |")
+            lines.append("|---|" + "|".join(["---:"] * len(cats)) + "|")
+            for model, mrow in by_cat.items():
+                if not isinstance(mrow, dict):
+                    continue
+                cells: list[str] = []
+                for c in cats:
+                    s = mrow.get(c) if isinstance(mrow.get(c), dict) else None
+                    if isinstance(s, dict):
+                        cells.append(f"{float(s.get('mean_score', 0.0)):.3f}/{float(s.get('pass_rate', 0.0)):.2f}")
+                    else:
+                        cells.append("—")
+                lines.append("| " + str(model) + " | " + " | ".join(cells) + " |")
     lines.extend(["", "## Per-Target Results", ""])
     for r in payload["results"]:
         lines.append(f"### {r['target_id']} · {r['model_name']}")
@@ -642,6 +694,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("canonical", "any"),
         default="canonical",
         help="Grounding IoU matching: canonical (label must map to water/vegetation/snow_ice/bare) or any (label-agnostic).",
+    )
+    p.add_argument("--max-pred-boxes", type=int, default=3, help="Predicted box budget before grounding penalty.")
+    p.add_argument(
+        "--box-budget-penalty-per-extra",
+        type=float,
+        default=0.08,
+        help="Grounding multiplicative penalty per predicted box beyond --max-pred-boxes.",
+    )
+    p.add_argument(
+        "--oversize-penalty-strength",
+        type=float,
+        default=0.75,
+        help="Penalize predicted boxes much larger than the gold region (0 disables; higher penalizes more).",
     )
     p.add_argument(
         "--pass-metric",
@@ -979,6 +1044,12 @@ def main(argv: list[str] | None = None) -> int:
                 if getattr(args, "score_weight", None) is not None
                 else {"lexical": 0.22, "grounding": 0.48, "structured": 0.30}
             ),
+            "grounding_label_mode": args.grounding_label_mode,
+            "grounding_policy": {
+                "max_pred_boxes": args.max_pred_boxes,
+                "box_budget_penalty_per_extra": args.box_budget_penalty_per_extra,
+                "oversize_penalty_strength": args.oversize_penalty_strength,
+            },
             "still_source": args.still_source,
             "mapbox_size": args.mapbox_size,
             "still_provenance_by_target": still_prov,
@@ -1008,6 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
         },
         "targets": target_records,
         "summary_by_model": _summarize(results),
+        "summary_by_model_by_category": _summarize_by_category(results, target_records=target_records),
         "threshold_sweep": {},
         "results": results,
     }

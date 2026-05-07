@@ -8,7 +8,7 @@ import platform.Foundation.NSError
  * Swift-implemented bridge for iOS on-device VLM.
  *
  * Implement this in the host `iosApp` using the Swift Leap SDK (`leap-ios`) and inject it via
- * `NutonicInitIosServices(vlmBridge: ...)` before creating the Compose view controller.
+ * `nutonicInitIosServices(vlmBridge: ...)` before creating the Compose view controller.
  *
  * Kotlin/Native exports this interface to ObjC/Swift as a protocol; Swift should implement the protocol.
  */
@@ -28,4 +28,3 @@ interface IosVlmBridge {
         completion: (text: String?, error: NSError?) -> Unit,
     )
 }
-

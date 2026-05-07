@@ -33,7 +33,8 @@ class WorldMapGameplayPersistenceTest {
             }
         }
         rule.onNodeWithTag("worldMapGuessHandleButton").performClick()
-        rule.onNodeWithTag("worldMapSearchField").performTextInput("Paris")
+        // poi_0000 truth is South Australia; "Paris" resolves ~16 Mm away → score clamps to 0.
+        rule.onNodeWithTag("worldMapSearchField").performTextInput("-34.24,138.914")
         rule.onNodeWithTag("worldMapSearchButton").performClick()
         rule.onNodeWithTag("worldMapSubmitGuessButton").performClick()
         rule.waitForIdle()

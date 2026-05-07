@@ -11,4 +11,3 @@ import com.nutonic.vlm.IosVlmBridge
 internal object IosServiceRegistry {
     var vlmBridge: IosVlmBridge? = null
 }
-

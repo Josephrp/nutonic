@@ -26,7 +26,7 @@ internal class IosSwiftBridgeProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
         val bridge =
             IosServiceRegistry.vlmBridge
                 ?: return ProOnDeviceVlmRunResult.Unsupported(
-                    "iOS VLM is not initialized (call NutonicInitIosServices before MainViewController).",
+                    "iOS VLM is not initialized (call nutonicInitIosServices before MainViewController).",
                 )
 
         val images: List<ByteArray> = input.images.map { it.bytes }
@@ -54,4 +54,3 @@ internal class IosSwiftBridgeProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
         }
     }
 }
-

@@ -12,12 +12,12 @@ fun MainViewController(): UIViewController =
     }
 
 /**
- * iOS host app must call this before creating [MainViewController] so platform services (e.g. VLM) are available.
+ * iOS host app must call this before creating [MainViewController] so platform services (for example VLM) are available.
  *
  * This avoids linking Kotlin/Native against upstream SDKs that are currently version-skewed vs Swift equivalents.
  */
 @Suppress("unused")
-fun NutonicInitIosServices(
+fun nutonicInitIosServices(
     vlmBridge: IosVlmBridge?,
 ) {
     IosServiceRegistry.vlmBridge = vlmBridge

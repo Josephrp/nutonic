@@ -146,29 +146,27 @@ def read_visual_and_scl_chips_from_urls(
     out_h: int,
 ) -> tuple[Image.Image | None, np.ndarray | None]:
     """
-    Read RGB + Scene Classification (SCL) chips using the **same** geographic window (Sentinel-2 grid).
+    Read RGB + Scene Classification (SCL) chips for the same (lon, lat).
 
-    Both assets must share dimensions/transform (standard L2A). Returns PIL RGB and uint8 SCL with
-    classes 0–11+, resized with ``ImageOps.contain`` to ``out_w`` × ``out_h`` (same display framing).
+    **Important:** in Sentinel-2 L2A, TCI/visual is typically **10 m** while SCL is **20 m**,
+    so pixel grids do **not** match. We therefore compute a window independently per asset using
+    its own transform, producing approximately the same *geographic* footprint.
     """
     if rasterio is None:
         return None, None
     vis_u = _rio_open_url(visual_href)
     scl_u = _rio_open_url(scl_href)
     rgb: Image.Image | None = None
-    win = None
-    grid_wh: tuple[int, int] | None = None
     try:
         with rasterio.Env(OGR_HTTP_UNSAFE_SSL="YES", GDAL_HTTP_TIMEOUT=180):
             with rasterio.open(vis_u) as src_v:
-                win = _point_chip_window(src_v, lon, lat)
-                if win is None:
+                win_v = _point_chip_window(src_v, lon, lat)
+                if win_v is None:
                     return None, None
-                grid_wh = (src_v.width, src_v.height)
                 if src_v.count >= 3:
-                    arr = src_v.read([1, 2, 3], window=win)
+                    arr = src_v.read([1, 2, 3], window=win_v)
                 else:
-                    b = src_v.read(1, window=win)
+                    b = src_v.read(1, window=win_v)
                     arr = np.stack([b, b, b])
                 x = np.transpose(arr, (1, 2, 0)).astype(np.float32)
                 lo, hi = float(np.percentile(x, 2)), float(np.percentile(x, 98))
@@ -178,12 +176,10 @@ def read_visual_and_scl_chips_from_urls(
                 rgb = ImageOps.contain(rgb, (out_w, out_h))
 
             with rasterio.open(scl_u) as src_s:
-                if grid_wh is None or win is None:
+                win_s = _point_chip_window(src_s, lon, lat)
+                if win_s is None:
                     return rgb, None
-                gw, gh = grid_wh
-                if src_s.width != gw or src_s.height != gh:
-                    return rgb, None
-                scl_raw = src_s.read(1, window=win).astype(np.uint8)
+                scl_raw = src_s.read(1, window=win_s).astype(np.uint8)
                 scl_img = Image.fromarray(scl_raw, mode="L")
                 scl_rs = ImageOps.contain(scl_img, (out_w, out_h))
                 scl_arr = np.asarray(scl_rs, dtype=np.uint8)

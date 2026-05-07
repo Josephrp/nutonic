@@ -178,6 +178,7 @@ def _apply_full_scoring(
         weights=_build_score_weights(args),
         score_mode=mode,
         pass_metric=pass_metric_resolved,
+        grounding_label_mode=str(getattr(args, "grounding_label_mode", "canonical") or "canonical"),
     )
     # Store the scalar that drove pass/fail so we can sweep thresholds without re-running inference.
     pass_value: float | None = None
@@ -635,6 +636,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=("lexical", "grounding", "structured", "composite", "all"),
         default="composite",
         help="primary reported score: composite (default) mixes lexical+SCL IoU+structured; 'all' same as composite with full breakdown.",
+    )
+    p.add_argument(
+        "--grounding-label-mode",
+        choices=("canonical", "any"),
+        default="canonical",
+        help="Grounding IoU matching: canonical (label must map to water/vegetation/snow_ice/bare) or any (label-agnostic).",
     )
     p.add_argument(
         "--pass-metric",

@@ -8,6 +8,8 @@ import numpy as np
 
 # Minimum fraction of chip pixels for a semantic mask to yield a gold box (avoid speckle).
 MIN_AREA_FRACTION = 0.015
+MIN_COMPONENT_FRACTION = 0.01
+MAX_COMPONENTS_PER_ROLE = 2
 
 # ESA SCL classes used for coarse semantics (L2A).
 SCL_WATER = 6
@@ -60,6 +62,45 @@ def _bbox_xyxy_from_mask(mask: np.ndarray) -> tuple[float, float, float, float] 
     return (_clamp01(x1), _clamp01(y1), _clamp01(x2), _clamp01(y2))
 
 
+def _largest_components(mask: np.ndarray, *, max_components: int) -> list[np.ndarray]:
+    """Return up to N largest 4-neighborhood connected components as boolean masks."""
+    h, w = mask.shape
+    seen = np.zeros((h, w), dtype=np.uint8)
+    comps: list[tuple[int, np.ndarray]] = []
+    # Iterate only over true pixels
+    ys, xs = np.where(mask)
+    for y0, x0 in zip(ys.tolist(), xs.tolist(), strict=False):
+        if seen[y0, x0]:
+            continue
+        # BFS/stack
+        stack = [(y0, x0)]
+        seen[y0, x0] = 1
+        coords: list[tuple[int, int]] = []
+        while stack:
+            y, x = stack.pop()
+            coords.append((y, x))
+            if y > 0 and mask[y - 1, x] and not seen[y - 1, x]:
+                seen[y - 1, x] = 1
+                stack.append((y - 1, x))
+            if y + 1 < h and mask[y + 1, x] and not seen[y + 1, x]:
+                seen[y + 1, x] = 1
+                stack.append((y + 1, x))
+            if x > 0 and mask[y, x - 1] and not seen[y, x - 1]:
+                seen[y, x - 1] = 1
+                stack.append((y, x - 1))
+            if x + 1 < w and mask[y, x + 1] and not seen[y, x + 1]:
+                seen[y, x + 1] = 1
+                stack.append((y, x + 1))
+        if not coords:
+            continue
+        cm = np.zeros((h, w), dtype=bool)
+        for y, x in coords:
+            cm[y, x] = True
+        comps.append((len(coords), cm))
+    comps.sort(key=lambda t: t[0], reverse=True)
+    return [cm for _, cm in comps[: max(1, int(max_components))]]
+
+
 def gold_boxes_from_scl(scl_hw: np.ndarray, *, category: str) -> list[dict[str, Any]]:
     """
     Build normalized [0,1] xyxy boxes from SCL for roles implied by ``category``.
@@ -71,16 +112,28 @@ def gold_boxes_from_scl(scl_hw: np.ndarray, *, category: str) -> list[dict[str, 
     h, w = scl_hw.shape
     for role in roles:
         mask = _mask_for_role(scl_hw, role)
-        bb = _bbox_xyxy_from_mask(mask)
-        if bb is None:
+        total_frac = float(np.count_nonzero(mask)) / float(h * w)
+        if total_frac < MIN_AREA_FRACTION:
             continue
-        frac = float(np.count_nonzero(mask)) / float(h * w)
-        out.append(
-            {
-                "label": role,
-                "bbox": [bb[0], bb[1], bb[2], bb[3]],
-                "source": "sentinel2_scl",
-                "area_fraction": round(frac, 5),
-            }
-        )
+        comps = _largest_components(mask, max_components=MAX_COMPONENTS_PER_ROLE)
+        emitted = 0
+        for cm in comps:
+            comp_frac = float(np.count_nonzero(cm)) / float(h * w)
+            if comp_frac < MIN_COMPONENT_FRACTION:
+                continue
+            bb = _bbox_xyxy_from_mask(cm)
+            if bb is None:
+                continue
+            out.append(
+                {
+                    "label": role,
+                    "bbox": [bb[0], bb[1], bb[2], bb[3]],
+                    "source": "sentinel2_scl_component",
+                    "area_fraction": round(comp_frac, 5),
+                    "area_fraction_total": round(total_frac, 5),
+                }
+            )
+            emitted += 1
+            if emitted >= MAX_COMPONENTS_PER_ROLE:
+                break
     return out

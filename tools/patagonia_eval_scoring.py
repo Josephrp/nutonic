@@ -35,11 +35,45 @@ def iou_xyxy(a: tuple[float, float, float, float], b: tuple[float, float, float,
 _CANONICAL_ALIASES: dict[str, frozenset[str]] = {
     "water": frozenset({"water", "ocean", "sea", "marine", "fjord", "lake", "lago", "inundation"}),
     "vegetation": frozenset(
-        {"vegetation", "veg", "forest", "trees", "woodland", "grass", "crops", "cropland", "shrub", "plant"}
+        {
+            "vegetation",
+            "veg",
+            "forest",
+            "trees",
+            "woodland",
+            "grass",
+            "grassland",
+            "crops",
+            "crop",
+            "cropland",
+            "agriculture",
+            "agricultural",
+            "shrub",
+            "shrubland",
+            "scrub",
+            "plant",
+            "plants",
+            "canopy",
+        }
     ),
-    "bare": frozenset({"bare", "soil", "bare_ground", "barren"}),
+    "bare": frozenset({"bare", "soil", "bare_ground", "barren", "sand", "rock", "rocks", "scree"}),
     "snow_ice": frozenset({"snow", "ice", "glacier", "cryosphere", "snow_ice", "frozen"}),
 }
+
+
+def _all_pred_boxes(caption: str) -> list[tuple[tuple[float, float, float, float], str | None]]:
+    out: list[tuple[tuple[float, float, float, float], str | None]] = []
+    for p in parse_predicted_boxes(caption):
+        bb = p.get("bbox")
+        if not isinstance(bb, list) or len(bb) != 4:
+            continue
+        try:
+            box = tuple(float(x) for x in bb)
+        except (TypeError, ValueError):
+            continue
+        lab = normalize_pred_label(str(p.get("label") or ""))
+        out.append((box, lab))
+    return out
 
 
 def normalize_pred_label(label: str) -> str | None:
@@ -128,6 +162,8 @@ def parse_predicted_boxes(text: str) -> list[dict[str, Any]]:
 def grounding_score_vs_gold(
     caption: str,
     gold_boxes: list[dict[str, Any]],
+    *,
+    label_mode: str = "canonical",
 ) -> tuple[float, dict[str, Any]]:
     """
     Mean best IoU per gold box (label must match canonical class); 1.0 if no gold boxes.
@@ -137,8 +173,9 @@ def grounding_score_vs_gold(
     if not gold_boxes:
         return 1.0, {"reason": "no_gold", "pred_boxes": []}
 
-    preds = parse_predicted_boxes(caption)
-    diag: dict[str, Any] = {"pred_boxes": preds, "gold_count": len(gold_boxes)}
+    preds_raw = parse_predicted_boxes(caption)
+    preds = _all_pred_boxes(caption)
+    diag: dict[str, Any] = {"pred_boxes": preds_raw, "gold_count": len(gold_boxes), "label_mode": label_mode}
     ious: list[float] = []
 
     for g in gold_boxes:
@@ -152,18 +189,14 @@ def grounding_score_vs_gold(
         except (TypeError, ValueError):
             continue
         best = 0.0
-        for p in preds:
-            plab = normalize_pred_label(str(p.get("label") or ""))
-            if plab != canon_g:
-                continue
-            pbb = p.get("bbox")
-            if not isinstance(pbb, list) or len(pbb) != 4:
-                continue
-            try:
-                pt = tuple(float(x) for x in pbb)
-            except (TypeError, ValueError):
-                continue
-            best = max(best, iou_xyxy(gt, pt))
+        if label_mode == "any":
+            for pt, _lab in preds:
+                best = max(best, iou_xyxy(gt, pt))
+        else:
+            for pt, plab in preds:
+                if plab != canon_g:
+                    continue
+                best = max(best, iou_xyxy(gt, pt))
         ious.append(best)
 
     mean_iou = float(sum(ious) / max(1, len(ious))) if ious else 0.0
@@ -199,6 +232,7 @@ def score_patagonia_multimodal(
     weights: ScoreWeights | None = None,
     score_mode: str = "composite",
     pass_metric: str = "composite",
+    grounding_label_mode: str = "canonical",
 ) -> dict[str, Any]:
     """
     Compute lexical, grounding, structured, composite; guardrails from ``EvalTarget``.
@@ -222,7 +256,9 @@ def score_patagonia_multimodal(
     }
 
     grounding_usable = bool(gold_boxes) and len(gold_boxes) > 0
-    gr_score, gr_diag = grounding_score_vs_gold(caption, list(gold_boxes or []))
+    gr_score, gr_diag = grounding_score_vs_gold(
+        caption, list(gold_boxes or []), label_mode=grounding_label_mode.strip().lower() or "canonical"
+    )
     if not grounding_usable:
         gr_score = None  # type: ignore[assignment]
 

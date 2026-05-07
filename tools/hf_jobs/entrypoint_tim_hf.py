@@ -32,6 +32,43 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TIM_PKG_DIR = REPO_ROOT / "inference" / "terramind_tim_local"
 
 
+def _normalize_cfg_path_string(raw: str) -> str:
+    """
+    Normalize config paths that may be mangled by MSYS/Git-Bash path conversion.
+
+    Example failure mode (host Git-Bash):
+      user passes ``/workspace/inference/...yaml`` but MSYS rewrites it into a
+      Windows-looking path like ``C:/.../Git/workspace/inference/...yaml``.
+
+    Inside a Linux container this becomes a relative path (contains ':') and
+    ``Path.resolve()`` prefixes it with ``/workspace/``, producing a missing path.
+    """
+    s = (raw or "").strip()
+    if not s:
+        return s
+    s = s.replace("\\", "/")
+    if s.startswith("/workspace/"):
+        return s
+    if ":" in s and "/Git/workspace/" in s:
+        # Most common: .../Git/workspace/<rest>
+        idx = s.find("/Git/workspace/")
+        rest = s[idx + len("/Git/workspace/") :].lstrip("/")
+        return "/workspace/" + rest
+    if ":" in s:
+        # Generic: try to salvage any ".../workspace/<rest>" segment.
+        marker = "/workspace/"
+        j = s.lower().find(marker)
+        if j >= 0:
+            rest = s[j + len(marker) :].lstrip("/")
+            return "/workspace/" + rest
+        marker2 = "/workspace"
+        j2 = s.lower().rfind(marker2)
+        if j2 >= 0:
+            rest = s[j2 + len(marker2) :].lstrip("/")
+            return "/workspace/" + rest
+    return s
+
+
 def _hub_token() -> None:
     tok = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN") or "").strip()
     if tok and not os.environ.get("HUGGING_FACE_HUB_TOKEN"):
@@ -136,7 +173,12 @@ def main(argv: list[str] | None = None) -> int:
             raw = str(TIM_PKG_DIR / "config.hf_job_geoguessr_poi12_first5.yaml")
         else:
             raw = str(TIM_PKG_DIR / "config.hf_job_geoguessr_poi12_first3.yaml")
-        cfg = Path(raw)
+        cfg = Path(_normalize_cfg_path_string(raw))
+    else:
+        cfg = Path(_normalize_cfg_path_string(str(cfg)))
+
+    # Avoid prefixing /workspace onto Windows-looking paths (e.g. "C:/...") by resolving only
+    # after normalization.
     cfg = _resolve_tim_config_path(cfg.resolve())
 
     out_dir = args.output_dir.resolve()

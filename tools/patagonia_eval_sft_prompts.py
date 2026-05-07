@@ -12,8 +12,14 @@ if str(_SFT_SCRIPTS) not in sys.path:
 
 from lfm_vl_sft_dataset.production_analysis_prompt import (  # noqa: E402
     PRODUCTION_ANALYSIS_SYSTEM,
+    build_production_no_tim_user_prompt,
     build_production_tim_user_prompt,
     compact_tim_for_production_prompt,
 )
 
-__all__ = ["PRODUCTION_ANALYSIS_SYSTEM", "build_production_tim_user_prompt", "compact_tim_for_production_prompt"]
+__all__ = [
+    "PRODUCTION_ANALYSIS_SYSTEM",
+    "build_production_tim_user_prompt",
+    "build_production_no_tim_user_prompt",
+    "compact_tim_for_production_prompt",
+]

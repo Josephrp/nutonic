@@ -73,6 +73,7 @@ from evaluate_vlm_patagonia import (  # noqa: E402
 from patagonia_eval_scoring import ScoreWeights, score_patagonia_multimodal  # noqa: E402
 from patagonia_eval_sft_prompts import (  # noqa: E402
     PRODUCTION_ANALYSIS_SYSTEM,
+    build_production_no_tim_user_prompt,
     build_production_tim_user_prompt,
     compact_tim_for_production_prompt,
 )
@@ -300,22 +301,6 @@ def _refresh_stills_with_stac_cog_gold(
             sidecar["reason"] = meta.get("reason", "cog_pair_failed")
         _write_json(gold_dir / f"{t.target_id}.json", sidecar)
     return gold_by_id
-
-
-def _no_tim_prompt_text(*, category: str) -> str:
-    cat = (category or "").strip().lower()
-    # Keep this aligned with typical on-device captioning behavior: image-only, grounded, no TiM.
-    base = (
-        "Review the provided Sentinel-2 RGB satellite image. Describe visible surface cover and structure "
-        "using only what is observable in the image. State uncertainty and limitations where appropriate."
-    )
-    if "glacier" in cat or "ice" in cat:
-        return base + " Focus on snow/ice, glacier texture, and surrounding terrain/water."
-    if "marine" in cat or "water" in cat or "coast" in cat:
-        return base + " Focus on open water vs coast/islands/channels, and any visible human infrastructure."
-    if "urban" in cat or "port" in cat:
-        return base + " Focus on infrastructure patterns (roads, buildings, port/harbor shapes) and coast/water."
-    return base + " Focus on vegetation vs water vs bare ground, mountains/valleys, and major patterns."
 
 
 def _target_profile(target: EvalTarget) -> str:
@@ -844,7 +829,7 @@ def main(argv: list[str] | None = None) -> int:
                 "tim": compact_tim_for_production_prompt(tim_row),
             },
         )
-        prompt_no_tim = _no_tim_prompt_text(category=t.category)
+        prompt_no_tim = build_production_no_tim_user_prompt(analysis_profile=_target_profile(t))
         prompt_no_tim_by_id[t.target_id] = prompt_no_tim
         _append_jsonl(
             prompts_no_tim_path,

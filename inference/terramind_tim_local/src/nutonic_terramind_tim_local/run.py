@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import random
 import sys
@@ -71,6 +72,54 @@ def _set_ensemble_iteration_seed(seed: int) -> None:
     torch.manual_seed(s)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(s)
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(max(0.0, a))))
+
+
+def _sanitize_coordinates_in_row(
+    row: dict[str, Any],
+    *,
+    inputs_aux: Mapping[str, Any] | None,
+    max_decode_drift_km: float = 250.0,
+) -> None:
+    """If decoded TiM WGS84 is far from the requested batch lat/lon, replace with request (bad decode guard)."""
+    if not isinstance(inputs_aux, Mapping):
+        return
+    req = inputs_aux.get("request_wgs84")
+    if not isinstance(req, dict):
+        return
+    try:
+        elat = float(req["latitude"])
+        elon = float(req["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return
+    tmo = row.get("tim_modality_outputs")
+    if not isinstance(tmo, dict):
+        return
+    coord = tmo.get("Coordinates")
+    if not isinstance(coord, dict):
+        return
+    try:
+        clat = float(coord["latitude"])  # type: ignore[arg-type]
+        clon = float(coord["longitude"])  # type: ignore[arg-type]
+    except (KeyError, TypeError, ValueError):
+        return
+    drift = _haversine_km(clat, clon, elat, elon)
+    if drift <= max_decode_drift_km:
+        return
+    coord["latitude"] = elat
+    coord["longitude"] = elon
+    coord["replaced_decode_invalid"] = True
+    coord["original_decode_km_drift"] = round(float(drift), 2)
+    coord["original_latitude"] = clat
+    coord["original_longitude"] = clon
 
 
 def _pair_from_wgs(wgs: Mapping[str, Any] | None) -> tuple[float | None, float | None]:
@@ -165,6 +214,9 @@ def _export_row(
     tim_modality_outputs = build_tim_modality_outputs(
         model, tim_raw, tensor_sample_limit=sample_limit, policy=tim_policy
     )
+    row_prelim: dict[str, Any] = {"tim_modality_outputs": tim_modality_outputs}
+    _sanitize_coordinates_in_row(row_prelim, inputs_aux=inputs_aux)
+    tim_modality_outputs = row_prelim["tim_modality_outputs"]
     profile = str(
         analysis_profile
         or export_cfg.get("analysis_profile")

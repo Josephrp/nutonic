@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import copy
+import json
 import math
+import warnings
 from difflib import SequenceMatcher
 from typing import Any
 
 
 def flip_tim_modality_numeric_samples(tim_compact: dict[str, Any]) -> dict[str, Any]:
+    warnings.warn(
+        "flip_tim_modality_numeric_samples is a low-level helper; prefer patagonia_eval_counterfactuals.perturb_tim_payload_flip.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     """
     Deep-copy TiM compact JSON and negate finite numeric samples under ``tim_modality_outputs``.
 
@@ -37,6 +44,33 @@ def _negate_finite(x: Any) -> Any:
     if isinstance(x, (int, float)) and math.isfinite(float(x)):
         return float(-float(x))
     return x
+
+
+def _tim_compact_canonical_json(tim_compact: dict[str, Any]) -> str:
+    return json.dumps(tim_compact, sort_keys=True, default=str)
+
+
+def perturb_tim_compact_for_contrast(tim_compact: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Apply numeric flip; if the canonical JSON is unchanged (all-zero / empty modalities), jitter a
+    benign eval-only token under ``profile_analytics`` so prompts differ and contrastive scoring is meaningful.
+    """
+    flipped = flip_tim_modality_numeric_samples(tim_compact)
+    diag: dict[str, Any] = {"mode": "negate_modality_samples"}
+    if _tim_compact_canonical_json(flipped) != _tim_compact_canonical_json(tim_compact):
+        diag["json_changed"] = True
+        return flipped, diag
+
+    alt = copy.deepcopy(tim_compact) if isinstance(tim_compact, dict) else {}
+    pa = alt.get("profile_analytics")
+    if not isinstance(pa, dict):
+        pa = {}
+        alt["profile_analytics"] = pa
+    prev = float(pa.get("_eval_contrast_flip_token", 0.0) or 0.0)
+    pa["_eval_contrast_flip_token"] = prev + 1e-6
+    diag["mode"] = "profile_analytics_token_jitter"
+    diag["json_changed"] = _tim_compact_canonical_json(alt) != _tim_compact_canonical_json(tim_compact)
+    return alt, diag
 
 
 def contrast_caption_responsiveness(caption_a: str, caption_b: str) -> tuple[float, dict[str, Any]]:

@@ -4,6 +4,9 @@ Upload Patagonia eval output to a Hugging Face **dataset** repository.
 
 Uploads the full run folder, and when ``models/<name>/`` exists (finetune vs base splits),
 also uploads each subfolder to ``<run>/by_model/<name>/`` so both model outputs are easy to browse.
+
+Runs may include ``gold/*.json`` sidecars (SCL fractions, optional Dynamic World fetch metadata from
+``evaluate_vlm_patagonia_tim_e2e.py``); upload preserves the full tree.
 """
 
 from __future__ import annotations

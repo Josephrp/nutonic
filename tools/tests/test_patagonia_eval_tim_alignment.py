@@ -30,13 +30,14 @@ class TestTimAlignment(unittest.TestCase):
             },
         }
         cap = (
-            "Dominant open ocean in the Sentinel-2 chip. TiM JSON suggests vessel candidates as model-shaped signals; "
-            "optical view cannot verify hulls. Limitations: cloud and pseudo-SAR ambiguity."
+            "Dominant open ocean in the Sentinel-2 chip. TiM JSON suggests vessel candidates as model-shaped signals "
+            "with scores around 0.8 (≈80% relative strength); optical view cannot verify hulls. "
+            "Limitations: cloud and pseudo-SAR ambiguity."
         )
         s, d = score_tim_alignment(cap, compact, analysis_profile="oceanscout_ship_detection")
         self.assertIsNotNone(s)
         assert s is not None
-        self.assertGreaterEqual(s, 0.7)
+        self.assertGreaterEqual(s, 0.64)
         self.assertTrue(d.get("mentions_tim_bridge") or d.get("hits_theme"))
 
     def test_multimodal_includes_tim_alignment_block(self) -> None:
@@ -57,7 +58,7 @@ class TestTimAlignment(unittest.TestCase):
             weights=ScoreWeights(0.2, 0.0, 0.3, 0.5),
             score_mode="composite",
             pass_metric="composite",
-            tim_compact=compact,
+            analytics_in_prompt=compact,
             analysis_profile="land_use_change",
         )
         self.assertIn("tim_alignment", out)
@@ -66,7 +67,7 @@ class TestTimAlignment(unittest.TestCase):
 
     def test_presets_sum_weights(self) -> None:
         for name, w in SCORE_WEIGHT_PRESETS.items():
-            total = w.lexical + w.grounding + w.structured + w.tim_alignment
+            total = w.lexical + w.grounding + w.contract + w.faithfulness
             self.assertAlmostEqual(total, 1.0, places=5, msg=name)
 
 

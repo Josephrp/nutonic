@@ -9,7 +9,7 @@ import numpy as np
 # Minimum fraction of chip pixels for a semantic mask to yield any gold (avoid speckle).
 MIN_AREA_FRACTION = 0.015
 # Minimum component size; if all components are smaller, fall back to a bbox over the full mask.
-MIN_COMPONENT_FRACTION = 0.01
+MIN_COMPONENT_FRACTION = 0.006
 MAX_COMPONENTS_PER_ROLE = 2
 # Change masks are often sparse — slightly lower floor than single-date masks.
 DELTA_MIN_AREA_FRACTION = 0.008

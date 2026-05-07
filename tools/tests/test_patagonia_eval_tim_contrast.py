@@ -13,6 +13,7 @@ if str(REPO / "tools") not in sys.path:
 from patagonia_eval_tim_contrast import (  # noqa: E402
     contrast_caption_responsiveness,
     flip_tim_modality_numeric_samples,
+    perturb_tim_compact_for_contrast,
 )
 
 
@@ -30,6 +31,17 @@ class TestTimContrast(unittest.TestCase):
     def test_responsiveness_different_high(self) -> None:
         s, _ = contrast_caption_responsiveness("rising ndvi trend", "falling ndvi trend")
         self.assertGreaterEqual(s, 0.2)
+
+    def test_perturb_changes_empty_modalities(self) -> None:
+        import json
+
+        compact = {"tim_modality_outputs": {}, "profile_analytics": {}}
+        alt, diag = perturb_tim_compact_for_contrast(compact)
+        self.assertTrue(diag.get("json_changed"), diag)
+        self.assertNotEqual(
+            json.dumps(alt, sort_keys=True, default=str),
+            json.dumps(compact, sort_keys=True, default=str),
+        )
 
 
 if __name__ == "__main__":

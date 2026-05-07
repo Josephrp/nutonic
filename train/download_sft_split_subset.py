@@ -107,6 +107,9 @@ def _download_one(
             )
             return
         except Exception as e:
+            msg = str(e)
+            if "404" in msg or "Entry Not Found" in msg or "RemoteEntryNotFoundError" in msg:
+                raise FileNotFoundError(path_in_repo) from e
             if not _retryable(e) or attempt >= max_retries:
                 raise
             time.sleep(min(120.0, 2.0**attempt))
@@ -150,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     local_dir.mkdir(parents=True, exist_ok=True)
 
     split_jsonl = f"data/{args.split}.jsonl"
-    must_get = [split_jsonl, *[p for p in args.also_download if p]]
+    extras = [p for p in args.also_download if p and p.strip()]
+    must_get = [split_jsonl]
 
     print(f"Downloading split JSONL first: {split_jsonl}", flush=True)
     for pth in must_get:
@@ -163,12 +167,29 @@ def main(argv: list[str] | None = None) -> int:
             max_retries=max(1, int(args.max_retries)),
         )
 
+    # Optional extras: best-effort (datasets may not have dataset_infos.json, etc.)
+    for pth in extras:
+        try:
+            _download_one(
+                repo_id=args.repo_id,
+                revision=args.revision,
+                token=token,
+                local_dir=local_dir,
+                path_in_repo=pth,
+                max_retries=max(1, int(args.max_retries)),
+            )
+        except FileNotFoundError:
+            print(f"note: skipping missing optional file: {pth}", flush=True)
+
     jsonl_path = local_dir / split_jsonl
     if not jsonl_path.is_file():
         raise SystemExit(f"Failed to download {split_jsonl} to {jsonl_path}")
 
     # Parse referenced media
-    needed: set[str] = set(must_get)
+    needed: set[str] = {split_jsonl}
+    for pth in extras:
+        if (local_dir / pth).is_file():
+            needed.add(pth)
     rows_left = int(args.max_rows)
     n_rows = 0
     n_refs = 0

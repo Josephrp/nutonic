@@ -54,6 +54,7 @@ class NutonicServerClient:
         )
         self._session_token: str | None = None
         self._session_token_expires_at: float = 0.0
+        self._maybe_canonicalize_origin()
 
     @property
     def origin(self) -> str:
@@ -70,6 +71,39 @@ class NutonicServerClient:
         if not self._origin:
             raise ValueError("NUTONIC_SERVER_ORIGIN must be set")
         return self._origin + path
+
+    def _maybe_canonicalize_origin(self) -> None:
+        """
+        Hugging Face sometimes serves the same Space under multiple hostnames
+        (e.g. `nutonic-nutonic-game-server.hf.space` vs `NuTonic-nutonic-game-server.hf.space`)
+        which can end up on different replicas/config states.
+
+        If the origin responds with a `Link: <https://huggingface.co/spaces/ORG/SPACE>; rel="canonical"`,
+        rewrite the origin to the canonical `https://ORG-SPACE.hf.space`.
+        """
+        if not self._origin:
+            return
+        try:
+            r = self._client.get(self._origin + "/api/v1/health")
+        except Exception:
+            return
+        link = r.headers.get("link") or r.headers.get("Link")
+        if not link:
+            return
+        # Example: <https://huggingface.co/spaces/NuTonic/nutonic-game-server>;rel="canonical"
+        if "huggingface.co/spaces/" not in link or "rel=\"canonical\"" not in link:
+            return
+        try:
+            start = link.index("<") + 1
+            end = link.index(">", start)
+            url = link[start:end]
+            # https://huggingface.co/spaces/ORG/SPACE
+            parts = url.split("/")
+            org = parts[-2]
+            space = parts[-1]
+            self._origin = f"https://{org}-{space}.hf.space"
+        except Exception:
+            return
 
     def post_pro_job(self, body: ProJobCreateIn) -> ProJobCreateOut:
         r = self._request_with_backoff(

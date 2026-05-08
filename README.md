@@ -2,9 +2,15 @@
 
 **NU:TONIC is a cross-platform Earth intelligence prototype that combines satellite imagery, temporal AI, and vision-language models to help people understand what is changing on the planet.**
 
+## Summary
+
+**NU:TONIC combines temporal satellite memory with visual-language reasoning so AI can not only see Earth from space, but explain what is changing and help people act sooner.**
+
+## Try it Out
+
 The easiest way to try the implementation is to use the build artifacts produced by GitHub Actions: Android APKs, iOS/TestFlight builds, desktop installers, and web bundles. The codebase also includes the satellite inference services behind the demo: a specialist LFM-VL satellite caption model, TerraMind TiM temporal reasoning, and PRO materialization workers that turn map selections into imagery and model-ready bundles.
 
-For a public overview of the Patagonia satellite benchmark and competition narrative, start with [`Patagonia_Eval/patagonia_eval_runs/eval.md`](Patagonia_Eval/patagonia_eval_runs/eval.md).
+For an overview of the Patagonia satellite benchmark and competition narrative, start with reading our [Presentation](https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth) .
 
 ## What NU:TONIC Demonstrates
 
@@ -118,7 +124,7 @@ Artifact names to look for:
 - `web-js-productionExecutable`
 - `ios-ipa`
 
-GitHub Actions artifacts may require being signed in to GitHub and may expire according to repository retention settings.
+GitHub Actions artifacts may require being signed in to GitHub and may expire.
 
 ### TestFlight
 
@@ -128,15 +134,13 @@ iOS public testing uses Apple TestFlight:
 2. Install Apple’s **TestFlight** app.
 3. Accept the invite and install the NU:TONIC iOS build.
 
-Maintainers can trigger [`ios-testflight.yml`](.github/workflows/ios-testflight.yml) directly, or use the release workflow with `upload_ios_to_testflight=true`. Both paths require Apple signing and App Store Connect secrets configured in GitHub Actions.
+## The Patagonia Story
 
-## Competition Story
+what happens when satellite imagery is paired with a model that remembers time ?
 
-The Patagonia work is the clearest competition-facing example. It asks what happens when satellite imagery is paired with a model that remembers time.
+Adding temporal context improved average composite performance for both the base model and the satellite fine-tune. The satellite fine-tune showed the larger lift from the temporal context. This supports the central product claim: **Earth observation becomes more useful when a model can reason over change, not just describe a still image.**
 
-In the main Patagonia run, adding temporal context improved average composite performance for both the base model and the satellite fine-tune. The satellite fine-tune showed the larger lift from the temporal context. This supports the central product claim: **Earth observation becomes more useful when a model can reason over change, not just describe a still image.**
-
-Read the full public-facing write-up in [`Patagonia_Eval/patagonia_eval_runs/eval.md`](Patagonia_Eval/patagonia_eval_runs/eval.md).
+Read the full public-facing write-up in [Teaching Satellites to Remember: Patagonia as a Testbed for Predictive Earth Intelligence](https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth) .
 
 ## Repository Guide
 
@@ -152,27 +156,17 @@ Read the full public-facing write-up in [`Patagonia_Eval/patagonia_eval_runs/eva
 | [`data/scripts/`](data/scripts/) | Dataset and satellite training-data generation pipelines. |
 | [`server/`](server/) | Thin FastAPI orchestration layer for hosted demos and app data. |
 
-## For Judges and Reviewers
+### Recommended review path:
 
-Recommended review path:
-
-1. Read the public article: [`Patagonia_Eval/patagonia_eval_runs/eval.md`](Patagonia_Eval/patagonia_eval_runs/eval.md).
+1. Read the public article: https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth .
 2. Install the app using the platform artifact table above.
 3. Inspect the inference architecture in [`inference/README.md`](inference/README.md).
-4. Review the benchmark artifacts under [`Patagonia_Eval/patagonia_eval_runs/`](Patagonia_Eval/patagonia_eval_runs/).
+4. Review the benchmark artifacts.
 5. If evaluating deployability, inspect GitHub Actions artifacts and the workflows under [`.github/workflows/`](.github/workflows/).
 
 ## For Developers
-
-Local development is optional for competition use, but supported:
 
 - Client build/run notes: [`nutonic/README.md`](nutonic/README.md)
 - Inference services: [`inference/README.md`](inference/README.md)
 - Hugging Face Space deploys: [`tools/hf_deploy/README.md`](tools/hf_deploy/README.md)
 - Hugging Face Jobs: [`tools/hf_jobs/README.md`](tools/hf_jobs/README.md)
-- Contribution and quality checks: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Project rules and implementation conventions: [`rules/README.md`](rules/README.md)
-
-## One-Line Summary
-
-**NU:TONIC combines temporal satellite memory with visual-language reasoning so AI can not only see Earth from space, but explain what is changing and help people act sooner.**

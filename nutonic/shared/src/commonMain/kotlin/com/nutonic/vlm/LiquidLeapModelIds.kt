@@ -19,4 +19,10 @@ internal object LiquidLeapModelIds {
             record.revision.uppercase().contains("FP16") -> "F16"
             else -> "Q8_0"
         }
+
+    fun manifestUrl(record: ProVlmCacheRecord): String {
+        val modelName = modelName(record)
+        val quantization = quantization(record)
+        return "https://huggingface.co/LiquidAI/LeapBundles/resolve/main/$modelName-GGUF/$quantization.json"
+    }
 }

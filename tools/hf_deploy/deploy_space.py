@@ -57,6 +57,11 @@ SERVICE_SPECS: dict[str, dict[str, Path]] = {
         "source_dir": REPO_ROOT / "inference" / "pro_materialization_service",
         "readme_template": REPO_ROOT / "tools" / "hf_deploy" / "templates" / "readme_pro_materialization.md",
     },
+    "pro_gradio_demo": {
+        "source_dir": REPO_ROOT / "inference" / "pro_gradio_demo",
+        "readme_template": REPO_ROOT / "tools" / "hf_deploy" / "templates" / "readme_pro_gradio_demo.md",
+        "gradio_extras": ["serve"],
+    },
 }
 
 SERVICE_PROFILE = {
@@ -66,6 +71,7 @@ SERVICE_PROFILE = {
     "terramind_tim": PROFILES_DIR / "terramind_tim.yaml",
     "game_server": PROFILES_DIR / "game_server.yaml",
     "pro_materialization": PROFILES_DIR / "pro_materialization.yaml",
+    "pro_gradio_demo": PROFILES_DIR / "pro_gradio_demo.yaml",
 }
 
 

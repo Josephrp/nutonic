@@ -12,12 +12,13 @@ actual class ProVlmModelCacheWriter actual constructor(
     private val modelBundleId: String,
     private val revision: String,
 ) {
+    private val cacheFileName = "${modelBundleId.safeCacheSegment()}-${revision.safeCacheSegment()}.bundle"
     private val finalPath: Path =
         Path.of(
             System.getProperty("user.home"),
             ".nutonic",
             "pro-vlm",
-            "$modelBundleId-$revision.bundle",
+            cacheFileName,
         )
     private var tmpPath: Path? = null
     private var out: java.io.OutputStream? = null
@@ -78,7 +79,10 @@ actual fun proVlmVerifiedBundleExists(record: ProVlmCacheRecord): Boolean =
                 System.getProperty("user.home"),
                 ".nutonic",
                 "pro-vlm",
-                "${record.modelBundleId}-${record.revision}.bundle",
+                "${record.modelBundleId.safeCacheSegment()}-${record.revision.safeCacheSegment()}.bundle",
             )
         Files.isRegularFile(path) && Files.size(path) > 0L
     }.getOrDefault(false)
+
+private fun String.safeCacheSegment(): String =
+    replace(Regex("""[\\/:*?"<>|]+"""), "_")

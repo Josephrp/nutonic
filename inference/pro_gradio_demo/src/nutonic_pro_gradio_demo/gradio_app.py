@@ -1,0 +1,332 @@
+from __future__ import annotations
+
+import time
+from typing import Any
+
+import gradio as gr
+
+from nutonic_pro_gradio_demo.client import NutonicServerClient
+from nutonic_pro_gradio_demo.models import ProJobCreateIn, ProJobStatusOut
+from nutonic_pro_gradio_demo.image_fetch import fetch_vlm_images
+from nutonic_pro_gradio_demo.render import decode_image, draw_boxes
+from nutonic_pro_gradio_demo.settings import get_settings
+from nutonic_pro_gradio_demo.vlm_parse import parse_vlm_output
+from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, infer_caption_and_boxes
+
+
+def _bbox_half_km_for_zoom(zoom: int) -> float:
+    z = int(zoom)
+    z = min(18, max(1, z))
+    if z >= 16:
+        return 0.5
+    if z >= 15:
+        return 1.0
+    if z >= 14:
+        return 2.0
+    if z >= 13:
+        return 3.0
+    if z >= 12:
+        return 5.0
+    if z >= 11:
+        return 8.0
+    if z >= 10:
+        return 12.0
+    if z >= 9:
+        return 20.0
+    if z >= 8:
+        return 35.0
+    if z >= 7:
+        return 60.0
+    if z >= 6:
+        return 100.0
+    return 250.0
+
+
+def _zoom_for_bbox_half_km(bbox_half_km: float) -> int:
+    v = float(bbox_half_km)
+    if v <= 0.5:
+        return 16
+    if v <= 1.0:
+        return 15
+    if v <= 2.0:
+        return 14
+    if v <= 3.0:
+        return 13
+    if v <= 5.0:
+        return 12
+    if v <= 8.0:
+        return 11
+    if v <= 12.0:
+        return 10
+    if v <= 20.0:
+        return 9
+    if v <= 35.0:
+        return 8
+    if v <= 60.0:
+        return 7
+    if v <= 100.0:
+        return 6
+    return 5
+
+
+def _run_job(
+    *,
+    center_lat: float,
+    center_lon: float,
+    mapbox_zoom: int,
+    analysis_profile: str,
+    enable_tim: bool,
+    tim_branch: str,
+    sentinel_fetch_mode: str,
+    vlm_contract_id: str,
+    datetime_interval: str | None,
+    scene_id_t0: str | None,
+    scene_id_t1: str | None,
+    scene_id_t2: str | None,
+) -> dict[str, Any]:
+    settings = get_settings()
+    bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
+    client = NutonicServerClient(settings)
+    try:
+        created = client.post_pro_job(
+            ProJobCreateIn(
+                center_lat=center_lat,
+                center_lon=center_lon,
+                bbox_half_km=bbox_half_km,
+                mapbox_zoom=mapbox_zoom,
+                analysis_profile=analysis_profile,  # type: ignore[arg-type]
+                enable_tim=enable_tim,
+                tim_branch=tim_branch,  # type: ignore[arg-type]
+                sentinel_fetch_mode=sentinel_fetch_mode,  # type: ignore[arg-type]
+                vlm_contract_id=vlm_contract_id,
+                datetime_interval=datetime_interval or None,
+                scene_id_t0=scene_id_t0 or None,
+                scene_id_t1=scene_id_t1 or None,
+                scene_id_t2=scene_id_t2 or None,
+            )
+        )
+        job_id = created.job_id
+        last: ProJobStatusOut | None = None
+        started = time.time()
+        while True:
+            last = client.get_pro_job(job_id)
+            if last.status in {"completed", "failed", "cancelled"}:
+                break
+            if time.time() - started > settings.poll_timeout_seconds:
+                raise TimeoutError(f"Timed out polling PRO job {job_id}")
+            time.sleep(max(0.2, settings.poll_interval_seconds))
+        return last.model_dump(mode="json") if last else {"job_id": job_id, "status": "unknown"}
+    finally:
+        client.close()
+
+def _run_full_pipeline(
+    *,
+    center_lat: float,
+    center_lon: float,
+    mapbox_zoom: int,
+    analysis_profile: str,
+    enable_tim: bool,
+    tim_branch: str,
+    sentinel_fetch_mode: str,
+    vlm_contract_id: str,
+    datetime_interval: str | None,
+    scene_id_t0: str | None,
+    scene_id_t1: str | None,
+    scene_id_t2: str | None,
+) -> tuple[dict[str, Any], Any, Any, dict[str, Any]]:
+    settings = get_settings()
+    bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
+    client = NutonicServerClient(settings)
+    try:
+        created = client.post_pro_job(
+            ProJobCreateIn(
+                center_lat=center_lat,
+                center_lon=center_lon,
+                bbox_half_km=bbox_half_km,
+                mapbox_zoom=mapbox_zoom,
+                analysis_profile=analysis_profile,  # type: ignore[arg-type]
+                enable_tim=enable_tim,
+                tim_branch=tim_branch,  # type: ignore[arg-type]
+                sentinel_fetch_mode=sentinel_fetch_mode,  # type: ignore[arg-type]
+                vlm_contract_id=vlm_contract_id,
+                datetime_interval=datetime_interval or None,
+                scene_id_t0=scene_id_t0 or None,
+                scene_id_t1=scene_id_t1 or None,
+                scene_id_t2=scene_id_t2 or None,
+            )
+        )
+        job = client.poll_until_terminal(
+            job_id=created.job_id,
+            poll_interval_seconds=settings.poll_interval_seconds,
+            poll_timeout_seconds=settings.poll_timeout_seconds,
+        )
+        if job.status != "completed":
+            return job.model_dump(mode="json"), None, None, {"error": f"Job ended with status {job.status}"}
+
+        images = fetch_vlm_images(client=client, job=job)
+        if not images:
+            return job.model_dump(mode="json"), None, None, {"error": "No vlm_image_set images found on job"}
+
+        # Choose the first image as the main VLM input for now.
+        main = images[0]
+        pil = decode_image(main.bytes)
+
+        prompt_injection = (job.on_device_payload.vlm_prompt_injection if job.on_device_payload else None) or {}
+        prompt = (
+            "NU:TONIC PRO vision analysis. Describe the provided EO image using visible evidence.\n"
+            "Return a concise caption followed by strict JSON with key `boxes`.\n"
+            "Each box must be `{label,bbox,confidence}` with bbox normalized [x1,y1,x2,y2] in 0..1.\n\n"
+            f"CONTEXT_JSON:\n{prompt_injection}"
+        )
+
+        t0 = time.time()
+        loaded = ensure_model_loaded(client=client, settings=settings)
+        raw_text = infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
+        t1 = time.time()
+
+        parsed = parse_vlm_output(
+            raw_text=raw_text,
+            model_bundle_id=loaded.manifest.model_bundle_id,
+            revision=loaded.manifest.revision,
+            source="hf_space_vlm",
+        )
+        annotated = draw_boxes(pil, parsed.boxes)
+        meta = {
+            "inference_seconds": round(t1 - t0, 3),
+            "model_bundle_id": loaded.manifest.model_bundle_id,
+            "revision": loaded.manifest.revision,
+        }
+        return job.model_dump(mode="json"), pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
+    finally:
+        client.close()
+
+
+def build_demo() -> gr.Blocks:
+    settings = get_settings()
+    with gr.Blocks(title="NU:TONIC PRO (ZeroGPU demo)") as demo:
+        if settings.require_server_origin and not settings.nutonic_server_origin.strip():
+            gr.Markdown(
+                "## Configuration required\n\n"
+                "Set the Space variable `NUTONIC_SERVER_ORIGIN` to the game server base URL "
+                "(must expose `/api/v1/pro/jobs` and `/api/v1/pro/vlm/model-manifest`)."
+            )
+            return demo
+        gr.Markdown(
+            "## NU:TONIC PRO — ZeroGPU demo\n\n"
+            "This Space submits a PRO job to the configured game server, polls it to completion, "
+            "then runs the final VLM locally (Transformers) on ZeroGPU.\n\n"
+            f"**Server origin:** `{settings.nutonic_server_origin or '(unset)'}`"
+        )
+
+        with gr.Row():
+            center_lat = gr.Number(label="Center latitude", value=47.6062)
+            center_lon = gr.Number(label="Center longitude", value=-122.3321)
+            mapbox_zoom = gr.Slider(label="Zoom (maps to AOI radius)", minimum=1, maximum=18, step=1, value=12)
+
+        bbox_preview = gr.Number(label="AOI radius km (derived from zoom)", value=_bbox_half_km_for_zoom(12), interactive=False)
+
+        def _update_bbox(z: int) -> float:
+            return _bbox_half_km_for_zoom(int(z))
+
+        mapbox_zoom.change(fn=_update_bbox, inputs=mapbox_zoom, outputs=bbox_preview)
+
+        with gr.Row():
+            analysis_profile = gr.Dropdown(
+                label="Analysis profile",
+                choices=["brief_only", "wildfire", "oceanscout_ship_detection", "land_use_change", "flood_pulse"],
+                value="brief_only",
+            )
+            enable_tim = gr.Checkbox(label="Enable TiM", value=False)
+            tim_branch = gr.Dropdown(label="TiM branch", choices=["S2L2A_full", "RGB_mapbox"], value="S2L2A_full")
+
+        with gr.Row():
+            sentinel_fetch_mode = gr.Dropdown(
+                label="Sentinel fetch mode",
+                choices=["TERRAMIND_SPECTRAL", "FULL_STAC"],
+                value="TERRAMIND_SPECTRAL",
+            )
+            vlm_contract_id = gr.Textbox(label="VLM contract id", value="nutonic.pro.vlm.v1_512_s2_only")
+
+        with gr.Accordion("Advanced provenance pinning", open=False):
+            datetime_interval = gr.Textbox(label="Datetime interval (optional)", value="")
+            with gr.Row():
+                scene_id_t0 = gr.Textbox(label="scene_id_t0 (optional)", value="")
+                scene_id_t1 = gr.Textbox(label="scene_id_t1 (optional)", value="")
+                scene_id_t2 = gr.Textbox(label="scene_id_t2 (optional)", value="")
+
+        run_job = gr.Button("Run PRO job (upstream)", variant="primary")
+        job_out = gr.JSON(label="PRO job status (completed job)")
+
+        run_job.click(
+            fn=lambda *args: _run_job(
+                center_lat=args[0],
+                center_lon=args[1],
+                mapbox_zoom=args[2],
+                analysis_profile=args[3],
+                enable_tim=args[4],
+                tim_branch=args[5],
+                sentinel_fetch_mode=args[6],
+                vlm_contract_id=args[7],
+                datetime_interval=args[8],
+                scene_id_t0=args[9],
+                scene_id_t1=args[10],
+                scene_id_t2=args[11],
+            ),
+            inputs=[
+                center_lat,
+                center_lon,
+                mapbox_zoom,
+                analysis_profile,
+                enable_tim,
+                tim_branch,
+                sentinel_fetch_mode,
+                vlm_contract_id,
+                datetime_interval,
+                scene_id_t0,
+                scene_id_t1,
+                scene_id_t2,
+            ],
+            outputs=job_out,
+            api_name="run_pro_job",
+        )
+
+        gr.Markdown("## Full pipeline (upstream job + local VLM)")
+        run_all = gr.Button("Run full pipeline", variant="primary")
+        raw_img = gr.Image(label="Raw VLM image", type="pil")
+        annotated_img = gr.Image(label="Annotated output", type="pil")
+        final_json = gr.JSON(label="Final outputs (VLM result + meta)")
+
+        run_all.click(
+            fn=lambda *args: _run_full_pipeline(
+                center_lat=args[0],
+                center_lon=args[1],
+                mapbox_zoom=args[2],
+                analysis_profile=args[3],
+                enable_tim=args[4],
+                tim_branch=args[5],
+                sentinel_fetch_mode=args[6],
+                vlm_contract_id=args[7],
+                datetime_interval=args[8],
+                scene_id_t0=args[9],
+                scene_id_t1=args[10],
+                scene_id_t2=args[11],
+            ),
+            inputs=[
+                center_lat,
+                center_lon,
+                mapbox_zoom,
+                analysis_profile,
+                enable_tim,
+                tim_branch,
+                sentinel_fetch_mode,
+                vlm_contract_id,
+                datetime_interval,
+                scene_id_t0,
+                scene_id_t1,
+                scene_id_t2,
+            ],
+            outputs=[job_out, raw_img, annotated_img, final_json],
+            api_name="run_full_pipeline",
+        )
+    return demo
+

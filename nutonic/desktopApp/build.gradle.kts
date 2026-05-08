@@ -1,7 +1,4 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import org.gradle.api.tasks.JavaExec
-import org.gradle.jvm.toolchain.JavaLanguageVersion
-import org.gradle.jvm.toolchain.JavaToolchainService
 
 plugins {
     kotlin("multiplatform")
@@ -13,7 +10,6 @@ val nutonicServerOrigin = (project.findProperty("nutonicServerOrigin") as String
 
 kotlin {
     jvm()
-    jvmToolchain(21)
     sourceSets {
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
@@ -25,6 +21,7 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.nutonic.MainKt"
+        javaHome = providers.gradleProperty("nutonicDesktopJavaHome").getOrElse(System.getProperty("java.home"))
         // Large PRO VLM bundles + Compose Multiplatform need headroom beyond the default JVM heap.
         jvmArgs("-Xmx4g")
         jvmArgs("--enable-native-access=ALL-UNNAMED")
@@ -60,17 +57,5 @@ compose.desktop {
         buildTypes.release.proguard {
             configurationFiles.from(project.file("rules.pro"))
         }
-    }
-}
-
-// Ensure `:desktopApp:run` uses a stable toolchain JDK (not Android Studio's JBR).
-val javaToolchains = project.extensions.getByType(JavaToolchainService::class.java)
-tasks.withType(JavaExec::class.java).configureEach {
-    if (name == "run") {
-        javaLauncher.set(
-            javaToolchains.launcherFor {
-                languageVersion.set(JavaLanguageVersion.of(21))
-            },
-        )
     }
 }

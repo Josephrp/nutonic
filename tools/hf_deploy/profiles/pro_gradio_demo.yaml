@@ -1,0 +1,22 @@
+# PRO Gradio demo (Tonic / ZeroGPU).
+#
+# This Space orchestrates PRO jobs against the game server, then runs the final VLM
+# locally in the Space (Transformers + ZeroGPU).
+hf_space_owner_org: Tonic
+
+space_hardware: zero-a10g
+space_sdk: gradio
+sleep_time_seconds: -1
+
+variables:
+  PORT: "7860"
+  # Base URL of the game server that exposes `/api/v1/pro/jobs` and `/api/v1/pro/vlm/model-manifest`.
+  # Matches the current CI deployment of `NuTonic/nutonic-game-server` (see `tools/hf_deploy/profiles/game_server.yaml`).
+  NUTONIC_SERVER_ORIGIN: "https://NuTonic-nutonic-game-server.hf.space"
+  # Polling and runtime controls (non-secret).
+  NUTONIC_HTTP_TIMEOUT_SECONDS: "60"
+  NUTONIC_PRO_POLL_INTERVAL_SECONDS: "2"
+  NUTONIC_PRO_POLL_TIMEOUT_SECONDS: "240"
+
+secrets: {}
+

@@ -1,4 +1,5 @@
 import java.io.File
+
 plugins {
     kotlin("multiplatform")
     kotlin("plugin.compose")
@@ -39,6 +40,7 @@ kotlin {
         }
 
         val ktorVersion = "3.0.3"
+        val leapVersion = "0.10.2"
 
         commonMain.dependencies {
             implementation(compose.runtime)
@@ -68,8 +70,8 @@ kotlin {
 
         androidMain.dependencies {
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-            implementation("ai.liquid.leap:leap-sdk:0.10.2")
-            implementation("ai.liquid.leap:leap-model-downloader:0.10.2")
+            implementation("ai.liquid.leap:leap-sdk:$leapVersion")
+            implementation("ai.liquid.leap:leap-model-downloader:$leapVersion")
             implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
             api("androidx.activity:activity-compose:1.13.0")
             api("androidx.appcompat:appcompat:1.7.1")
@@ -100,7 +102,7 @@ kotlin {
 
         val desktopMain by getting
         desktopMain.dependencies {
-            implementation("ai.liquid.leap:leap-sdk-jvm:0.10.2")
+            implementation("ai.liquid.leap:leap-sdk-jvm:$leapVersion")
             implementation("io.ktor:ktor-client-cio:$ktorVersion")
             runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
             implementation(compose.desktop.common)

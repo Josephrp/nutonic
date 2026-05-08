@@ -45,7 +45,7 @@ private fun cachePath(record: ProVlmCacheRecord): Path =
         System.getProperty("user.home"),
         ".nutonic",
         "pro-vlm",
-        "${record.modelBundleId}-${record.revision}.bundle",
+        "${record.modelBundleId.safeCacheSegment()}-${record.revision.safeCacheSegment()}.bundle",
     )
 
 private fun ByteArray.sha256HexJvm(): String =
@@ -53,3 +53,6 @@ private fun ByteArray.sha256HexJvm(): String =
         .getInstance("SHA-256")
         .digest(this)
         .joinToString("") { b -> (b.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+private fun String.safeCacheSegment(): String =
+    replace(Regex("""[\\/:*?"<>|]+"""), "_")

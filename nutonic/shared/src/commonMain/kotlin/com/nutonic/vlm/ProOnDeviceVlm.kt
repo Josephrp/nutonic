@@ -134,6 +134,7 @@ class ProOnDeviceVlmCoordinator(
 
         var model: ProVlmCacheRecord? = null
         if (failure == null) {
+            onStatus(ProVlmStatus.LoadingModel)
             when (val prepared = prepareModel(payload?.modelBundleId, onStatus)) {
                 is ApiResult.Ok -> model = prepared.value
                 is ApiResult.HttpFailure -> failure = prepared.userMessage
@@ -188,7 +189,6 @@ class ProOnDeviceVlmCoordinator(
                             null
                         },
                 )
-            onStatus(ProVlmStatus.LoadingModel)
             onStatus(ProVlmStatus.Inferencing)
             when (val result = engine.run(input)) {
                 is ProOnDeviceVlmRunResult.Ok -> {

@@ -273,7 +273,8 @@ jobs:
         run: |
           pip install -U pip
           pip install pytest
-          pip install -e "./inference/pro_gradio_demo"
+          # The demo Space imports Gradio; install the `serve` extra in CI.
+          pip install -e "./inference/pro_gradio_demo[serve]"
           python -m pytest inference/pro_gradio_demo/tests -q
 
   deploy-streetview-pano:

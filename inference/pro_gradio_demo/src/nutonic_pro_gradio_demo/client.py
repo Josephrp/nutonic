@@ -75,7 +75,7 @@ class NutonicServerClient:
             raise ValueError("NUTONIC_SERVER_ORIGIN must be set")
         return self._origin + path
 
-    def _maybe_canonicalize_origin(self, *, force: bool = False) -> None:
+    def _maybe_canonicalize_origin(self, *, force: bool = False) -> str | None:
         """
         Hugging Face sometimes serves the same Space under multiple hostnames
         (e.g. `nutonic-nutonic-game-server.hf.space` vs `NuTonic-nutonic-game-server.hf.space`)
@@ -85,22 +85,18 @@ class NutonicServerClient:
         rewrite the origin to the canonical `https://ORG-SPACE.hf.space`.
         """
         if not self._origin:
-            return
-        # Skip repeated discovery unless forced (used as a recovery path on 404).
-        if not force and "huggingface.co/spaces/" not in (self._origin or ""):
-            # Still allow normal discovery for hf.space origins.
-            pass
+            return None
         try:
             # Use the same retry/backoff behavior as other upstream calls.
             r = self._request_with_backoff("GET", "/api/v1/health", require_bearer=False, max_retries=3)
         except Exception:
-            return
+            return None
         link = r.headers.get("link") or r.headers.get("Link")
         if not link:
-            return
+            return None
         # Example: <https://huggingface.co/spaces/NuTonic/nutonic-game-server>;rel="canonical"
         if "huggingface.co/spaces/" not in link or "rel=\"canonical\"" not in link:
-            return
+            return None
         try:
             start = link.index("<") + 1
             end = link.index(">", start)
@@ -109,9 +105,12 @@ class NutonicServerClient:
             parts = url.split("/")
             org = parts[-2]
             space = parts[-1]
-            self._origin = f"https://{org}-{space}.hf.space"
+            canonical = f"https://{org}-{space}.hf.space"
+            if force or (canonical and canonical != self._origin):
+                self._origin = canonical
+            return canonical
         except Exception:
-            return
+            return None
 
     def post_pro_job(self, body: ProJobCreateIn, *, bearer_token: str | None = None) -> ProJobCreateOut:
         r = self._request_with_backoff(
@@ -132,11 +131,41 @@ class NutonicServerClient:
             # HF Spaces sometimes route different hostnames to different replicas/config states.
             # If a job is created on one hostname but polled on another, we can see a 404.
             if e.response is not None and e.response.status_code == 404:
-                before = self._origin
-                self._maybe_canonicalize_origin(force=True)
-                if self._origin and self._origin != before:
-                    r2 = self._request_with_backoff("GET", path, require_bearer=True, bearer_token=bearer_token)
-                    return ProJobStatusOut.model_validate(r2.json())
+                candidates: list[str] = []
+                if self._origin:
+                    candidates.append(self._origin)
+
+                # 1) Force canonical discovery and try the canonical host.
+                canonical = self._maybe_canonicalize_origin(force=True)
+                if canonical:
+                    candidates.append(canonical)
+
+                # 2) If we're on the all-lowercase org hostname, also try the mixed-case org variant.
+                # This is a pragmatic compatibility shim for the specific Space naming pattern we use.
+                if self._origin and self._origin.startswith("https://nutonic-"):
+                    candidates.append("https://NuTonic-nutonic-game-server.hf.space")
+
+                # Retry once per candidate, using absolute URLs so we don't rely on mutated origin.
+                seen: set[str] = set()
+                for origin in candidates:
+                    origin = (origin or "").rstrip("/")
+                    if not origin or origin in seen:
+                        continue
+                    seen.add(origin)
+                    try:
+                        r2 = self._request_with_backoff(
+                            "GET",
+                            origin + path,
+                            absolute=True,
+                            require_bearer=True,
+                            bearer_token=bearer_token,
+                            max_retries=1,
+                        )
+                        return ProJobStatusOut.model_validate(r2.json())
+                    except httpx.HTTPStatusError as e2:
+                        if e2.response is not None and e2.response.status_code == 404:
+                            continue
+                        raise
             raise
 
     def get_artifact(self, *, job_id: str, artifact_id: str, bearer_token: str | None = None) -> bytes:

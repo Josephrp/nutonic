@@ -270,8 +270,15 @@ def _run_full_pipeline(
         return job.model_dump(mode="json"), pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
     except httpx.HTTPStatusError as e:
         resp = e.response
-        # If the game server is rate-limiting auth/token, bypass orchestrator immediately.
-        if settings.enable_direct_worker_fallback and resp is not None and resp.status_code == 429:
+        # The upstream game server can be degraded in two ways:
+        # - 429: rate-limiting (often on /auth/token)
+        # - 404 after POST 200: non-sticky routing / per-replica job state (job-id not found when polling)
+        # In both cases, bypass orchestrator and call workers directly.
+        if (
+            settings.enable_direct_worker_fallback
+            and resp is not None
+            and resp.status_code in {404, 429, 502, 503, 504}
+        ):
             return _run_via_direct_workers(
                 client=client,
                 center_lat=center_lat,
@@ -292,7 +299,7 @@ def _run_full_pipeline(
             "error": "upstream_http_error",
             "status_code": resp.status_code if resp is not None else None,
             "detail": str(e),
-            "hint": "If this is 429, the upstream Space is rate-limiting. Wait and retry; consider adding auth later.",
+            "hint": "If this is 429, the upstream Space is rate-limiting. If this is 404 after job creation, the job API is non-sticky; the demo can bypass it via direct-worker mode.",
         }
         return {"error": err}, None, None, err
     finally:

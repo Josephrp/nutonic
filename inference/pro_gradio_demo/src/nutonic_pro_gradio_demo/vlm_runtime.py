@@ -129,34 +129,34 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
         ) from e
     # `device_map="auto"` requires `accelerate`. If it's missing in the Space runtime,
     # fall back to default device placement (ZeroGPU will still provide CUDA when available).
+    model_kwargs: dict[str, Any] = {
+        "torch_dtype": "auto",
+        "trust_remote_code": True,
+    }
     try:
         import accelerate  # noqa: F401
 
-        device_map: str | None = "auto"
+        model_kwargs["device_map"] = "auto"
     except Exception:
-        device_map = None
+        # IMPORTANT: do not pass `device_map=None` at all; `transformers` treats the presence
+        # of the kwarg as opting into the accelerate integration path.
+        pass
 
     if AutoModelForVision2Seq is not None:
         try:
             model = AutoModelForVision2Seq.from_pretrained(
                 str(model_dir),
-                torch_dtype="auto",
-                device_map=device_map,
-                trust_remote_code=True,
+                **model_kwargs,
             )
         except Exception:
             model = AutoModel.from_pretrained(
                 str(model_dir),
-                torch_dtype="auto",
-                device_map=device_map,
-                trust_remote_code=True,
+                **model_kwargs,
             )
     else:
         model = AutoModel.from_pretrained(
             str(model_dir),
-            torch_dtype="auto",
-            device_map=device_map,
-            trust_remote_code=True,
+            **model_kwargs,
         )
     model.eval()
     return model, processor

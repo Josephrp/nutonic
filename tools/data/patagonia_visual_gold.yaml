@@ -1,0 +1,10 @@
+# Human-authored visual-gold metadata keyed by ``EvalTarget.target_id``.
+# SCL-derived bounding boxes remain the default; this file only augments scoring.
+
+targets:
+  pat_namuncura_burdwood:
+    no_local_features: true
+    notes: "Offshore open-ocean MPA; abstain-from-boxes is the correct grounding behavior."
+  pat_yaganes_mpa:
+    no_local_features: true
+    notes: "Uniform open-water tile at coarse zoom; no discrete SCL components to localize."

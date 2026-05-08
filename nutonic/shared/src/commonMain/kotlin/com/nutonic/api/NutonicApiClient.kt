@@ -8,11 +8,18 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.delay
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.random.Random
 
 /**
  * Thin REST client for `docs/openapi.yaml` (`IMP-070`).
@@ -85,12 +92,33 @@ class NutonicApiClient(
             header("Authorization", "Bearer $bearerAccessToken")
         }
 
-    suspend fun getLeaderboard(mapId: String): ApiResult<List<CommunityLeaderboardRow>> = getJson(leaderboardUrl(mapId))
+    suspend fun getLeaderboard(
+        mapId: String,
+        /** When `"ranked"`, same aggregate as [getRankedLeaderboard] (`?tier=ranked`). */
+        tier: String? = null,
+    ): ApiResult<List<CommunityLeaderboardRow>> {
+        val q =
+            tier
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { "?tier=${it.encodeURLParameter()}" }
+                .orEmpty()
+        return getJson(leaderboardUrl(mapId) + q)
+    }
+
+    /** Server-verified ranked aggregate (`GET /api/v1/maps/{map_id}/leaderboard/ranked`, `docs/RANKED-MODE.md` §4). */
+    suspend fun getRankedLeaderboard(mapId: String): ApiResult<List<CommunityLeaderboardRow>> =
+        getJson(
+            originTrimmed.trimEnd('/') +
+                "/api/v1/maps/" +
+                encodePathSegment(mapId) +
+                "/leaderboard/ranked",
+        )
 
     /** IMP-081: fetch versioned still bytes (`GET /api/v1/bundles/{bundle_id}`). */
     suspend fun getBundleStill(bundleId: String): ApiResult<ByteArray> =
         try {
-            val url = "${originTrimmed}/api/v1/bundles/${encodePathSegment(bundleId)}"
+            val url = "$originTrimmed/api/v1/bundles/${encodePathSegment(bundleId)}"
             val response: HttpResponse = http.get(url)
             when {
                 response.status.isSuccess() -> ApiResult.Ok(response.body())
@@ -139,6 +167,7 @@ class NutonicApiClient(
                 http.post(
                     originTrimmed.trimEnd('/') + "/api/v1/maps/" + encodePathSegment(mapId) + "/guesses/record",
                 ) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     if (!idempotencyKey.isNullOrBlank()) {
                         header("Idempotency-Key", idempotencyKey)
@@ -161,6 +190,7 @@ class NutonicApiClient(
         try {
             val response: HttpResponse =
                 http.post(leaderboardUrl(mapId)) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     if (!idempotencyKey.isNullOrBlank()) {
                         header("Idempotency-Key", idempotencyKey)
@@ -181,6 +211,7 @@ class NutonicApiClient(
         try {
             val response: HttpResponse =
                 http.post(originTrimmed.trimEnd('/') + "/api/v1/ranked/rounds/start") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     setBody(body)
                 }
@@ -205,6 +236,7 @@ class NutonicApiClient(
                     "/submit"
             val response: HttpResponse =
                 http.post(url) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     header("Idempotency-Key", idempotencyKey)
                     setBody(body)
@@ -229,10 +261,320 @@ class NutonicApiClient(
                     "/forfeit-ranked-integrity"
             val response: HttpResponse =
                 http.post(url) {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
                     header("Authorization", "Bearer $bearerAccessToken")
                     setBody(body)
                 }
             decodeResponse(response)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun postProJob(
+        body: ProJobCreateIn,
+        bearerAccessToken: String,
+    ): ApiResult<ProJobCreateOut> =
+        try {
+            val response: HttpResponse =
+                http.post(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs") {
+                    header(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+                    header("Authorization", "Bearer $bearerAccessToken")
+                    setBody(body)
+                }
+            decodeResponse(response)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun getProJob(
+        jobId: String,
+        bearerAccessToken: String,
+    ): ApiResult<ProJobStatusOut> =
+        getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs/" + encodePathSegment(jobId)) {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+
+    suspend fun listProJobs(
+        bearerAccessToken: String,
+        limit: Int = 20,
+        status: String? = null,
+    ): ApiResult<List<ProJobStatusOut>> {
+        val params =
+            buildList {
+                add("limit=${limit.coerceIn(1, 100)}")
+                status?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    add("status=${it.encodeURLParameter()}")
+                }
+            }.joinToString("&")
+        return getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs?$params") {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+    }
+
+    suspend fun cancelProJob(
+        jobId: String,
+        bearerAccessToken: String,
+    ): ApiResult<ProJobCancelOut> =
+        try {
+            val response: HttpResponse =
+                http.post(originTrimmed.trimEnd('/') + "/api/v1/pro/jobs/" + encodePathSegment(jobId) + "/cancel") {
+                    header("Authorization", "Bearer $bearerAccessToken")
+                }
+            decodeResponse(response)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun getProArtifact(
+        jobId: String,
+        artifactId: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> =
+        try {
+            val url =
+                originTrimmed.trimEnd('/') +
+                    "/api/v1/pro/jobs/" +
+                    encodePathSegment(jobId) +
+                    "/artifacts/" +
+                    encodePathSegment(artifactId)
+            val response: HttpResponse =
+                http.get(url) {
+                    header("Authorization", "Bearer $bearerAccessToken")
+                }
+            when {
+                response.status.isSuccess() -> ApiResult.Ok(response.body())
+                else ->
+                    ApiResult.HttpFailure(
+                        response.status.value,
+                        stubUserMessageForStatus(response.status.value, null),
+                        null,
+                    )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+
+    suspend fun getProArtifactByUrl(
+        downloadUrl: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> {
+        val path = downloadUrl.trim()
+        if (path.isBlank()) {
+            return ApiResult.NetworkFailure("Artifact URL is blank")
+        }
+        val url =
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                originTrimmed.trimEnd('/') + "/" + path.trimStart('/')
+            }
+        return getAuthenticatedBytes(url, bearerAccessToken)
+    }
+
+    suspend fun getProBundleByUrl(
+        bundleDownloadUrl: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> {
+        val path = bundleDownloadUrl.trim()
+        if (path.isBlank()) {
+            return ApiResult.NetworkFailure("PRO bundle URL is blank")
+        }
+        val url =
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                originTrimmed.trimEnd('/') + "/" + path.trimStart('/')
+            }
+        return getAuthenticatedBytes(url, bearerAccessToken)
+    }
+
+    suspend fun getProVlmModelManifest(
+        bearerAccessToken: String,
+    ): ApiResult<ProVlmModelManifest> =
+        getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/vlm/model-manifest") {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+
+    suspend fun getProReadiness(
+        bearerAccessToken: String,
+    ): ApiResult<ProReadinessOut> =
+        getJson(originTrimmed.trimEnd('/') + "/api/v1/pro/readiness") {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+
+    suspend fun getProVlmModelBytes(
+        downloadUrl: String,
+        bearerAccessToken: String,
+        onChunk: (receivedBytes: Long, totalBytes: Long?) -> Unit = { _, _ -> },
+    ): ApiResult<ByteArray> {
+        val url =
+            nutonicAbsoluteAssetUrl(downloadUrl)
+                ?: return ApiResult.NetworkFailure("Model download URL is blank")
+        onChunk(0, null)
+        return getAuthenticatedBytes(url, bearerAccessToken).also { result ->
+            if (result is ApiResult.Ok) {
+                onChunk(result.value.size.toLong(), result.value.size.toLong())
+            }
+        }
+    }
+
+    /**
+     * Streams an authenticated GET body without buffering the full payload in memory.
+     * Used for large PRO VLM bundles (multi‑GiB) where `getAuthenticatedBytes` would exhaust the heap.
+     */
+    suspend fun downloadAuthenticatedStreaming(
+        downloadUrl: String,
+        bearerAccessToken: String,
+        onProgress: (receivedBytes: Long, totalBytes: Long?) -> Unit,
+        onChunk: suspend (ByteArray, Int, Int) -> Unit,
+    ): ApiResult<Long> {
+        val url =
+            nutonicAbsoluteAssetUrl(downloadUrl)
+                ?: return ApiResult.NetworkFailure("Model download URL is blank")
+        return try {
+            val response: HttpResponse =
+                http.get(url) {
+                    nutonicAuthHeaders(url, bearerAccessToken)
+                }
+            if (response.status.isSuccess()) {
+                consumeAuthenticatedStreamingBody(response, onProgress, onChunk)
+            } else {
+                ApiResult.HttpFailure(
+                    response.status.value,
+                    stubUserMessageForStatus(response.status.value, null),
+                    null,
+                )
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApiResult.NetworkFailure(e.message ?: e::class.simpleName ?: "network")
+        }
+    }
+
+    private suspend fun consumeAuthenticatedStreamingBody(
+        response: HttpResponse,
+        onProgress: (receivedBytes: Long, totalBytes: Long?) -> Unit,
+        onChunk: suspend (ByteArray, Int, Int) -> Unit,
+    ): ApiResult<Long> {
+        val channel = response.bodyAsChannel()
+        val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+        val buffer = ByteArray(STREAM_BUFFER_BYTES)
+        var received = 0L
+        onProgress(0L, total)
+        while (true) {
+            val read = channel.readAvailable(buffer, 0, buffer.size)
+            if (read == -1) break
+            if (read > 0) {
+                onChunk(buffer, 0, read)
+                received += read.toLong()
+                onProgress(received, total)
+            }
+        }
+        return ApiResult.Ok(received)
+    }
+
+    internal fun nutonicAbsoluteAssetUrl(assetPathOrUrl: String): String? {
+        val raw = assetPathOrUrl.trim()
+        if (raw.isBlank()) {
+            return null
+        }
+        return if (raw.startsWith("http://") || raw.startsWith("https://")) {
+            raw
+        } else {
+            originTrimmed.trimEnd('/') + "/" + raw.trimStart('/')
+        }
+    }
+
+    /**
+     * Hugging Face / CDN downloads must not carry session Bearer tokens (and need long timeouts).
+     * Only attach Nutonic auth for same-origin URLs as [originTrimmed].
+     */
+    private fun shouldAttachNutonicBearer(resolvedAbsoluteUrl: String): Boolean {
+        val trimmed = resolvedAbsoluteUrl.trim()
+        val absolute =
+            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                trimmed
+            } else {
+                nutonicAbsoluteAssetUrl(trimmed) ?: return true
+            }
+        val origin = Url(originTrimmed)
+        val target = Url(absolute)
+        return origin.protocol == target.protocol &&
+            origin.host.lowercase() == target.host.lowercase() &&
+            origin.port == target.port
+    }
+
+    private fun HttpRequestBuilder.nutonicAuthHeaders(
+        resolvedAbsoluteUrl: String,
+        bearerAccessToken: String,
+    ) {
+        header(HttpHeaders.UserAgent, NUTONIC_HTTP_USER_AGENT)
+        if (shouldAttachNutonicBearer(resolvedAbsoluteUrl)) {
+            header("Authorization", "Bearer $bearerAccessToken")
+        }
+    }
+
+    suspend fun pollProJob(
+        jobId: String,
+        bearerAccessToken: String,
+        intervalMs: Long = 2_000,
+        maxAttempts: Int = 90,
+        onProgress: (ProJobStatusOut) -> Unit = {},
+    ): ApiResult<ProJobStatusOut> {
+        repeat(maxAttempts) { attempt ->
+            val result = getProJob(jobId, bearerAccessToken)
+            when (result) {
+                is ApiResult.Ok -> {
+                    onProgress(result.value)
+                    if (result.value.status in terminalProJobStatuses) {
+                        return result
+                    }
+                }
+
+                is ApiResult.HttpFailure -> {
+                    if (!result.isTransientPollFailure() || attempt == maxAttempts - 1) {
+                        return result
+                    }
+                }
+
+                is ApiResult.NetworkFailure -> {
+                    if (attempt == maxAttempts - 1) {
+                        return result
+                    }
+                }
+            }
+            delay(nextPollDelayMs(intervalMs, attempt))
+        }
+        return ApiResult.NetworkFailure("Polling timeout after ${maxAttempts * intervalMs / 1000}s")
+    }
+
+    private suspend fun getAuthenticatedBytes(
+        url: String,
+        bearerAccessToken: String,
+    ): ApiResult<ByteArray> =
+        try {
+            val response: HttpResponse =
+                http.get(url) {
+                    nutonicAuthHeaders(url, bearerAccessToken)
+                }
+            when {
+                response.status.isSuccess() -> ApiResult.Ok(response.body())
+                else ->
+                    ApiResult.HttpFailure(
+                        response.status.value,
+                        stubUserMessageForStatus(response.status.value, null),
+                        null,
+                    )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -315,6 +657,34 @@ class NutonicApiClient(
                 )
             }
         }
+
+    private companion object {
+        private const val STREAM_BUFFER_BYTES = 256 * 1024
+        private const val NUTONIC_HTTP_USER_AGENT = "Nutonic/1.0"
+    }
+}
+
+private val terminalProJobStatuses = setOf("completed", "failed", "cancelled")
+
+private fun ApiResult.HttpFailure.isTransientPollFailure(): Boolean =
+    statusCode == 408 || statusCode == 429 || statusCode in 500..599
+
+private fun nextPollDelayMs(
+    intervalMs: Long,
+    attempt: Int,
+): Long {
+    val base = intervalMs.coerceAtLeast(0)
+    if (base == 0L) {
+        return 0L
+    }
+    val multiplier =
+        when {
+            attempt >= 3 -> 4L
+            attempt >= 1 -> 2L
+            else -> 1L
+        }
+    val jitter = Random.nextLong(0, (base / 4).coerceAtLeast(1))
+    return (base * multiplier).coerceAtMost(30_000L) + jitter
 }
 
 sealed class ApiResult<out T> {
@@ -340,13 +710,13 @@ fun stubUserMessageForStatus(
 ): String =
     when {
         featureDisabled != null ->
-            "This server has ${featureDisabled.feature} turned off. Try another build or ask the host to enable it."
+            "This activity is not enabled on this server yet."
 
-        statusCode == 401 -> "Session missing or expired. Refresh your token and try again."
-        statusCode == 403 -> "The server declined this action for this deployment."
-        statusCode == 404 -> "That endpoint or map was not found."
+        statusCode == 401 -> "Your session expired. Sign in again and retry."
+        statusCode == 403 -> "This action is not available for your current access."
+        statusCode == 404 -> "We could not find that content."
         statusCode == 429 -> "Too many requests. Wait a moment and try again."
-        statusCode in 500..599 -> "Server hiccup. Retry in a few seconds."
         statusCode == 501 -> "That feature is not implemented on this server yet."
-        else -> "Request failed (HTTP $statusCode)."
+        statusCode in 500..599 -> "Server hiccup. Retry in a few seconds."
+        else -> "We could not complete that request right now."
     }

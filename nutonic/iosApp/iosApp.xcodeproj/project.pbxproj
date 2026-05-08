@@ -11,6 +11,7 @@
 		058557D9273AAEEB004C7B11 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 058557D8273AAEEB004C7B11 /* Preview Assets.xcassets */; };
 		2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2152FB032600AC8F00CF470E /* iOSApp.swift */; };
 		3251B13A2AA8D738001521C0 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3251B1392AA8D738001521C0 /* ContentView.swift */; };
+		A16A6D7B2D7A7C2B00A1B2C3 /* LeapVlmBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16A6D7A2D7A7C2B00A1B2C3 /* LeapVlmBridge.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -18,6 +19,7 @@
 		058557D8273AAEEB004C7B11 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		2152FB032600AC8F00CF470E /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
 		3251B1392AA8D738001521C0 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A16A6D7A2D7A7C2B00A1B2C3 /* LeapVlmBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LeapVlmBridge.swift; sourceTree = "<group>"; };
 		7555FF7B242A565900829871 /* My Memories.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "My Memories.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		7555FF8C242A565B00829871 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AB3632DC29227652001CCB65 /* Config.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
@@ -68,6 +70,7 @@
 				2152FB032600AC8F00CF470E /* iOSApp.swift */,
 				058557D7273AAEEB004C7B11 /* Preview Content */,
 				3251B1392AA8D738001521C0 /* ContentView.swift */,
+				A16A6D7A2D7A7C2B00A1B2C3 /* LeapVlmBridge.swift */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -103,6 +106,10 @@
 			);
 			dependencies = (
 			);
+			packageProductDependencies = (
+				A16A6D7C2D7A7D0A00A1B2C3 /* LeapSDK */,
+				A16A6D7D2D7A7D0A00A1B2C3 /* LeapModelDownloader */,
+			);
 			name = iosApp;
 			productName = iosApp;
 			productReference = 7555FF7B242A565900829871 /* My Memories.app */;
@@ -132,6 +139,9 @@
 				Base,
 			);
 			mainGroup = 7555FF72242A565900829871;
+			packageReferences = (
+				A16A6D7E2D7A7D2B00A1B2C3 /* XCRemoteSwiftPackageReference "leap-ios" */,
+			);
 			productRefGroup = 7555FF7C242A565900829871 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -180,11 +190,36 @@
 			buildActionMask = 2147483647;
 			files = (
 				3251B13A2AA8D738001521C0 /* ContentView.swift in Sources */,
+				A16A6D7B2D7A7C2B00A1B2C3 /* LeapVlmBridge.swift in Sources */,
 				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A16A6D7E2D7A7D2B00A1B2C3 /* XCRemoteSwiftPackageReference "leap-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Liquid4All/leap-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.9.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A16A6D7C2D7A7D0A00A1B2C3 /* LeapSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A16A6D7E2D7A7D2B00A1B2C3 /* XCRemoteSwiftPackageReference "leap-ios" */;
+			productName = LeapSDK;
+		};
+		A16A6D7D2D7A7D0A00A1B2C3 /* LeapModelDownloader */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A16A6D7E2D7A7D2B00A1B2C3 /* XCRemoteSwiftPackageReference "leap-ios" */;
+			productName = LeapModelDownloader;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		7555FFA3242A565B00829871 /* Debug */ = {
@@ -326,7 +361,7 @@
 					"-framework",
 					"shared\n",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}${TEAM_ID}";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
 				PRODUCT_NAME = "${APP_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
@@ -355,7 +390,7 @@
 					"-framework",
 					"shared\n",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "${BUNDLE_ID}${TEAM_ID}";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID)";
 				PRODUCT_NAME = "${APP_NAME}";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;

@@ -1,0 +1,13 @@
+# Street View pano worker (Tonic / CPU).
+
+space_hardware: cpu-basic
+sleep_time_seconds: null
+
+variables:
+  PORT: "7860"
+  STREETVIEW_PROVIDER: stub
+  STREETVIEW_EXPOSE_SAMPLING_DEBUG: "0"
+
+secrets:
+  GOOGLE_MAPS_API_KEY: TONIC_GOOGLE_MAPS_API_KEY
+  NUTONIC_INFERENCE_HMAC_SECRET: NUTONIC_INFERENCE_HMAC_SECRET

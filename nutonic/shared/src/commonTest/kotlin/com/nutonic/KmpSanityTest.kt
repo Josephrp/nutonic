@@ -14,14 +14,18 @@ class KmpSanityTest {
     }
 
     @Test
+    fun legacy_shell_intel_decodes_to_rank_tab() {
+        assertEquals(NutonicRoute.Shell(MainTab.Rank), decodeNutonicRoute("shell.Intel"))
+    }
+
+    @Test
     fun nutonic_route_roundtrip_token() {
         val routes =
             listOf(
                 NutonicRoute.Splash,
                 NutonicRoute.RoleSelection,
-                NutonicRoute.Authentication,
                 NutonicRoute.Shell(MainTab.ScanHub),
-                NutonicRoute.Shell(MainTab.Intel, ShellDetail.IntelDashboard),
+                NutonicRoute.Shell(MainTab.Rank, ShellDetail.IntelDashboard),
                 NutonicRoute.Shell(MainTab.ScanHub, ShellDetail.WorldMapGameplay),
                 NutonicRoute.Shell(MainTab.Rank, rankFocusMapId = "demo"),
                 NutonicRoute.Shell(MainTab.Rank, ShellDetail.RankGlobal, rankFocusMapId = "idempotency-map"),

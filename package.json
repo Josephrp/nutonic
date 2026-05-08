@@ -7,6 +7,7 @@
     "pm2:quality": "pm2 start ecosystem.config.cjs --only nutonic-quality",
     "pm2:ci-local": "pm2 start ecosystem.config.cjs --only nutonic-ci-local",
     "pm2:build-verify": "pm2 start ecosystem.config.cjs --only nutonic-build-verify",
+    "pm2:build": "pm2 start ecosystem.config.cjs --only nutonic-build",
     "pm2:test-watch": "pm2 start ecosystem.config.cjs --only nutonic-test-watch",
     "pm2:stop": "node scripts/pm2-stop-nutonic.cjs",
     "pm2:logs": "pm2 logs",

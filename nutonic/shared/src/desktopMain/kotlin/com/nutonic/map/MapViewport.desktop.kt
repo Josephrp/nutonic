@@ -211,8 +211,7 @@ private fun MapState.isApproximately(other: MapState): Boolean =
         abs(longitude - other.longitude) < 0.00001 &&
         abs(scale - other.scale) < 0.01
 
-private fun zoomLevelToDesktopScale(zoomLevel: Double): Double =
-    2.0.pow(zoomLevel.coerceIn(MIN_MAP_ZOOM_LEVEL, MAX_MAP_ZOOM_LEVEL))
+private fun zoomLevelToDesktopScale(zoomLevel: Double): Double = 2.0.pow(zoomLevel.coerceIn(MIN_MAP_ZOOM_LEVEL, MAX_MAP_ZOOM_LEVEL))
 
 private fun desktopScaleToZoomLevel(scale: Double): Double {
     val safeScale = scale.coerceAtLeast(1.0)
@@ -255,5 +254,3 @@ private fun wrapDisplayX(
 
     return best
 }
-
-

@@ -1,0 +1,8 @@
+# Optional: LFM-VL SFT dataset builder (S2 tiling + Dynamic World + HF upload).
+# Install on top of data/scripts/requirements.txt:
+#   pip install -r data/scripts/requirements.txt -r data/scripts/requirements-lfm-vl-dataset.txt
+
+rasterio>=1.3.9,<2
+scipy>=1.10.0,<2
+earthengine-api>=0.1.384
+huggingface_hub>=0.23.0,<2.0

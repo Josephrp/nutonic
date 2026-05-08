@@ -7,7 +7,7 @@
 
 **Client invariant (unchanged):** Apps call **only** the game server OpenAPI; **no** Hub tokens on device; **no** direct calls to Spaces from KMP.
 
-**Local batch + datasets (2026-04-14):** Offline production of **`streetview_hint_pack`** and other cached SCAN rows runs **locally** first on **`data/downloads/geoguessr_poi_12`** (smoke) then **`geoguessr_poi_120`**, using the **smallest** LFM-VL checkpoint for contract validation — see **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5.0 and §5 Phase **D**. **`useful_hints` three-tier strings** are **not** owned by this LFM plan; they come from **programmatic proximity + templates** (**shipped-cache plan** §5 Phase **C**).
+**Local batch + datasets (2026-04-14):** Offline production of **`streetview_hint_pack`** and other cached SCAN rows runs **locally** first on **`data/downloads/geoguessr_poi_12`** (smoke) then **`geoguessr_poi_120`**, using the **smallest** LFM-VL checkpoint for contract validation — see **`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`** §5.0 and §5 Phase **D**. **Pano imagery / headings** (**IMP-110**): **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)** (CPU **`streetview_pano_service`**; not LFM). **`useful_hints` three-tier strings** are **not** owned by this LFM plan; they come from **programmatic proximity + templates** (**shipped-cache plan** §5 Phase **C**).
 
 ---
 
@@ -92,6 +92,18 @@ refs/
 |----------|---------|
 | `LFM_VL_MODEL_ID` | `LiquidAI/LFM2.5-VL-450M` |
 | `LFM_VL_REVISION` | `main` or commit SHA |
+
+### 3.4 Serving backends (normative)
+
+The **HTTP contract** (`POST /v1/suggestions/from_frames`, Pydantic-validated JSON) is stable; **how** the model runs is an implementation choice per deploy:
+
+| Backend | When to use |
+|---------|-------------|
+| **vLLM** | Production or lab when the **LFM-VL** (or chosen VLM) checkpoint is **supported** by vLLM; expose OpenAI-compatible routes and add a **thin adapter** in-repo if the path differs from §3.2. |
+| **`transformers` + PyTorch** | Default **HF Space / Docker** pattern: in-process load + `generate` (or equivalent) behind FastAPI. |
+| **TerraTorch** | **Not** the default stack for **LFM-VL** Street View captioning — reserve for **TerraMind EO** workers (`demos/terramind_space/`, dedicated TiM URLs). |
+
+Satellite specialist service (**§4**) follows the same **vLLM vs torch** split where applicable; grounding JSON validation stays server-side.
 
 ---
 
@@ -276,6 +288,7 @@ strategy:
 
 ## 13. Related documents
 
+- **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** — **IMP-110** Street View pano service: **`pano=`** Static, **`heading_mode`**, road-bearing providers, batch (**CPU**; not LFM)  
 - **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`** — Street View **A→B** detail  
 - **`plans/2026-04-07-terramind-gradio-spaces-comprehensive-demo.md`** — ZeroGPU + `hf` CI patterns  
 - **`refs/satellite-vlm/README.md`** — task definitions, JSON bbox format, eval limits  
@@ -289,5 +302,7 @@ strategy:
 | Ver | Date | Notes |
 |-----|------|-------|
 | 0.1 | 2026-04-07 | Initial: standard LFM-VL hints + specialist satellite Space + Gradio demo + game orchestration |
+| 0.2 | 2026-04-14 | **§3.4** / `inference/README.md`: vLLM vs **`transformers`+PyTorch** vs TerraTorch (EO) as allowed serving backends behind stable HTTP contracts |
+| 0.3 | 2026-04-18 | **§0** local batch paragraph + **§13:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** (**IMP-110** CPU pano WBS vs LFM). |
 
 *End of document.*

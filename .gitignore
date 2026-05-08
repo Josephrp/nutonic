@@ -1,14 +1,44 @@
 refs
-stitch
+!refs/leap-finetune-main
+stitch/
+artifacts
+Patagonia_Eval
+
 # Large/local payloads stay untracked; version tooling under data/scripts only.
 data/*
 !data/scripts/
 !data/scripts/**
+data/scripts/tests/_scratch_raster/
+!data/catalog/
+!data/catalog/**
+
+# PRO SFT event catalogs (fire/flood POI JSON, etc.) — tracked so cloud clones can run orchestrator defaults.
+!data/events/
+!data/events/**
+!data/geo/
+data/geo/*
+!data/geo/README.md
 .cache
 .env
 
+# PRO VLM model bundles are staged by CI/deploy from external storage; never commit model bytes.
+server/pro_vlm_bundles/*
+!server/pro_vlm_bundles/.gitkeep
+nutonic/shared/src/androidMain/assets/pro_vlm/*
+!nutonic/shared/src/androidMain/assets/pro_vlm/.gitkeep
+
+# Google Cloud / Earth Engine service account keys (never commit)
+radioshaq-*.json
+*-gserviceaccount*.json
+
 # PM2 and local verification (Gradle, future server test runners)
 logs/
+
+# Raw Music Folder
+music/
+
+# Parquet files
+*.parquet
 
 # Root npm tooling (pm2, scripts)
 node_modules/
@@ -17,3 +47,44 @@ node_modules/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Python envs, packaging, tests, and tooling (repo-wide: inference/, tools/, data/scripts/, etc.)
+# server/.gitignore only applies under server/; keep these patterns here too.
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.tox/
+htmlcov/
+.benchmarks/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+dist/
+build/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+.hatch/
+
+# Apple signing & App Store Connect API material (never commit; use GitHub Actions secrets)
+*.p12
+*.p8
+*.mobileprovision
+nutonic/dist.key
+nutonic/dist.csr
+nutonic/distribution.cer
+nutonic/distribution.pem
+# If generated elsewhere, still catch common names
+**/AppleDistribution.p12
+**/AuthKey_*.p8
+
+# JVM crash / replay logs (local HotSpot dumps)
+hs_err_pid*.log
+replay_pid*.log

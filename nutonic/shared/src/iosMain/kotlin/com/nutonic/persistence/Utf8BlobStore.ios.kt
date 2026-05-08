@@ -22,14 +22,30 @@ private class IosUtf8BlobStore(
     override suspend fun save(text: String) {
         withContext(Dispatchers.Default) {
             fileUrl.URLByDeletingLastPathComponent?.mkdirs()
+            // NSString.writeToURL(..., atomically = true) — durable single-file replace on iOS.
             fileUrl.writeText(text)
         }
     }
 }
 
-actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore {
+private fun iosNutonicBlob(fileName: String): Utf8BlobStore {
     val root = File(iosDocumentsDirectory(), "nutonic")
     root.mkdirs()
-    val file = File(root, "local-nonranked-leaderboard.json")
+    val file = File(root, fileName)
     return IosUtf8BlobStore(file)
 }
+
+actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("local-nonranked-leaderboard.json")
+
+actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("guess-record-outbox.json")
+
+actual fun createSettingsBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("client-settings.json")
+
+actual fun createPlayerProgressBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("player-progress.json")
+
+actual fun createProVlmModelBlobStore(): Utf8BlobStore =
+    iosNutonicBlob("pro-vlm-model-cache.json")

@@ -9,7 +9,6 @@ enum class MainTab(
     val label: String,
 ) {
     ScanHub("ScanHub", "SCAN"),
-    Intel("Intel", "INTEL"),
     Rank("Rank", "RANK"),
     Setup("Setup", "SETUP"),
     Pro("Pro", "PRO"),
@@ -18,6 +17,11 @@ enum class MainTab(
     companion object {
         val ordered: Array<MainTab> = entries.toTypedArray()
 
-        fun fromId(id: String): MainTab? = entries.find { it.id == id }
+        /** Legacy bookmark `shell.Intel` resolves to fused progress + leaderboard tab. */
+        fun fromId(id: String): MainTab? =
+            when (id) {
+                "Intel" -> Rank
+                else -> entries.find { it.id == id }
+            }
     }
 }

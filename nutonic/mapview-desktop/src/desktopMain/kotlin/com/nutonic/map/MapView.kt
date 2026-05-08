@@ -279,5 +279,3 @@ private fun navigateToUrl(url: String) {
 }
 
 private var inMemoryCache: Map<Tile, TileImage> by mutableStateOf(mapOf())
-
-

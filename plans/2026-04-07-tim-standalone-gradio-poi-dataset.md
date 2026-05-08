@@ -56,16 +56,21 @@ The downloader writes **`poi_id`**, **`latitude`**, **`longitude`**, **`bbox_wgs
 
 ### 2.5 SCAN assist bundles — explicit generation scripts (`useful_hints`, `streetview_hint_pack`)
 
-**Product contract:** Optional SCAN assists are **pre-cached** bundle fields documented in **`docs/GAME-ENGINE.md` §9** and **`docs/NARRATIVE-AND-PROMPTS.md` §4** (three-tier **`useful_hints`**, **`streetview_hint_pack`** text). They are **not** produced by an in-round **TiM** forward; they are **offline** artifacts from **data scripts** and/or **HF Jobs**, same discipline as Mapbox stills.
+**Product contract:** Optional SCAN assists are **pre-cached** bundle fields documented in **`docs/GAME-ENGINE.md` §9** and **`docs/NARRATIVE-AND-PROMPTS.md` §4** (default **six** coordinate-free **`tier_1`…`tier_6`** for **`useful_hints`**, plus **`streetview_hint_pack`** text). They are **not** produced by an in-round **TiM** forward; they are **offline** artifacts from **`data/scripts/`**, **`tools/`**, **`inference/*`**, and/or **HF Jobs**, same discipline as Mapbox stills.
+
+**Canonical pipeline (2026-04-14):** Normative names and specs live in **[`docs/scripts/README.md`](../docs/scripts/README.md)**. The table below is the **landed** mapping; older drafts used the working names **`generate_scan_useful_hints.py`** and **`materialize_streetview_hint_pack.py`** — those files were **never added**; do not search the repo for them.
 
 | Script / entrypoint | Status | Role |
 |---------------------|--------|------|
 | **`data/scripts/download_geoguessr_poi_imagery.py`** | **In repo** | Canonical **POI** tree: **`poi.json`**, **`mapbox/`** PNG, **`sentinel-2-l2a/`** assets—**inputs** for Jobs that also emit round manifests (`docs/POI-PACKAGES-AND-OFFICIAL-CLIENTS.md`). |
 | **`data/scripts/download_simsat_sources.py`** | **In repo** | STAC + Mapbox static fetch semantics shared with SimSat / TerraMesh-style pipelines—reuse for **batch** imagery pulls aligned with **`poi.json`** centroids. |
-| **`data/scripts/generate_scan_useful_hints.py`** | **To add** (recommended name) | Offline generator: reads golden **`(lat, lon)`** (+ optional `map_id` / `content_version`) and emits **`useful_hints`** `{ tier_1, tier_2, tier_3 }` (continent → regional EO landmark / hydrology → country). Implement via **gazetteer / admin-boundary datasets** and/or **batch LLM** with **schema-capped** JSON; must be **reproducible** for CI when deterministic sources only. |
-| **`data/scripts/materialize_streetview_hint_pack.py`** | **To add** (recommended name) | Offline orchestrator: drives **`inference/streetview_pano_service`** (multi-pano sample around target, **not** at golden unless product allows) + **`inference/lfm_vl_hint_service`** → normalized **`suggestions[]`** merged into **`streetview_hint_pack`** on the bundle row. See **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`** and **`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`**. |
+| **`data/scripts/catalog_import_poi.py`** + **`catalog_lint.py`** | **In repo** | Normalize downloads → **`data/catalog/`** (`maps.yaml`, **`locations/*.yaml`**) for downstream scripts. |
+| **`data/scripts/fetch_geo_baselines.py`** + **`build_poi_geo_context.py`** | **In repo** | Natural Earth–backed **geo context** (ordinal / gazetteer facts) feeding deterministic hints. |
+| **`data/scripts/compile_useful_hint_tiers.py`** + **`validate_hint_strings.py`** | **In repo** | Emit and validate **`useful_hints`** JSON (optional **`generate_useful_hints_llm.py`** stub for HTTP polish). |
+| **`tools/batch_streetview_hints.py`** + **`inference/streetview_pano_service`** + **`inference/lfm_vl_hint_service`** | **In repo** | Batch **pano frames → captions** → per-location **`streetview_hint_pack`** JSON under **`data/cache/<version>/streetview/`**; merged by **`assemble_manifest.py`**. |
+| **`data/scripts/generate_ai_guess_fixture.py`** + **`inference/terramind_tim_local`** (`ingest`) | **In repo** | **`ai_lat` / `ai_lon`** rows from decoy/heuristic modes or **TiM** NDJSON (`Coordinates` / aliases); not a substitute for **`useful_hints`** / SV packs. |
 
-**CI wiring:** Add Gradle / GitHub Actions steps that run the **new** scripts **after** imagery exists (typically post-`download_geoguessr_poi_imagery.py`), write Parquet or JSON manifest slices keyed by **`round_id`** + **`content_version`**, and fail CI on **placeholder / empty** tiers if the mission marks assists as required.
+**CI wiring (current):** **`.github/workflows/nutonic-ci.yml`** **`data-scripts-unit-tests`** runs **`pytest`** on **`data/scripts/tests`**, **`tools/tests`**, and the **streetview / LFM / satellite-caption** inference packages. Full **`geoguessr_poi_12`** end-to-end hydration remains a **developer / nightly** loop (see **`plans/2026-04-14-data-scripts-testing-and-ci.md`**).
 
 **Ranked note:** Client assist consumption rules (**`forfeit-assists`**) are server/API policy (`docs/RANKED-MODE.md`); scripts only ensure **redacted, capped** strings ship in ranked clue bundles.
 
@@ -124,8 +129,8 @@ From the guide’s **Model Versions** list: `terramind_v1_{tiny,small,base,large
 | **`rules/10-terramesh-vlm-progressive-zoom-game-engine.md`** | Maps **`refs/terramind-geogen-main/`** (when present) to **TerraMesh** batch patterns, **`geo_utils.py` haversine**, and **zarr** metadata conventions—**not** a substitute for reading TerraTorch TiM docs. |
 | **`data/scripts/download_geoguessr_poi_imagery.py`** | **Normative** for how **`poi_####`**, **`poi.json`**, **`mapbox/`**, and **`sentinel-2-l2a/`** are created; cites TerraMesh metadata patterns (file header lines 11–15). |
 | **`data/scripts/download_simsat_sources.py`** | STAC client, asset download naming, Mapbox static URL parity with **`refs/SimSat-main`** (comment lines 5–8). |
-| **`data/scripts/generate_scan_useful_hints.py`** | **Planned** — emits **`useful_hints`** tiers for SCAN bundles (**§2.5**). |
-| **`data/scripts/materialize_streetview_hint_pack.py`** | **Planned** — emits **`streetview_hint_pack`** via pano + LFM-VL batch (**§2.5**). |
+| **`docs/scripts/README.md`** + **`compile_useful_hint_tiers.py`** / **`validate_hint_strings.py`** | **Landed** — deterministic **`useful_hints`** (**§2.5**). |
+| **`tools/batch_streetview_hints.py`** + **`inference/*`** pano + LFM services | **Landed** — **`streetview_hint_pack`** batch path (**§2.5**). |
 
 **If `refs/terramind-geogen-main/` is not checked in:** treat **`rules/10`** as the pointer to expected research layout; **do not** block the TiM demo on that tree—TerraTorch + your POI rasters are sufficient.
 
@@ -275,7 +280,7 @@ Gradio’s **server mode** is **`Blocks.launch(...)`** (or **`Interface.launch`*
 | **T3** | **Branch B** Mapbox→`RGB` path | Document channel order + resize |
 | **T4** | **Gradio** UI + `launch()` | Screenshot + README with run command |
 | **T5** (opt) | **HF Dataset** upload script | One sample row reproducible from CI |
-| **T5b** (opt) | **`generate_scan_useful_hints.py`** + **`materialize_streetview_hint_pack.py`** (or CI equivalents) | Bundle rows include **`useful_hints`** + optional **`streetview_hint_pack`**; CI validates caps + `content_version` (**§2.5**) |
+| **T5b** (opt) | **`compile_useful_hint_tiers`** + **`tools/batch_streetview_hints`** (or HF Job equivalents) | Bundle / manifest rows include **`useful_hints`** + optional **`streetview_hint_pack`**; CI validates via **`data/scripts/tests`** + **`tools/tests`** + inference **`pytest`** (**§2.5**, [`plans/2026-04-14-data-scripts-testing-and-ci.md`](2026-04-14-data-scripts-testing-and-ci.md)) |
 | **T6** | **`_generate`** path + one **PNG** (or COG) artifact from canned POI | Schema includes `pipeline`, `output_modalities`; no OOM at default resolution on target GPU |
 
 ---
@@ -304,6 +309,10 @@ Gradio’s **server mode** is **`Blocks.launch(...)`** (or **`Interface.launch`*
 12. **SCAN assist bundle fields + ranked forfeit policy:** `docs/GAME-ENGINE.md` §9, `docs/RANKED-MODE.md` §4  
 13. **Narrative / generated inventory (assist rows):** `docs/NARRATIVE-AND-PROMPTS.md` §4  
 14. **Street View + LFM-VL inference plane (batch → `streetview_hint_pack`):** `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`  
+15. **Shipped-cache script index (`SPEC-*.md`):** [`docs/scripts/README.md`](../docs/scripts/README.md)  
+16. **Data scripts implementation + CI:** [`plans/2026-04-14-data-scripts-implementation-track.md`](2026-04-14-data-scripts-implementation-track.md), [`plans/2026-04-14-data-scripts-testing-and-ci.md`](2026-04-14-data-scripts-testing-and-ci.md)  
+
+**Revision note (2026-04-14):** §2.5, §4 reference table, and **T5b** were updated to match the **landed** monorepo scripts. Historical working names **`generate_scan_useful_hints.py`** / **`materialize_streetview_hint_pack.py`** are **not** canonical paths.
 
 ---
 

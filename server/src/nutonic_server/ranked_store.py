@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from threading import Lock
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Callable, Literal
 
-from sqlalchemy import Column, Float, Integer, MetaData, String, Table, create_engine, insert, select, update
+from sqlalchemy import Column, Float, Integer, MetaData, String, Table, create_engine, delete, desc, insert, select, text, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -26,6 +28,7 @@ ranked_rounds = Table(
     Column("truth_lon", Float, nullable=False),
     Column("session_id", String(128), nullable=False),
     Column("status", String(32), nullable=False),
+    Column("opened_at_epoch", Integer, nullable=False, server_default="0"),
 )
 
 ranked_submit_idem = Table(
@@ -35,6 +38,17 @@ ranked_submit_idem = Table(
     Column("idempotency_key", String(256), primary_key=True, nullable=False),
     Column("distance_km", Float, nullable=False),
     Column("score_points", Integer, nullable=False),
+)
+
+ranked_verified_lb = Table(
+    "ranked_verified_leaderboard",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("map_id", String(256), nullable=False, index=True),
+    Column("round_id", String(64), nullable=False, unique=True),
+    Column("session_id", String(128), nullable=False),
+    Column("score_points", Integer, nullable=False),
+    Column("distance_km", Float, nullable=False),
 )
 
 
@@ -49,13 +63,52 @@ class RankedRoundRow:
     status: str
 
 
+@dataclass
+class RankedVerifiedLbRow:
+    """Maps to ``LeaderboardRowOut`` for ``GET .../leaderboard/ranked`` responses."""
+
+    display_handle: str
+    player_role: str
+    score_points: int
+    distance_km: float
+
+
 class SqliteRankedStore:
-    def __init__(self, engine: Engine) -> None:
+    def __init__(self, engine: Engine, *, on_write: Callable[[], None] | None = None) -> None:
         self._engine = engine
         self._lock = Lock()
+        self._on_write = on_write
 
     def initialize_schema(self) -> None:
         metadata.create_all(self._engine)
+        self._ensure_opened_at_epoch_column()
+
+    def _ensure_opened_at_epoch_column(self) -> None:
+        """SQLite: add ``opened_at_epoch`` when upgrading an older ranked DB file."""
+        with self._lock:
+            with self._engine.begin() as conn:
+                rows = conn.execute(text("PRAGMA table_info(ranked_rounds)")).fetchall()
+                names = {str(r[1]) for r in rows}
+                if "opened_at_epoch" not in names:
+                    conn.execute(text("ALTER TABLE ranked_rounds ADD COLUMN opened_at_epoch INTEGER NOT NULL DEFAULT 0"))
+                    self._sync_after_write()
+
+    def prune_stale_open_rounds(self, *, now_epoch: int, max_age_seconds: int) -> int:
+        """Delete ``open`` rounds whose ``opened_at_epoch`` is older than ``now_epoch - max_age_seconds``."""
+        cutoff = int(now_epoch) - int(max_age_seconds)
+        if cutoff <= 0:
+            return 0
+        with self._lock:
+            with self._engine.begin() as conn:
+                res = conn.execute(
+                    delete(ranked_rounds).where(
+                        ranked_rounds.c.status == "open",
+                        ranked_rounds.c.opened_at_epoch < cutoff,
+                    )
+                )
+                if (res.rowcount or 0) > 0:
+                    self._sync_after_write()
+                return int(res.rowcount or 0)
 
     def create_round(
         self,
@@ -67,6 +120,7 @@ class SqliteRankedStore:
         session_id: str,
     ) -> str:
         rid = uuid.uuid4().hex
+        opened = int(datetime.now(tz=UTC).timestamp())
         with self._lock:
             with self._engine.begin() as conn:
                 conn.execute(
@@ -78,8 +132,10 @@ class SqliteRankedStore:
                         truth_lon=truth_lon,
                         session_id=session_id,
                         status="open",
+                        opened_at_epoch=opened,
                     )
                 )
+        self._sync_after_write()
         return rid
 
     def get_round(self, round_id: str) -> RankedRoundRow | None:
@@ -109,6 +165,7 @@ class SqliteRankedStore:
                     .where(ranked_rounds.c.round_id == round_id)
                     .values(status="submitted")
                 )
+        self._sync_after_write()
 
     def forfeit_round(self, round_id: str, session_id: str) -> RankedForfeitResult:
         """Mark ``open`` round as ``forfeited`` when ``session_id`` matches (IMP-091)."""
@@ -132,6 +189,7 @@ class SqliteRankedStore:
                     .where(ranked_rounds.c.round_id == round_id)
                     .values(status="forfeited")
                 )
+        self._sync_after_write()
         return "ok"
 
     def get_submit_if_exists(self, round_id: str, idempotency_key: str) -> tuple[float, int] | None:
@@ -174,7 +232,62 @@ class SqliteRankedStore:
                         score_points=score_points,
                     )
                 )
+                self._sync_after_write()
                 return distance_km, score_points, True
+
+    def append_verified_leaderboard(
+        self,
+        *,
+        map_id: str,
+        round_id: str,
+        session_id: str,
+        score_points: int,
+        distance_km: float,
+    ) -> None:
+        """Persist one server-verified ranked row per ``round_id`` (idempotent on replay)."""
+        with self._lock:
+            with self._engine.begin() as conn:
+                stmt = sqlite_insert(ranked_verified_lb).values(
+                    map_id=map_id,
+                    round_id=round_id,
+                    session_id=session_id,
+                    score_points=score_points,
+                    distance_km=distance_km,
+                )
+                conn.execute(stmt.on_conflict_do_nothing(index_elements=["round_id"]))
+        self._sync_after_write()
+
+    def list_ranked_leaderboard(self, map_id: str) -> list[RankedVerifiedLbRow]:
+        """Verified ranked rows for ``map_id``, highest score first."""
+        with self._lock:
+            with self._engine.connect() as conn:
+                hits = conn.execute(
+                    select(
+                        ranked_verified_lb.c.session_id,
+                        ranked_verified_lb.c.score_points,
+                        ranked_verified_lb.c.distance_km,
+                    )
+                    .where(ranked_verified_lb.c.map_id == map_id)
+                    .order_by(desc(ranked_verified_lb.c.score_points))
+                ).all()
+        out: list[RankedVerifiedLbRow] = []
+        for sid, pts, dkm in hits:
+            sid_s = str(sid)
+            handle = f"RNK-{sid_s[:8].upper()}" if len(sid_s) >= 8 else f"RNK-{sid_s.upper()}"
+            out.append(
+                RankedVerifiedLbRow(
+                    display_handle=handle,
+                    player_role="RANKED",
+                    score_points=int(pts),
+                    distance_km=float(dkm),
+                )
+            )
+        return out
+
+    def _sync_after_write(self) -> None:
+        if self._on_write is None:
+            return
+        self._on_write()
 
 
 def create_ranked_engine(url: str) -> Engine:
@@ -184,10 +297,19 @@ def create_ranked_engine(url: str) -> Engine:
 
 
 def create_ranked_store(url: str) -> SqliteRankedStore:
-    from nutonic_server.leaderboard_store import _ensure_parent_dir_for_sqlite_file
+    from nutonic_server.leaderboard_store import _ensure_parent_dir_for_sqlite_file, sqlite_file_path_from_url
+    from nutonic_server.hf_persistence import HfSqliteSync
+    from nutonic_server.settings import load_settings
 
     _ensure_parent_dir_for_sqlite_file(url)
+    sync_hook = None
+    db_path = sqlite_file_path_from_url(url)
+    if db_path is not None:
+        hf = HfSqliteSync.from_settings(load_settings())
+        if hf is not None:
+            hf.bootstrap_sqlite_file(local_path=db_path, logical_name="ranked")
+            sync_hook = hf.make_write_sync_hook(local_path=db_path, logical_name="ranked")
     eng = create_ranked_engine(url)
-    st = SqliteRankedStore(eng)
+    st = SqliteRankedStore(eng, on_write=sync_hook)
     st.initialize_schema()
     return st

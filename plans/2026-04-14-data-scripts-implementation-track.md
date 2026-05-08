@@ -49,7 +49,7 @@ flowchart TD
   subgraph P5[P5 Optional]
     LLM[generate_useful_hints_llm.py]
   end
-  subgraph P6[P6 Street View]
+  subgraph P6[P6 Street View — landed]
     BV[batch_streetview_hints.py]
   end
   subgraph P7[P7 AI guess]
@@ -163,15 +163,15 @@ flowchart TD
 
 ## 5. Track P3 — `render_mapbox_still.py`
 
-**Spec:** [SPEC-render-mapbox-still.md](../docs/scripts/SPEC-render-mapbox-still.md) — **IMP-081**
+**Spec:** [SPEC-render-mapbox-still.md](../docs/scripts/SPEC-render-mapbox-still.md) — **IMP-081** — **landed 2026-04-14** (reuse + gated network + `still_index.json`).
 
 | Work unit | Detail |
 |-----------|-------------------------|
 | **P3.1** | **`--reuse-only`:** copy from `still_source.bundled_relative`, optional Pillow resize to policy width/height, export JPEG to temp output dir. |
-| **P3.2** | **`still_sha256`** sidecar JSON next to output image. |
-| **P3.3** | Optional network render behind `--allow-network` + `MAPBOX_ACCESS_TOKEN` (retry/backoff). |
+| **P3.2** | **`still_sha256`** sidecar JSON per location under `--meta-dir/stills/` plus aggregate **`still_index.json`**. |
+| **P3.3** | Network render behind **`--allow-network`** + `MAPBOX_ACCESS_TOKEN` / `MAPBOX_TOKEN` (retry/backoff); default **no** HTTP. |
 | **P3.4** | Sidecar / index fields **`width_px`**, **`height_px`**, **`center_*`**, **`zoom`** per [SPEC-render-mapbox-still.md](../docs/scripts/SPEC-render-mapbox-still.md) so **P6 satellite caption** and **QA** can detect center drift vs Street View sampling. |
-| **Tests** | Reuse-only with tiny PNG fixture; assert JPEG output dimensions and non-zero file size. |
+| **Tests** | `test_render_mapbox_still.py`: reuse-only with `fixtures/maps/reuse_stub.png`; gated-network / missing-token cases. |
 | **Acceptance** | Produces at least one **`nutonic.bundle.v1.*`** compatible blob matching `server` bundle loader expectations (coordinate with `bundles.py` registry extension in same or follow-up PR). |
 
 ---
@@ -179,6 +179,8 @@ flowchart TD
 ## 6. Track P4 — Useful hints (deterministic)
 
 **Specs:** [SPEC-validate-hint-strings.md](../docs/scripts/SPEC-validate-hint-strings.md), [SPEC-build-poi-geo-context.md](../docs/scripts/SPEC-build-poi-geo-context.md), [SPEC-compile-useful-hint-tiers.md](../docs/scripts/SPEC-compile-useful-hint-tiers.md)
+
+**Product (2026-04-14):** default **six** monotonic **`tier_1`…`tier_6`** strings — **no coordinate literals in any tier** (including strongest). OpenAPI + Kotlin accept optional **`tier_4`–`tier_6`**; legacy three-tier payloads remain valid.
 
 ### P4a — `validate_hint_strings.py` (land **first**)
 
@@ -195,7 +197,7 @@ flowchart TD
 |------|--------|
 | **P4b.1** | Load NE layers from `NE_FIXTURE_ROOT` in CI or `data/geo` locally; build GeoDataFrame spatial index. |
 | **P4b.2** | Implement **R** radius query; nearest river/lake; coast distance; admin0/1 containment. |
-| **P4b.3** | Write **`geo_context/<location_id>.json`** per [SPEC-build-poi-geo-context.md](../docs/scripts/SPEC-build-poi-geo-context.md) schema. |
+| **P4b.3** | Write **`geo_context/<location_id>.json`** per [SPEC-build-poi-geo-context.md](../docs/scripts/SPEC-build-poi-geo-context.md) schema. **2026-04-14:** emits **`hint_compile_facts`** (ordinal buckets + framing strings for compile). |
 | **Tests** | Synthetic point inside known fixture polygon; assert `admin0_name` / `nearest_river` keys stable. |
 | **Acceptance** | Run on **`geoguessr_poi_12`** end-to-end in < 2 minutes on typical laptop with fixture geo. |
 
@@ -203,10 +205,10 @@ flowchart TD
 
 | Item | Detail |
 |------|--------|
-| **P4c.1** | Default **`tier_policy.yaml`** with templates + max lengths + `easy_hints: false`. |
-| **P4c.2** | After compile, call **`validate_hints`**; fail on violations. |
-| **Tests** | One `context.json` → expected `tier_*` substrings (admin0, river name). |
-| **Acceptance** | **`geoguessr_poi_12`** produces 12 `useful_hints/*.json` files, all pass validator. |
+| **P4c.1** | Default **`tier_policy.default.yaml`** — **`tier_count: 6`**, templates, max lengths, `easy_hints: false`. |
+| **P4c.2** | After compile, call **`validate_hints`** with same policy; exit **8** on violations. |
+| **Tests** | `test_compile_useful_hint_tiers.py`: fixture geo_context → six non-empty tiers + validator pass. |
+| **Acceptance** | **`geoguessr_poi_12`** produces 12 `useful_hints/*.json` files (when geo_context exists), all pass validator. **Landed 2026-04-14.** |
 
 ---
 
@@ -226,22 +228,27 @@ flowchart TD
 
 ---
 
-## 8. Track P6 — `tools/batch_streetview_hints.py`
+## 8. Track P6 — `tools/batch_streetview_hints.py` (**landed 2026-04-14** — local full runner)
+
+**IMP-110 / pano sampling WBS:** [`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) (**PR-F** forward batch/HF Jobs; **PR-H** tests).
 
 **Spec:** [SPEC-batch-streetview-hints.md](../docs/scripts/SPEC-batch-streetview-hints.md)
 
 | Item | Detail |
 |------|--------|
-| **P6.1** | HTTP client with timeouts; read **`--pano-service-url`** / **`--lfm-service-url`**. |
-| **P6.2** | Wire **`POST /v1/suggestions/from_frames`** response → `streetview_hint_pack`; run caption subset through **validator** rules. Implement **S0–S2**: **`--poi-limit`**, **`--sv-screenshots-per-location`**, chunking via **`--lfm-max-frames-per-request`**. |
-| **P6.3** | **`--skip-streetview-hints`** no-op for CI. |
-| **P6.4** | Optional **`--satellite-caption-service-url`** + **`--still-index`** from **P3** → call **`lfm_vl_satellite_caption_service`**; write **separate** provenance-labeled fields for manifest assembly (never mix unlabeled with SV pack). |
-| **P6.5** | Default **omit** `useful_hints` text from LFM request body (see spec §3.1 — anchoring footgun); gate behind **`--inject-useful-hint-tone`** if ever needed. |
-| **P6.6** | Optional **S3** narrative: **`--enable-narrative-pass`** + text backend; emit **`streetview_assist_narrative`**; validate; pin model in **`model_pins`**. |
-| **Tests** | Integration tests **skipped** unless `RUN_STREETVIEW_BATCH=1`; unit test with `responses`/`httpx` mocking. |
-| **Acceptance** | Manual smoke: 1 POI against local Docker services per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`. |
+| **P6.1** | **Landed** — `httpx` client, timeouts, **`--pano-service-url`** / **`--lfm-vl-url`** (alias **`--lfm-service-url`**), startup **GET …/health** on both bases (exit **9** on hard connectivity failure). |
+| **P6.2** | **Landed** — **`POST /v1/panos/sample`** → frames; **`POST /v1/suggestions/from_frames`** → `streetview_hint_pack`; **`validate_caption_text`** (`data/scripts/validate_hint_strings.py`) on each line. **S0–S2**: **`--poi-limit`**, **`--location-ids`**, **`--location-ids-file`**, **`--shuffle-seed`**, **`--sv-screenshots-per-location`**, **`--lfm-max-frames-per-request`** chunk merge. |
+| **P6.3** | **Landed** — **`--skip-streetview-hints`** exits **0** without network. |
+| **P6.4** | **Landed (partial)** — batch posts optional satellite **`POST …/v1/infer`** when **`--satellite-caption-service-url`** + **`--still-index`** resolve a still file; **separate** `satellite_caption_sidecar` object. **`inference/lfm_vl_satellite_caption_service/`** is **present** with pytest in CI; service URL may be absent in local smoke (404 tolerated). |
+| **P6.5** | **Landed** — **`useful_hints`** omitted from LFM JSON unless **`--inject-useful-hint-tone`**. |
+| **P6.6** | **Landed (stub)** — **`--enable-narrative-pass`** + **`--narrative-service-url`** → **`POST /v1/narrative/fuse`** on **`lfm_vl_hint_service`** (text-only stub); validated narrative string or **null**. |
+| **P6.7** | **Partial (2026-04-21)** — Chunked LFM **`rank`** renumbering (**PR-F4**) + per-run **`reports/model_pins.json`** **landed** in **`tools/batch_streetview_hints.py`**. **Open:** forward **`heading_mode`** / optional **`road_bearing_deg`** / **`model_pins`** v2 fields per **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)** **PR-F**; **`SPEC-batch-streetview-hints.md`** §1.1 **S1** wording refresh. |
+| **Tests** | **Landed** — default CI: **`tools/tests/test_batch_streetview_hints.py`** (`httpx.MockTransport`) + **`inference/*/tests`**. Optional **`RUN_STREETVIEW_BATCH=1`** remains for live Google/GPU runs when wired. |
+| **Acceptance** | **Local:** two terminals — `uvicorn streetview_pano_service.main:app --port 7861` + `uvicorn lfm_vl_hint_service.main:app --port 7862` — then `python tools/batch_streetview_hints.py --catalog-root data/catalog --lfm-vl-url http://127.0.0.1:7862 --pano-service-url http://127.0.0.1:7861` after **`catalog_import`**. Outputs under **`data/cache/<version>/streetview/*.json`** + **`reports/streetview_failures.json`**. |
 
-**Dependency:** **IMP-110**/**IMP-111** services usable; until then track P6 remains **optional** / stubbed. **Soft dependency on P3** when satellite caption hop is enabled (still bytes + sha256 from `render_mapbox_still`).
+**Inference (CPU pano, optional GPU LFM):** **`inference/streetview_pano_service`** — **`POST /api/v1/panos/sample`** (Pillow stub **or** Google Static per **`STREETVIEW_PROVIDER`**); **production sampling** (**`pano=`**, road-perpendicular **`heading_mode`**, providers) tracked in **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)**. **`inference/lfm_vl_hint_service`** — **`POST /v1/suggestions/from_frames`** + **`POST /v1/narrative/fuse`** with **`LFM_VL_BACKEND`**: **`stub`** (default), **`transformers`** (official **Liquid** Hugging Face LFM-VL weights), or **`openai_compatible`** (OpenAI API to vLLM/SGLang per Liquid deployment docs).
+
+**P8.1a streetview merge:** **`assemble_manifest`** merges optional `data/cache/.../streetview/*.json` into **`ManifestRoundLocation`** rows; OpenAPI/Kotlin **`streetview_hint_pack`** is **landed** (see **`docs/scripts/SPEC-assemble-manifest.md`** §2.1).
 
 ---
 
@@ -251,11 +258,11 @@ flowchart TD
 
 | Item | Detail |
 |------|--------|
-| **P7.1** | Implement **`decoy_offset`** + **`fixed_table`** modes first; **`random_seeded`** last. |
-| **P7.2** | Output **`ai_guesses.json`** array. |
-| **P7.3** | Implement **`terramind_tim_jsonl`** / **`terramind_tim_dir`** importers: read **`tim_modality_outputs.Coordinates`** (full lat/lon) per `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`; **`--prefer-tim`** default true; exit codes **12–13** on schema/precedence failures. |
-| **Tests** | `decoy_offset`: distance from truth within configured delta ± tolerance using `geo_nutonic`. TiM: golden fixture JSONL → expected `ai_lat`/`ai_lon`. |
-| **Acceptance** | Generated rows joinable to catalog `map_id` / `location_id` keys. |
+| **P7.1** | Implement **`decoy_offset`** + **`fixed_table`** modes first; **`random_seeded`** last. **2026-04-14:** **Landed** — `geo_nutonic.destination_point_km` + modes. |
+| **P7.2** | Output **`ai_guesses.json`** array. **Landed** — envelope `{"ai_guesses":[…]}` for **`assemble_manifest`**. |
+| **P7.3** | Implement **`terramind_tim_jsonl`** / **`terramind_tim_dir`** importers: read **`tim_modality_outputs.Coordinates`** (full lat/lon) per `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`; **`--prefer-tim`** default true; exit codes **12–13** on schema/precedence failures. **Landed** — **`coordinates_wgs84`** / `lat`+`lon` / top-level `ai_lat`+`ai_lon`; overlay on decoy/fixed/random. |
+| **Tests** | `decoy_offset`: distance from truth within configured delta ± tolerance using `geo_nutonic`. TiM: golden fixture JSONL → expected `ai_lat`/`ai_lon`. **Landed:** **`test_generate_ai_guess_fixture.py`**, **`fixtures/tim_export/`**. |
+| **Acceptance** | Generated rows joinable to catalog `map_id` / `location_id` keys. **Landed** for fixture catalog. |
 
 **Dependency:** P2 catalog exists. TiM JSON fixtures may live under `data/scripts/tests/fixtures/tim_export/`.
 
@@ -317,14 +324,14 @@ flowchart TD
 
 ---
 
-## 13. Gradle `:shared:validateCatalog` (parallel track)
+## 13. Gradle `:shared:validateCatalog` (**landed**)
 
 **Spec pointer:** [SPEC-catalog-lint.md](../docs/scripts/SPEC-catalog-lint.md) §5
 
 | Item | Detail |
 |------|--------|
-| **G.1** | Gradle task reads packaged catalog subset or `manifest.full.json` in resources. |
-| **G.2** | Fails build if `still_bundled_resource` path missing under `composeResources`. |
+| **G.1** | **Landed** — `:shared:validateCatalog` runs **`data/scripts/validate_shipped_compose_resources.py`** on **`composeResources/files/cache/manifest.full.json`** (`nutonic/shared/build.gradle.kts`); root **`quality`** depends on it. |
+| **G.2** | **Landed** — fails the build if a manifest **`still_bundled_resource`** does not resolve under **`composeResources/`** (path traversal rejected). |
 
 **Dependency:** P8.1 produces manifest that Gradle can consume, **or** interim hand-maintained manifest for pilot.
 
@@ -369,6 +376,12 @@ flowchart TD
 | 0.1 | 2026-04-14 | Initial implementation track for all **`docs/scripts/SPEC-*.md`** scripts |
 | 0.2 | 2026-04-14 | **P3.4** still sidecar for LFM satellite + SV alignment; **P6.4–P6.5** batch hops + prompt footgun; **P7.3** TerraMind TiM coordinate import |
 | 0.3 | 2026-04-14 | **P6.2** / **P6.6**: POI limit + **K** SV frames + optional narrative LLM pass per **`SPEC-batch-streetview-hints.md`** §1.1 |
+| 0.4 | 2026-04-14 | **P6 landed:** `tools/batch_streetview_hints.py` + pano **`/v1/panos/sample`** + LFM stub **`/v1/suggestions/from_frames`** + **`validate_caption_text`**; CI runs **`tools/tests`** and **`inference/*/tests`**. |
+| 0.5 | 2026-04-14 | **`lfm_vl_hint_service`:** real **Liquid LFM-VL** via **`LFM_VL_BACKEND=transformers`** (HF `AutoModelForImageTextToText`) or **`openai_compatible`** (OpenAI `/v1/chat/completions` for vLLM/SGLang); default **stub** unchanged for CI. |
+| 0.6 | 2026-04-14 | **P6.4** satellite caption service **landed** in repo/CI; **P8.1a** streetview **`assemble_manifest`** merge + OpenAPI parity **landed**; stale “follow-up when OpenAPI adds SV” row **removed**. |
+| 0.7 | 2026-04-14 | **§13:** **`validateCatalog`** + **`validate_shipped_compose_resources.py`** documented as **landed** (was “parallel track”). |
+| 0.8 | 2026-04-18 | **§8 P6:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; new **P6.7** open row (batch **`heading_mode`** / **`model_pins`**); inference blurb **`/api/v1/panos/sample`**. |
+| 0.9 | 2026-04-21 | **P6.7** row: **PR-F4** rank merge + **`model_pins.json`** **landed**; remaining **P6.7** = **`heading_mode`** / docs / SPEC refresh. |
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-14  
 **Status:** Implementation plan (normative for engineering sequencing; product sign-off on catalog size vs app binary caps).  
-**Authority:** Aligns with `rules/00-product-intent.md`, `rules/13-client-cache-and-data-plane.md`, `docs/GAME-ENGINE.md` §9–§10, `docs/NARRATIVE-AND-PROMPTS.md`, `docs/RANKED-MODE.md` §3–§4, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`, existing inference plans (`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`), and backlog items **IMP-081**, **IMP-082**, **IMP-120** / architecture **S3**, **S6**.
+**Authority:** Aligns with `rules/00-product-intent.md`, `rules/13-client-cache-and-data-plane.md`, `docs/GAME-ENGINE.md` §9–§10, `docs/NARRATIVE-AND-PROMPTS.md`, `docs/RANKED-MODE.md` §3–§4, `docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`, existing inference plans (`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`, `plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`, **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** for **IMP-110** Street View sampling WBS), and backlog items **IMP-081**, **IMP-082**, **IMP-120** / architecture **S3**, **S6**.
 
 **Intent (shipped builds):** Store builds ship **as much precomputed SCAN content as practical**: Mapbox (or equivalent) **reference stills**, **three-tier coordinate-scoped useful hints**, **optional Street View description packs** (batch LFM-VL), **precomputed AI marker coordinates**, **authorial + LLM narrative** keyed by `mission_id` / `map_id` / slots, and **catalog metadata**—so **gameplay never depends on live inference** on the hot path. **Ranked** ships the **same clue assets and assists** on-device **except** the **golden answer** (WGS84 truth): truth remains **server-held** until `submit`; hints that materially narrow search space remain **behind ranked forfeit** UX per `docs/RANKED-MODE.md`.
 
@@ -29,7 +29,7 @@ Everything below is **versioned** with at least **`content_version`** (manifest)
 |-------|-------------|-----------|------------------|
 | **L0 — Catalog** | `map_id`, `title`, `engine_version`, optional `mission_id` links | Curated YAML/JSON + lint | SCAN hub, manifest `maps[]` |
 | **L1 — Reference still** | Downsampled static map image (PNG/JPEG/WebP) | Script: Mapbox Static Images (keys in CI secret), width/height policy per `docs/GAME-ENGINE.md` §9 | `still_bundle_id` + `GET /api/v1/bundles/...` and/or `still_bundled_resource` under `nutonic/shared/src/.../composeResources/` |
-| **L2 — Coordinate useful hints** | `useful_hints.tier_1..3`: continent → regional landmark/hydro → country; **no lat/lon literals**, length caps | **Scripts** (deterministic gazetteer: reverse geocode → admin polygons / Natural Earth–class tables) **or** LLM with **validator** (see §6) | `ManifestRoundLocation` / `RankedClue` |
+| **L2 — Coordinate useful hints** | `useful_hints.tier_1..N` (default **N=6**): monotonic bands from continental → marine/hydro → subnational → country-scale synthesis; **no lat/lon literals in any tier (including strongest)**; length caps | **`build_poi_geo_context`** → **`hint_compile_facts`** → **`compile_useful_hint_tiers`** (+ optional LLM polish) + **`validate_hint_strings`** | `ManifestRoundLocation` / `RankedClue` (OpenAPI optional **`tier_4`–`tier_6`**) |
 | **L3 — Street View hint pack** | Ordered text entries + viewpoint metadata; **decoy viewpoints** per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` | **Batch job**: `streetview_pano_service` → images → `lfm_vl_hint_service` → JSON | Optional assist panel; **ranked forfeit** if revealed before submit |
 | **L4 — Narrative (authorial)** | `prompts/` Markdown + YAML front matter: slots (`mission_select`, `map_select`, `map_overlay`, …) per `docs/NARRATIVE-AND-PROMPTS.md` §7 | Authors + CI lint | Gradle-serialized **PromptBundle** in compose resources |
 | **L5 — Narrative / chrome (generated)** | Mission one-liners, debrief templates, INTEL flavor | **Composable prompts**: `prompts/llm/*.md` with `{{vars}}`; HF Job or local `openai`-compatible runner in CI | Same bundle or sidecar JSON merged by `content_version` |
@@ -93,15 +93,15 @@ nutonic/shared/src/commonMain/composeResources/files/
 
 ---
 
-## 4. OpenAPI, server, and Kotlin model extensions (planned work)
+## 4. OpenAPI, server, and Kotlin model extensions
 
-**Today:** `UsefulHintsTiers`, `ManifestRoundLocation`, `RankedClue`, `CacheManifestDocument` cover stills + three-tier strings + AI rows; **no** `streetview_hint_pack` on wire or in Kotlin.
+**Landed (2026-04-14):** `docs/openapi.yaml`, Kotlin **`ManifestRoundLocation`** / **`RankedClue`**, FastAPI **`ManifestLocationOut`** / **`RankedClueOut`**, and **`data/scripts/assemble_manifest.py`** all carry optional **`streetview_hint_pack`** (+ optional **`streetview_assist_narrative`**) with caption validation. **`POST /api/v1/ranked/rounds/start`** echoes catalog **`streetview_*`** fields on **`RankedClueOut`** (no golden coordinates).
 
-**Plan:**
+**Remaining / polish:**
 
-1. Extend **`docs/openapi.yaml`** with optional **`streetview_hint_pack`** on `ManifestRoundLocation` and `RankedClueOut` (array of `{ "text": string, "viewpoint_id": string?, "rank": int? }` or equivalent — finalize schema with caps).
-2. Bump **`CacheManifestDocument`** / server redaction: **public** manifest omits `locations`, `ai_guesses` (unchanged); **shipped app** uses **embedded** `manifest.full.json` or **ranked_clue_pack.json** + compose resources, **not** the public HTTP manifest, for offline completeness.
-3. **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH`** remains for **lab** and **contract tests** only; **store** builds use **embedded full local manifest** for non-ranked and **embedded ranked clue pack** for ranked.
+1. **Shipped compose validation (landed):** **`:shared:validateCatalog`** runs **`data/scripts/validate_shipped_compose_resources.py`** against embedded **`manifest.full.json`** and resolves **`still_bundled_resource`** paths under **`nutonic/shared/.../composeResources/`** (see [`docs/scripts/SPEC-catalog-lint.md`](../docs/scripts/SPEC-catalog-lint.md) §5). **`git`** tracks the referenced **`files/maps/*.jpg`** and the embedded manifest so **normal clones** pass validation without a generate step. **`data/scripts/sync_server_catalog.py`** (**`--write`**) emits **`server/src/nutonic_server/catalog_generated.py`** from that manifest for static server hydration — see [`docs/scripts/SPEC-sync-server-catalog.md`](../docs/scripts/SPEC-sync-server-catalog.md); matching **JPEGs** under **`server/src/nutonic_server/bundles/`** are also **tracked** for **`GET /api/v1/bundles/{id}`**. **Still ahead:** **`sync_server_catalog --mode sql`** (**IMP-120**) and **workflow** docs for re-running **`render_mapbox_still`** / **`assemble_manifest`** / **`sync_server_catalog --write`** when **`data/catalog/`** or still policy changes (**IMP-081** maintenance, not first-time asset creation). **Street View batch (Phase D)** consumes **`streetview_pano_service`**; core **§13.1–§13.3** sampling is **landed** in **`inference/streetview_pano_service`** per **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md) v0.3** — track remaining **§13.4**/**§14** polish under **IMP-110**, not road-bearing research.
+2. **Public** manifest redaction unchanged (**`locations`** / **`ai_guesses`** empty by default); **shipped** **`composeResources/files/cache/manifest.full.json`** + **`mergeShippedRoundTruth`** and **`files/ranked/ranked_clue_pack.json`** + client **`mergeRankedClueWithPack`** keep SCAN/ranked assists coherent when the wire slice is thin.
+3. **`NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH`** remains for **lab** and **contract tests** only.
 
 ---
 
@@ -135,7 +135,7 @@ Phases are **ordered**; later phases depend on stable IDs from earlier ones.
 
 | `refs/` path | Role for **NU:TONIC `data/scripts/`** | Discipline |
 |---------------|----------------------------------------|------------|
-| **`refs/terramind-geogen-main/src/geo_utils.py`** | **Reference** for **haversine in km** and **(lon, lat)** point order when comparing distances, scoring parity notes, or **unit tests** that reimplement haversine in **pure Python / NumPy** | **Do not** `import torch` or add TerraTorch to `data/scripts/` — keep the data plane **lightweight**; mirror math only. |
+| **`refs/terramind-geogen-main/src/geo_utils.py`** | **Reference** for **haversine in km** and **(lon, lat)** point order when comparing distances, scoring parity notes, or **unit tests** that reimplement haversine in **pure Python / NumPy** | **Do not** `import torch` or add TerraTorch to `data/scripts/` — keep the data plane **lightweight**; mirror math only. **VLMs / TerraMind** run in **`inference/*`**, **`tools/`**, or Jobs using **vLLM** and/or **`transformers`+PyTorch** and/or **TerraTorch** per `inference/README.md`. |
 | **`refs/terramind-geogen-main/scripts/plot_error_heatmap.py`** | **Optional QA:** after playtests, bin **hint difficulty** or **distance error** by lat/lon (same CSV patterns as eval pipelines) | Offline analytics only. |
 | **`data/scripts/download_geoguessr_poi_imagery.py`** | **Canonical** patterns: HF `datasets` load, **STAC** + Mapbox fetch, **`haversine_km`** (already matches geogen **lon,lat** convention in file docstring) | New ingest scripts **load as module** or share a small **`data/scripts/geo_nutonic.py`** extracted from duplicated logic. |
 | **`refs/satellite-vlm/README.md`** (and related JSON eval shapes) | **Optional** strict JSON / schema habits for **LFM-VL caption** outputs (Street View pack entries) | Not required for **useful_hints** tiers. |
@@ -178,17 +178,20 @@ Phases are **ordered**; later phases depend on stable IDs from earlier ones.
 
 | Tier | Rule (default) | Example pattern |
 |------|----------------|-----------------|
-| **tier_1** | Continent + very coarse land/ocean framing; **no** country name unless product wants looser easy mode | “Indonesian archipelago · tropical maritime Southeast Asia” |
-| **tier_2** | **One** primary geographic signal from C0: **nearest named river/lake** within R **or** “~D km from coastline” bucket **or** admin-1 physiographic label | “Interior **Bali** sea-adjacent district; nearest major linear water: **X**” (names from NE only) |
-| **tier_3** | **Admin-0** common name (NE) or ISO name from `hf_row_meta`; may echo **non-spoiler** address fragments if schema allows (strip street numbers) | “Indonesia” |
+| **tier_1** | Continent + hemisphere + latitude **band** (ordinal, not numeric lat/lon) | “Indonesian archipelago · tropical maritime Southeast Asia” |
+| **tier_2** | **Marine / coastline framing** from C0 buckets (still **no** numeric coordinates) | Ordinal “very coastal / inland / deep interior” phrasing |
+| **tier_3** | **Hydrology synthesis** — named river/lake labels from NE + proximity **enum** (immediate / near / regional / distant) | “Named linear water …; standing water …” |
+| **tier_4** | **Subnational** emphasis (admin-1 name when resolved) | “First-order admin context: **Bali** …” |
+| **tier_5** | **Admin-0** country label | “Indonesia” |
+| **tier_6** | **Strongest scripted assist** — may combine admin1 + admin0 + compact hydro recap; **still no coordinate literals** | “Interior district pattern within **Indonesia**; hydro: …” |
 
-**Hard bans:** no digit sequences matching **lat/lon**; no **street address** precision in tier_1/2 unless explicitly allowed; max length per `docs/GAME-ENGINE.md` §9.1.
+**Hard bans:** no digit sequences matching **lat/lon** in **any** tier; no **street address** precision in early tiers unless explicitly allowed; max length per `docs/GAME-ENGINE.md` §9.1.
 
 #### C2 — Validation (always on)
 
 | Script / task | Input | Output |
 |---------------|-------|--------|
-| **`data/scripts/validate_hint_strings.py`** | `tier_1..3` + optional `facts_used` JSON | exit non-zero on coordinate regex hits, length caps, empty tiers when `assist_level != none`, **tier monotonicity** checks (tier_3 not looser than tier_2 heuristically) |
+| **`data/scripts/validate_hint_strings.py`** | `tier_1..N` + optional `facts_used` JSON | exit non-zero on coordinate regex hits on **any** tier, length caps, empty tiers when `assist_level != none`, optional **`enforce_max_tier_contains_admin0`** |
 
 #### C3 — Optional LLM polish (local, smallest model)
 
@@ -200,11 +203,13 @@ Phases are **ordered**; later phases depend on stable IDs from earlier ones.
 
 ### Phase D — Street View + LFM-VL batch (optional per map, ranked-safe)
 
+**Sampling / pano policy (normative WBS):** **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)** — **`streetview_pano_service`** implements **`sampling_mode`** (**`STOCHASTIC_S2_FOOTPRINT`** default: seeded disk anchors + **`pano=`** when metadata supplies a pano + random headings), **`LEGACY_RADIAL_OFFSET`**, and **`OMNI_SINGLE_PANO`**; retries on Static **429**/5xx; **`tools/batch_streetview_hints.py`** forwards **`--pano-*`** flags, **`model_pins`** (**`sampling_mode`**, **`s2_area_policy_version`**), and **renumbers `rank` 1..N** after chunked LFM merges. Road graph / external bearing providers remain **deferred** in that WBS.
+
 | Script / task | Input | Output | Notes |
 |---------------|-------|--------|-------|
-| **`tools/batch_streetview_hints.py`** (new, monorepo `tools/`) | Configurable **`--poi-limit`** / location subset; **`--sv-screenshots-per-location`**; **`--poi-root`**; **`--model-profile tiny`** | **`streetview_pano_service`** → **K** frames → **`lfm_vl_hint_service`** captioning → optional **text-only** narrative pass (`streetview_assist_narrative`) | Writes `streetview_hint_pack` (+ optional narrative field) per `SPEC-batch-streetview-hints.md` §1.1; **default local run: 12 POIs** before 120. |
+| **`tools/batch_streetview_hints.py`** (new, monorepo `tools/`) | Configurable **`--poi-limit`** / location subset; **`--sv-screenshots-per-location`**; **`--poi-root`**; **`--model-profile tiny`**; **`--pano-sampling-mode`** / **`--pano-jitter-seed`** / **`--pano-area-radius-m`** / **`--pano-min-anchor-separation-m`** / **`--pano-legacy-radius-m`** (per **IMP-110** WBS **PR-F**) | **`streetview_pano_service`** → **K** frames → **`lfm_vl_hint_service`** captioning → optional **text-only** narrative pass (`streetview_assist_narrative`) | Writes `streetview_hint_pack` (+ optional narrative field) per `SPEC-batch-streetview-hints.md` §1.1; **default local run: 12 POIs** before 120. |
 | **Optional same driver** | **`render_mapbox_still`** index + **`lfm_vl_satellite_caption_service`** URL | **Separate** caption lines / Intel sidecar with **`pipeline: satellite_lfm_vl_specialist`** | **Not** mixed into `streetview_hint_pack` without provenance (`docs/GAME-ENGINE.md` §5.2). |
-| **CI matrix** | HF_TOKEN, GPU | publishes Dataset shard or commits **pinned** `data/cache/<version>/` | Per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` |
+| **CI matrix** | HF_TOKEN, GPU | publishes Dataset shard or commits **pinned** `data/cache/<version>/` | Per `plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md` §2 + **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`** (**PR-H**/**PR-G**) |
 
 **Ranked:** Same generated packs ship **on device**; ranked integrity unchanged because **truth** is not in pack.
 
@@ -243,7 +248,7 @@ They receive:
 - **Distances** only as **binned** labels (e.g. `coastal_lt_25km`, `inland_gt_100km`) in the prompt text;
 - **Style tokens** from `prompts/index.md`.
 
-**Output contract:** JSON schema, e.g. `{ "tier_1": "...", "tier_2": "...", "tier_3": "..." }` with `maxLength` per tier. **Validator** (Phase C) is mandatory on CI merge to `main`.
+**Output contract:** JSON schema, e.g. `{ "tier_1": "...", … "tier_6": "..." }` with `maxLength` per tier (OpenAPI optional **`tier_4`–`tier_6`** for backward compatibility). **Validator** (Phase C) is mandatory on CI merge to `main`.
 
 **Street View captions:** Separate prompt file per **viewpoint** with **image attachments** only; model returns `{ "caption": "...", "confidence": 0-1 }`; strip coordinates from model output via validator.
 
@@ -254,12 +259,12 @@ They receive:
 | Task | Description |
 |------|-------------|
 | **Embed default manifest** | Ship `manifest.full.json` (or protobuf) under compose resources for **first-run offline**; `ContentCacheRepository` seeds from disk if HTTP fails — satisfies “every local map fully cached.” |
-| **Ranked clue resolver** | New `RankedCluePackRepository` (`commonMain`): `(mapId, locationId) -> RankedClueSlice` from `files/ranked/ranked_clue_pack.json`; merge with `RankedRoundStartOut.clue` for ticket-only fields. |
-| **Remove dangerous fallbacks** | Replace `groundTruthForMap` / `fallbackAiLatLon` hardcoding in `WorldMapGameplayScreen.kt` with **fail-closed** UX when pack incomplete (show “content unavailable” per `rules/08` uplink pattern). |
-| **Street View assist UI** | When `streetview_hint_pack` present, render collapsible list; wire **forfeit** call before expand in ranked (`docs/RANKED-MODE.md` §6). |
+| **Ranked clue resolver** | **Partial (2026-04-14):** `readShippedRankedCluePack` + **`mergeRankedClueWithPack`** merge **`files/ranked/ranked_clue_pack.json`** into `POST …/ranked/rounds/start` clues (API values win when set). A dedicated `RankedCluePackRepository` DI layer remains optional polish. |
+| **Remove dangerous fallbacks** | **Landed:** `WorldMapGameplayScreen.kt` no longer fabricates Vienna/NYC truth or AI coordinates; non-ranked rounds **fail closed** when no manifest row exists; **`readShippedFullManifest`** seeds gameplay when **`ContentCacheRepository`** is absent (tests / offline stub). |
+| **Street View assist UI** | **Landed (SCAN dock):** `AssistDock` lists **`streetview_hint_pack`** lines + optional narrative from **`ManifestRoundLocation`** / ranked clue merge; ranked **forfeit** gating unchanged (`docs/RANKED-MODE.md` §6). |
 | **Idempotency fix** | Stable `Idempotency-Key` for ranked submit (separate small PR, prerequisite for ranked E2E). |
 
-**Web / WASM:** Large binary caps — consider **splitting** `ranked_clue_pack` by `map_id` lazy fetch from same origin or gzip; document in `docs/map-engines.md` annex.
+**Web (Kotlin/JS):** Large binary caps — consider **splitting** `ranked_clue_pack` by `map_id` lazy fetch from same origin or gzip; document in `docs/map-engines.md` annex.
 
 ---
 
@@ -277,7 +282,7 @@ They receive:
 
 | Wave | This plan feeds |
 |------|-----------------|
-| **IMP-081** | Phases B, F + server bundle registry |
+| **IMP-081** | Phases B, F + server bundle registry (**shipped JPEGs + `registry.json` are git-tracked** — maintenance is re-running scripts when catalog changes) |
 | **IMP-082** | Phase E + F + client `AiGuessStore` from embedded pack |
 | **IMP-083** exit | Phase A–**C2** minimum (deterministic hints on **`geoguessr_poi_12`**, no SV, no LLM) + §7 fail-closed UX + E2E |
 | **IMP-090** | §1 ranked pack + §7 merge resolver + stable idempotency |
@@ -297,6 +302,10 @@ They receive:
 | 0.5 | 2026-04-14 | Link **`plans/2026-04-14-data-scripts-implementation-track.md`** + **testing-and-ci** supplement |
 | 0.6 | 2026-04-14 | Phase **D**: explicit LFM hint route + optional **satellite caption** hop from Mapbox stills; Phase **E**: TerraMind **`Coordinates`** as primary **`ai_lat`/`ai_lon`** source; cross-modal centering footgun |
 | 0.7 | 2026-04-14 | Phase **D** row: configurable POI count + **K** SV screenshots per POI + optional **LFM LLM** narrative pass (`streetview_assist_narrative`) per **`SPEC-batch-streetview-hints.md`** §1.1 |
+| 0.8 | 2026-04-14 | **§4 / §7:** `streetview_hint_pack` **landed** on OpenAPI, Kotlin, server ranked clues, **`assemble_manifest`**, bundled **`ranked_clue_pack.json`** merge, **AssistDock** wiring, **fail-closed** non-ranked gameplay. |
+| 0.9 | 2026-04-14 | **§4:** **`:shared:validateCatalog`** + **`validate_shipped_compose_resources.py`** and **`sync_server_catalog.py`** (**codegen**) documented as **landed**; **IMP-120** SQL sync called out as remaining. |
+| 1.0 | 2026-04-18 | **Authority** + **Phase D:** cross-ref **`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`**; Phase D table rows for batch CLI / CI matrix aligned to **IMP-110** WBS (**PR-F**/**PR-H**/**PR-G**). |
+| 1.1 | 2026-04-21 | **§4:** Clarify **git-tracked** **`files/maps/*.jpg`**, **`manifest.full.json`**, and **`server/.../bundles/*.jpg`**; **IMP-081** = workflow maintenance + **IMP-120** SQL; **§9** IMP-081 row note; gap analysis **v1.6** cross-ref. |
 
 ---
 

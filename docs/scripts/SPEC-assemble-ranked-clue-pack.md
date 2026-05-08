@@ -1,7 +1,7 @@
 # Script specification: `assemble_ranked_clue_pack.py`
 
 **Path:** `data/scripts/assemble_ranked_clue_pack.py`  
-**Status:** Planned (**Phase F**).  
+**Status:** **Phase F — implemented** (`ranked_clue_pack.json` + per-`map_id` slices under `ranked_clues/`).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) §1, §7.
 
 ---
@@ -15,7 +15,8 @@ Includes:
 - `map_id`, `location_id`
 - `still_bundle_id` / `still_bundled_resource`
 - `useful_hints`
-- optional `streetview_hint_pack`
+- optional `streetview_hint_pack`, optional `streetview_assist_narrative`
+- optional `satellite_caption_sidecar` (same object as full manifest; never golden)
 - `play_budget_ms`, `ai_marker_phase_enabled`
 - **`ai_guesses`** row for post-human marker (product decision: allowed on disk; not golden)
 

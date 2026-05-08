@@ -5,19 +5,24 @@ name: nutonic — quality, tests, clients
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "nutonic/**"
-      - "server/**"
-      - "docs/openapi.yaml"
-      - ".github/workflows/nutonic-ci.yml"
-      - "rules/**"
   pull_request:
+    branches:
+      - main
+      - dev
     paths:
       - "nutonic/**"
       - "server/**"
+      - "data/**"
+      - "docs/scripts/**"
+      - "tools/**"
+      - "inference/streetview_pano_service/**"
+      - "inference/lfm_vl_hint_service/**"
+      - "inference/lfm_vl_satellite_caption_service/**"
+      - "inference/pro_materialization_service/**"
       - "docs/openapi.yaml"
       - ".github/workflows/nutonic-ci.yml"
+      - ".github/workflows/nutonic-release.yml"
+      - ".github/workflows/nutonic-android-tester-build.yml"
       - "rules/**"
 
 concurrency:
@@ -29,9 +34,28 @@ defaults:
     working-directory: nutonic
 
 jobs:
+  data-scripts-unit-tests:
+    name: Data scripts (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r data/scripts/requirements.txt -r data/scripts/requirements-lfm-vl-dataset.txt -r tools/requirements.txt pytest ./inference/streetview_pano_service ./inference/lfm_vl_hint_service ./inference/lfm_vl_satellite_caption_service ./inference/pro_materialization_service
+      - name: Pytest data/scripts + tools + inference stubs
+        run: python -m pytest data/scripts/tests tools/tests inference/streetview_pano_service/tests inference/lfm_vl_hint_service/tests inference/lfm_vl_satellite_caption_service/tests inference/pro_materialization_service/tests -q
+
   server-unit-tests:
     name: Python game server (pytest)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -125,12 +149,22 @@ jobs:
           echo "MAPS_API_KEY=CI_STUB" >> local.properties
 
       - name: Assemble debug APK
-        run: ./gradlew --no-configuration-cache :androidApp:assembleDebug
+        env:
+          DEMO_ORIGIN: ${{ vars.NUTONIC_DEMO_SERVER_ORIGIN }}
+        run: |
+          set -euo pipefail
+          ARGS=(--no-configuration-cache :androidApp:assembleDebug)
+          if [ -n "${DEMO_ORIGIN:-}" ]; then
+            O="${DEMO_ORIGIN%%/}"
+            echo "Using -PnutonicServerOrigin=$O (repo variable NUTONIC_DEMO_SERVER_ORIGIN)"
+            ARGS+=(-PnutonicServerOrigin="$O")
+          fi
+          ./gradlew "${ARGS[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
           name: android-debug-apk
-          path: androidApp/build/outputs/apk/debug/*.apk
+          path: nutonic/androidApp/build/outputs/apk/debug/*.apk
 
   desktop-deb:
     name: Desktop package (Linux deb)
@@ -159,10 +193,106 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-linux-deb
-          path: desktopApp/build/compose/binaries/main-release/deb/*.deb
+          path: nutonic/desktopApp/build/compose/binaries/main-release/deb/*.deb
+
+  desktop-msi:
+    name: Desktop package (Windows MSI)
+    needs: quality-and-unit-tests
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI
+        shell: bash
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      # Compose unpacks WiX 3.11 under nutonic/build/wix311. Some runners expose WIX_PATH / PATH to a
+      # WiX 4+ layout (no candle/light), which breaks JDK 21 jpackage — unset WIX_PATH, unzip, then pin it.
+      - name: Prepare WiX 3.x (pin WIX_PATH for jpackage)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset WIX_PATH || true
+          ./gradlew.bat --no-configuration-cache :downloadWix :unzipWix
+          ROOT="$(pwd)"
+          WIX_ROOT="$ROOT/build/wix311"
+          if [[ -f "$WIX_ROOT/candle.exe" ]]; then
+            echo "WIX_PATH=$WIX_ROOT" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          CANDLE="$(find "$WIX_ROOT" -name candle.exe -type f -print -quit 2>/dev/null || true)"
+          if [[ -n "$CANDLE" ]]; then
+            echo "WIX_PATH=$(dirname "$CANDLE")" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "WiX candle.exe not found under $WIX_ROOT" >&2
+          find "$WIX_ROOT" -maxdepth 4 -type f 2>/dev/null | head -40 >&2 || true
+          exit 1
+
+      - name: Package release MSI
+        shell: bash
+        env:
+          TEMP: D:/jpktmp
+          TMP: D:/jpktmp
+          TMPDIR: D:/jpktmp
+        run: |
+          set -euo pipefail
+          mkdir -p "D:/jpktmp" 2>/dev/null || true
+          ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-msi
+          path: nutonic/desktopApp/build/compose/binaries/main-release/msi/*.msi
+
+  desktop-dmg:
+    name: Desktop package (macOS DMG)
+    needs: quality-and-unit-tests
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Package release DMG
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-dmg
+          path: nutonic/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
 
   web-bundles:
-    name: Web JS + Wasm production bundles
+    name: Web JS production bundle
     needs: quality-and-unit-tests
     runs-on: ubuntu-latest
     steps:
@@ -185,18 +315,10 @@ jobs:
       - name: JS browser production bundle
         run: ./gradlew --no-configuration-cache :webApp:jsBrowserProductionWebpack
 
-      - name: Wasm browser production bundle
-        run: ./gradlew --no-configuration-cache :webApp:wasmJsBrowserProductionWebpack
-
       - uses: actions/upload-artifact@v4
         with:
           name: web-js-productionExecutable
-          path: webApp/build/dist/js/productionExecutable/
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: web-wasm-productionExecutable
-          path: webApp/build/dist/wasmJs/productionExecutable/
+          path: nutonic/webApp/build/dist/js/productionExecutable/
 
   ios-framework:
     name: iOS shared framework (simulator)
@@ -223,9 +345,26 @@ jobs:
         run: ./gradlew --no-configuration-cache :shared:linkDebugFrameworkIosSimulatorArm64
 
       - name: Zip shared.framework
+        shell: bash
         run: |
-          cd shared/build/bin/iosSimulatorArm64/debugFramework
-          zip -r "$GITHUB_WORKSPACE/ios-shared-debug-framework.zip" shared.framework
+          set -euo pipefail
+          CAND=(
+            "shared/build/bin/iosSimulatorArm64/debugFramework/shared.framework"
+            "shared/build/bin/iosSimulatorArm64/DebugFramework/shared.framework"
+          )
+          FW=""
+          for p in "${CAND[@]}"; do
+            if [[ -d "$p" ]]; then FW="$p"; break; fi
+          done
+          if [[ -z "$FW" ]]; then
+            FW="$(find shared/build -type d -name shared.framework 2>/dev/null | grep -i iosSimulator | head -1 || true)"
+          fi
+          if [[ -z "$FW" || ! -d "$FW" ]]; then
+            echo "Could not locate shared.framework after linkDebugFrameworkIosSimulatorArm64" >&2
+            find shared/build -type d -name "*.framework" 2>/dev/null | head -40 >&2 || true
+            exit 1
+          fi
+          ( cd "$(dirname "$FW")" && zip -r "$GITHUB_WORKSPACE/ios-shared-debug-framework.zip" "$(basename "$FW")" )
 
       - uses: actions/upload-artifact@v4
         with:

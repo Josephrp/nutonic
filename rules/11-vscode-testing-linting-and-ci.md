@@ -63,14 +63,14 @@ The repository includes `.vscode/extensions.json` with suggested extensions:
 - **Shared logic tests** belong in **`shared/src/commonTest`** with `kotlin("test")` (see `KmpSanityTest`).
 - **Desktop Compose UI tests** stay in **`shared/src/desktopTest`** (existing pattern with `compose.desktop.uiTestJUnit4`).
 - **Platform-only** tests (Android instrumented, iOS XCTest bridges) are added only when CI and product require them; they are **not** required for every feature.
-- **`./gradlew test`** is the default **aggregate** verification command in CI for JVM-backed test tasks; KMP may add more specific tasks as modules grow.
+- **`./gradlew test`** is the default **aggregate** verification command in CI for JVM-backed test tasks. For **`:shared`**, the Android `test` task **finalizes** **`desktopTest`**, so Compose UI tests under `shared/src/desktopTest` (non-ranked gameplay persistence, etc.) run in the same CI invocation as `./gradlew test`.
 
 ### Commands
 
 ```bash
 cd nutonic
 ./gradlew test
-./gradlew :shared:desktopTest   # when you rely on desktop UI tests
+./gradlew :shared:desktopTest   # optional: run desktop UI tests alone (also runs after :shared:test)
 ```
 
 ---
@@ -116,13 +116,28 @@ Place the generated `baseline.xml` at `nutonic/config/detekt/baseline.xml`. The 
 
 Workflow: **`.github/workflows/nutonic-ci.yml`**
 
+- **Triggers:** **`pull_request`** when the **base branch is `main` or `dev`** (and paths match the filter below), plus **`workflow_dispatch`** for ad-hoc full CI from the Actions tab.
+- **Path filters:** PRs / dispatches only run client CI when changes touch listed paths (e.g. `nutonic/**`, `server/**`, `docs/openapi.yaml`, workflows under `.github/workflows/`, `rules/**`) — see the workflow file for the exact list.
+
 | Job | Runner | Purpose |
 |-----|--------|---------|
 | **quality-and-unit-tests** | `ubuntu-latest` | `./gradlew --continue quality test` (one invocation; `--continue` so lint and tests both run even if one fails); Android SDK via **setup-android before** `local.properties`; **Checks** from JUnit XML; artifacts for tests + detekt. |
-| **android-debug-apk** | `ubuntu-latest` | `:androidApp:assembleDebug` → APK artifact. |
+| **android-debug-apk** | `ubuntu-latest` | `:androidApp:assembleDebug` → APK artifact; if repository variable **`NUTONIC_DEMO_SERVER_ORIGIN`** is set, passes **`-PnutonicServerOrigin`** so the APK targets the deployed demo (otherwise Gradle default). |
 | **desktop-deb** | `ubuntu-latest` | `:desktopApp:packageReleaseDeb` → `.deb` artifact. |
-| **web-bundles** | `ubuntu-latest` | `:webApp:jsBrowserProductionWebpack` + `:webApp:wasmJsBrowserProductionWebpack` → upload `productionExecutable` trees. |
-| **ios-framework** | `macos-latest` | `:shared:linkDebugFrameworkIosSimulatorArm64` → zipped `shared.framework`. |
+| **desktop-msi** | `windows-latest` | After `:downloadWix` / `:unzipWix`, CI **unsets** inherited `WIX_PATH`, then sets `WIX_PATH` to the folder containing `candle.exe` under `nutonic/build/wix311` (Compose’s WiX 3.11). Packaging uses **short** `TEMP`/`TMP` on `D:/jpktmp` to reduce `jpackage` long-path failures. **MSI metadata** stays WiX-safe (see `desktopApp/build.gradle.kts`: no `:` in Start Menu group, ASCII description). |
+| **desktop-dmg** | `macos-latest` | `:desktopApp:packageReleaseDmg` → `.dmg` artifact (unsigned; notarization still manual). |
+| **web-bundles** | `ubuntu-latest` | `:webApp:jsBrowserProductionWebpack` → upload **`webApp/build/dist/js/productionExecutable/`** tree. |
+| **ios-framework** | `macos-latest` | `:shared:linkDebugFrameworkIosSimulatorArm64` → zip **`shared.framework`** from the resolved `…/iosSimulatorArm64/…Framework/` path (fallback `find` if Gradle layout changes). Kotlin/Native: `Dispatchers.IO` is not public on iOS — use `Dispatchers.Default` in `iosMain` `actual val ioDispatcher` (see `shared/src/iosMain/.../platform.ios.kt`). |
+
+### Release installers + GitHub Release (`.github/workflows/nutonic-release.yml`)
+
+- **Triggers:** **`push`** to **`main`** (path-filtered: `nutonic/**`, release workflow file, `docs/openapi.yaml`, `rules/**`) builds **`.deb` / `.msi` / `.dmg`** and uploads **workflow artifacts** (no GitHub Release on push). **`workflow_dispatch`** runs the same builds, then **publishes** assets to a **GitHub Release** for the **tag** you enter, using **`softprops/action-gh-release@v2.6.2`**.
+- **Optional mobile (same workflow, `workflow_dispatch` only):** boolean inputs build a **signed Android release APK** (keystore via secrets + Gradle injected signing), an **iOS archive → IPA** (distribution cert + provisioning profile + shared **`.xcscheme`**), optional **TestFlight upload** via **`apple-actions/upload-testflight-build@v4`**, and optional **attach** of `.apk` / `.ipa` to the same GitHub Release. See the workflow file header comments for the exact secret names. If **`android_nutonic_server_origin`** is left empty, **repository variable** **`NUTONIC_DEMO_SERVER_ORIGIN`** is used when set (same origin used by the tester workflow below).
+
+### Android demo APK for testers (`.github/workflows/nutonic-android-tester-build.yml`)
+
+- **`workflow_dispatch` only.** Builds a **signed** release APK pointed at **`NUTONIC_DEMO_SERVER_ORIGIN`** (or the per-run **origin** input), runs **`GET {origin}/api/v1/health`** before Gradle (optional skip), and uploads artifact **`nutonic-android-demo`** containing **`nutonic-demo.apk`** and **`README-TESTERS.txt`**. Use this for a **stable, documented** handoff to testers; PR CI’s debug APK can also pick up the same variable (see `nutonic-ci` **android-debug-apk** job).
+- **Repository settings:** publishing requires **Actions → General → Workflow permissions → Read and write** for the default `GITHUB_TOKEN` (the publish job sets **`contents: write`**; push-only runs use **`contents: read`**).
 
 ### CI conventions
 
@@ -135,7 +150,7 @@ Workflow: **`.github/workflows/nutonic-ci.yml`**
 
 ### Not in CI (by default)
 
-- **Signing** release APK/AAB or notarizing macOS desktop installers.
+- **Store-grade signing:** Play/App Store **AAB/APK signing**, Windows **Authenticode** on MSI, or **Apple notarization** for macOS (PR CI still produces **unsigned** `.msi` / `.dmg` for smoke verification).
 - **App Store / Play** upload.
 - **iOS Xcode archive** for device; only **Simulator** framework linkage is automated here.
 
@@ -178,9 +193,9 @@ So the portable contract for the team is: **set `JAVA_HOME` to a JDK 17+**, or s
 
 If the daemon runs on **JDK 25** (or another version not yet handled by the Kotlin compiler bundled with **Gradle’s Kotlin DSL**), configuration can fail early with **`IllegalArgumentException: 25.0.2`** (or similar) inside **`JavaVersion.parse`**. Prefer a **JDK 17–23** (or the **JetBrains Runtime** that ships with **Android Studio**, typically **21**) for **`org.gradle.java.home`** / **`JAVA_HOME`**.
 
-### Kotlin/JS and Wasm: `kotlin-js-store`
+### Kotlin/JS: `kotlin-js-store`
 
-- A failed **`kotlinStoreYarnLock`** task usually means the resolved graph no longer matches the committed lockfile. Run **`./gradlew kotlinUpgradeYarnLock`** (or a full **`jsBrowserProductionWebpack`** / **`wasmJsBrowserProductionWebpack`** with a clean npm install) and **commit** the resulting changes under **`nutonic/kotlin-js-store/`** (including **`yarn.lock`** and, when present, the **`wasm/`** subtree) so CI and other clones stay reproducible.
+- A failed **`kotlinStoreYarnLock`** task usually means the resolved graph no longer matches the committed lockfile. Run **`./gradlew kotlinUpgradeYarnLock`** (or a full **`jsBrowserProductionWebpack`** with a clean npm install) and **commit** the resulting changes under **`nutonic/kotlin-js-store/`** (including **`yarn.lock`**) so CI and other clones stay reproducible.
 
 ### Documented example (copy-paste)
 
@@ -210,7 +225,7 @@ See **`nutonic/gradle.properties.PERSONAL.example`**: it explains putting **`org
 Typical one-liner after clone (from **`nutonic/`**):
 
 ```bash
-./gradlew --no-configuration-cache test :androidApp:assembleDebug :desktopApp:compileKotlinJvm :webApp:jsBrowserProductionWebpack :webApp:wasmJsBrowserProductionWebpack
+./gradlew --no-configuration-cache test :androidApp:assembleDebug :desktopApp:compileKotlinJvm :webApp:jsBrowserProductionWebpack
 ```
 
 If **`quality`** fails on **ktlint** for the legacy template tree, run **`./gradlew formatKotlin`** and re-run **`./gradlew quality`**, or ratchet with **`detektBaseline`** (see §4).
@@ -235,7 +250,8 @@ The repository root includes **`ecosystem.config.cjs`** and **`scripts/pm2-run-g
 | Step | Action | Pass criteria |
 |------|--------|----------------|
 | **A. Lint + unit tests (always)** | From **repository root**: `npm install` if needed → `npx pm2 start ecosystem.config.cjs --only nutonic-ci-local` → `npm run pm2:wait-stopped -- nutonic-ci-local 3600000` (or wait until PM2 shows **stopped**). | **`logs/nutonic-ci-local.out.log`** contains **`BUILD SUCCESSFUL`**. **`logs/nutonic-ci-local.err.log`** reviewed (JVM noise vs new errors). |
-| **B. Smoke build (when required)** | Same pattern with **`nutonic-build-verify`** and **`npm run pm2:wait-stopped -- nutonic-build-verify 7200000`** (long timeout; webpack + wasm). | **`logs/nutonic-build-verify.out.log`** contains **`BUILD SUCCESSFUL`**. |
+| **B. Smoke build (when required)** | Same pattern with **`nutonic-build-verify`** and **`npm run pm2:wait-stopped -- nutonic-build-verify 7200000`** (long timeout; includes JS webpack). | **`logs/nutonic-build-verify.out.log`** contains **`BUILD SUCCESSFUL`**. |
+| **C. Full Gradle `build` (optional)** | **`npm run pm2:build`** → **`npm run pm2:wait-stopped -- nutonic-build 7200000`** (long timeout; all variants + lint + ktlint). | **`logs/nutonic-build.err.log`** ends with **`BUILD SUCCESSFUL`** (stdout may be merged here when `merge_logs` is true). |
 
 **When step B is required:** The PR modifies **`nutonic/webApp/`**, **`nutonic/androidApp/`**, **`nutonic/desktopApp/`**, **`nutonic/shared/`** in ways that affect compilation or resources, **or** **`nutonic/kotlin-js-store/`**, **or** root Gradle / version catalog under **`nutonic/`** that affects those modules. If in doubt, run **B**.
 
@@ -267,6 +283,8 @@ npm run pm2:wait-stopped -- nutonic-ci-local 3600000
 
 npm run pm2:build-verify   # when §9.2 step B applies
 npm run pm2:wait-stopped -- nutonic-build-verify 7200000
+npm run pm2:build          # optional: full `./gradlew build`
+npm run pm2:wait-stopped -- nutonic-build 7200000
 
 npm run pm2:stop           # remove nutonic-* PM2 entries when done
 npm run pm2:jlist          # clean JSON for tooling
@@ -288,7 +306,7 @@ npm run pm2:test           # optional ad-hoc
 - **Windows vs Unix:** The launcher selects **`nutonic/gradlew.bat`** vs **`gradlew`** automatically (aligned with **`.vscode/tasks.json`**).
 - **Do not pipe raw `pm2 jlist` through PowerShell `ConvertFrom-Json`:** PM2’s payload can include **duplicate env keys** differing only by case; use **`npm run pm2:jlist`** or **`node scripts/pm2-jlist-json.cjs`** and parse in Node.
 - **`pm2 update`:** Restarts the PM2 daemon and may **restore** apps from **`~/.pm2/dump.pm2`**; use with care on shared laptops (see runbook §6.3).
-- **Web / Wasm builds:** **`nutonic-build-verify`** can take a long time and may require a valid **`kotlin-js-store`** / lockfile state per §7.
+- **Web (Kotlin/JS) builds:** **`nutonic-build-verify`** can take a long time and may require a valid **`kotlin-js-store`** / lockfile state per §7.
 - **Future `server/` tests:** When **`server/`** lands, extend mandatory assessment with a PM2 app (e.g. **`pytest`**) and **`logs/`** paths; document in **`docs/PM2_LOCAL_VERIFICATION.md`** and add a row to §9.2 (`plans/2026-04-07-gradio-terramind-backend.md`).
 
 ---
@@ -297,5 +315,5 @@ npm run pm2:test           # optional ad-hoc
 
 - **`03-kotlin-multiplatform-structure.md`** — where tests and shared code live.
 - **`05-networking-leaderboard.md`** — **local** default leaderboards, optional community API, ranked contracts (not covered by this file).
-- **`14-testing-validation-pm2-and-documentation.md`** — PM2-first testing for Kotlin, Kotlin/JS/Wasm, and Python; **mandatory log review** and fix-before-continue; **complete PM2 environment** per feature; pragmatic **tests vs code** order; **plans/** pinning and **rules/docs** updates when standards shift.
+- **`14-testing-validation-pm2-and-documentation.md`** — PM2-first testing for Kotlin, Kotlin/JS, and Python; **mandatory log review** and fix-before-continue; **complete PM2 environment** per feature; pragmatic **tests vs code** order; **plans/** pinning and **rules/docs** updates when standards shift.
 - **`README.md`** (rules) — reading order for product and UX constraints.

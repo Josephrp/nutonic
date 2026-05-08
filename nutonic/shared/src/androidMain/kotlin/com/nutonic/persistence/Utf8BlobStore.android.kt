@@ -1,13 +1,15 @@
 package com.nutonic.persistence
 
 import com.nutonic.AndroidNutonicAppContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import kotlin.io.path.notExists
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 private class PathUtf8BlobStore(
     private val path: Path,
@@ -20,14 +22,35 @@ private class PathUtf8BlobStore(
     override suspend fun save(text: String) {
         withContext(Dispatchers.IO) {
             path.parent?.let { Files.createDirectories(it) }
-            path.writeText(text)
+            val tmp = path.resolveSibling(path.fileName.toString() + ".tmp")
+            tmp.writeText(text)
+            try {
+                Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp, path, StandardCopyOption.REPLACE_EXISTING)
+            }
         }
     }
 }
 
-actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore {
+private fun androidNutonicBlob(relative: String): Utf8BlobStore {
     val ctx = AndroidNutonicAppContext.application ?: return MemoryUtf8BlobStore()
-    val f = java.io.File(ctx.filesDir, "nutonic/local-nonranked-leaderboard.json")
+    val f = java.io.File(ctx.filesDir, relative)
     f.parentFile?.mkdirs()
     return PathUtf8BlobStore(f.toPath())
 }
+
+actual fun createLocalLeaderboardBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/local-nonranked-leaderboard.json")
+
+actual fun createGuessSyncOutboxBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/guess-record-outbox.json")
+
+actual fun createSettingsBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/client-settings.json")
+
+actual fun createPlayerProgressBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/player-progress.json")
+
+actual fun createProVlmModelBlobStore(): Utf8BlobStore =
+    androidNutonicBlob("nutonic/pro-vlm-model-cache.json")

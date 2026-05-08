@@ -1,46 +1,85 @@
+# NU:TONIC clients
 
-![](screenshots/nutonic.png)
+![NU:TONIC app screenshot](screenshots/nutonic.png)
 
-## Setting up your development environment
+This directory contains the Kotlin Multiplatform clients for the NU:TONIC Earth intelligence prototype: Android, iOS, desktop, and web. For competition use, prefer prebuilt artifacts from GitHub Actions or GitHub Releases; local builds are mainly for developers.
 
-Use **JDK 17+** and set **`JAVA_HOME`** (or `org.gradle.java.home` in `~/.gradle/gradle.properties`). See **`gradle.properties.PERSONAL.example`** and **`../rules/11-vscode-testing-linting-and-ci.md`** (section 7 — Team JDK).
+## Use a prebuilt client
 
-**Screen music:** Ship **one** background loop per primary route; place assets per **`../docs/SCREEN-MUSIC-SPEC.md`**. Every production screen must include the **header music on/off** control (`audio.music_master_enabled` in **`../docs/CLIENT-SETTINGS-SPEC.md`** §6.7).
+| Platform | Artifact | Notes |
+| --- | --- | --- |
+| Windows | `release-windows-msi` or `desktop-windows-msi` | Contains a `.msi` installer. |
+| macOS | `release-macos-dmg` or `desktop-macos-dmg` | Contains a `.dmg` installer. |
+| Linux | `release-linux-deb` or `desktop-linux-deb` | Contains a `.deb` package. |
+| Android | `release-android-signed-apk` or `android-debug-apk` | Install the `.apk` on a device or emulator. |
+| iOS | TestFlight, `release-ios-ipa`, or `ios-ipa` | TestFlight is the intended reviewer path. |
+| Web | `web-js-productionExecutable` | Static browser bundle. |
 
-To setup the environment, please consult these [instructions](https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-setup.html).
+To download artifacts:
 
-## How to run
+1. Open GitHub **Actions**.
+2. Use **`nutonic — release (installers + optional GitHub Release)`** for release installers, or **`nutonic — quality, tests, clients`** for CI/debug artifacts.
+3. Open a successful run and download the artifact from the **Artifacts** section.
+4. Unzip the artifact and install or serve the contained build.
 
-If you already ran this sample before, then you need to execute command at least once: 
-`/gradlew podInstall`
+For the most polished path, use GitHub **Releases** when a release tag has been published by `.github/workflows/nutonic-release.yml`.
 
-Choose a run configuration for an appropriate target in IDE and run it.
+## TestFlight
 
-![run-configurations.png](screenshots/run-configurations.png)
+For iOS public testing, use a TestFlight invite supplied by the maintainer. The workflow [`../.github/workflows/ios-testflight.yml`](../.github/workflows/ios-testflight.yml) builds a signed IPA and uploads it to TestFlight when Apple signing secrets are configured.
 
-## Run on desktop via Gradle
+## Local development
 
-`./gradlew desktopApp:run`
+Use **JDK 17+** and set **`JAVA_HOME`** or `org.gradle.java.home` in `~/.gradle/gradle.properties`. See `gradle.properties.PERSONAL.example` and [`../rules/11-vscode-testing-linting-and-ci.md`](../rules/11-vscode-testing-linting-and-ci.md).
 
-### Building native desktop distribution
+Compose Multiplatform setup notes are available in the [JetBrains documentation](https://www.jetbrains.com/help/kotlin-multiplatform-dev/compose-multiplatform-setup.html).
 
+## Run desktop locally
+
+```bash
+./gradlew desktopApp:run
 ```
-./gradlew :desktop:packageDistributionForCurrentOS
-# outputs are written to desktopApp/build/compose/binaries
+
+## Build desktop installers locally
+
+From `nutonic/`:
+
+```bash
+./gradlew :desktopApp:packageReleaseDeb    # Linux
+./gradlew :desktopApp:packageReleaseMsi    # Windows; WiX Toolset required
+./gradlew :desktopApp:packageReleaseDmg    # macOS
 ```
 
-## Run on Web via Gradle
+Outputs are written under `desktopApp/build/compose/binaries/main-release/`.
 
-> **Note:**
-> Web support is in [Alpha](https://kotlinlang.org/docs/components-stability.html). It may be changed at any time. You can use it in scenarios before production.
-> We would appreciate your feedback in [GitHub](https://github.com/JetBrains/compose-multiplatform/issues).
+## Run web locally
 
-`./gradlew :webApp:wasmJsRun`
+```bash
+./gradlew :webApp:jsBrowserDevelopmentRun
+```
 
-### Running Android application
+Web support follows Compose Multiplatform's browser target maturity and is best treated as a demo/reviewer surface.
 
-- Get a [Google Maps API key](https://developers.google.com/maps/documentation/android-sdk/get-api-key)
-- Add to `local.properties` file located in the root directory (create if it doesn't exist):
-  - `MAPS_API_KEY=YOUR_KEY` where `YOUR_KEY` is your key from previous step;
-  - `sdk.dir=YOUR_SDK_PATH` where `YOUR_SDK_PATH` is a path to Android SDK in your system.
-- Open project in IntelliJ IDEA or Android Studio and run `androidApp` configuration.
+## Run Android locally
+
+1. Get a [Google Maps API key](https://developers.google.com/maps/documentation/android-sdk/get-api-key) if using map-backed local screens.
+2. Create or update `local.properties` in `nutonic/`:
+
+   ```properties
+   MAPS_API_KEY=YOUR_KEY
+   sdk.dir=YOUR_ANDROID_SDK_PATH
+   ```
+
+3. Open the project in Android Studio or IntelliJ IDEA and run the `androidApp` configuration.
+
+CI builds debug APKs with `MAPS_API_KEY=CI_STUB`; release APKs can be signed by the release workflow when Android keystore secrets are configured.
+
+## Relation to the satellite AI stack
+
+The client is the easiest way for reviewers to experience the project, but the satellite intelligence work lives in the services and artifacts outside this directory:
+
+- Public Patagonia write-up: [`../Patagonia_Eval/patagonia_eval_runs/eval.md`](../Patagonia_Eval/patagonia_eval_runs/eval.md)
+- Inference services: [`../inference/README.md`](../inference/README.md)
+- PRO materialization: [`../inference/pro_materialization_service/README.md`](../inference/pro_materialization_service/README.md)
+- Satellite VLM captions: [`../inference/lfm_vl_satellite_caption_service/README.md`](../inference/lfm_vl_satellite_caption_service/README.md)
+- TerraMind TiM: [`../inference/terramind_tim_local/README.md`](../inference/terramind_tim_local/README.md)

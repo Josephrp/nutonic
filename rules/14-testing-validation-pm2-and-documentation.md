@@ -1,6 +1,6 @@
 # Testing, validation, PM2 environments, and documentation upkeep
 
-This document is the **authoritative rule** for **how** verification runs in the monorepo (PM2-first), **when** to treat Kotlin, Kotlin/JS (and Wasm), and Python as **in scope** for a change, **how** agents and humans must react to **logs** and failing builds, and **how** specs and rules stay aligned with shipped or in-flight work. It **extends** `11-vscode-testing-linting-and-ci.md` (Gradle layout, CI matrix, existing PM2 app names, §9.2 merge gate for `nutonic/**`). Where this file adds policy beyond §9, **both** apply.
+This document is the **authoritative rule** for **how** verification runs in the monorepo (PM2-first), **when** to treat Kotlin, Kotlin/JS, and Python as **in scope** for a change, **how** agents and humans must react to **logs** and failing builds, and **how** specs and rules stay aligned with shipped or in-flight work. It **extends** `11-vscode-testing-linting-and-ci.md` (Gradle layout, CI matrix, existing PM2 app names, §9.2 merge gate for `nutonic/**`). Where this file adds policy beyond §9, **both** apply.
 
 ---
 
@@ -14,7 +14,7 @@ This document is the **authoritative rule** for **how** verification runs in the
 
 - **Source of truth for commands** remains **`11-vscode-testing-linting-and-ci.md`** (§3–§5, §8–§9) and **`.github/workflows/nutonic-ci.yml`**.
 - **Kotlin unit tests, `quality`, and the combined `quality`+`test` path** run through the existing PM2 apps: **`nutonic-test`**, **`nutonic-quality`**, **`nutonic-ci-local`**.
-- **Kotlin/JS and Kotlin/Wasm** production bundles (and thus JS toolchains invoked by Gradle) are part of **`nutonic-build-verify`**—treat them as **JS-side validation** of the KMP tree. Any feature touching `webApp`, `kotlin-js-store`, or cross-cutting Gradle that affects JS/Wasm **must** go through **`nutonic-build-verify`** when §9.2 step B applies in `11`.
+- **Kotlin/JS** production bundles (and thus JS toolchains invoked by Gradle) are part of **`nutonic-build-verify`**—treat them as **JS-side validation** of the KMP tree. Any feature touching `webApp`, `kotlin-js-store`, or cross-cutting Gradle that affects the JS pipeline **must** go through **`nutonic-build-verify`** when §9.2 step B applies in `11`.
 
 ### 1.3 Python (`data/scripts/`, `inference/*`, future `server/`)
 
@@ -34,7 +34,7 @@ This document is the **authoritative rule** for **how** verification runs in the
 | If you change… | Minimum PM2 / verification environment (in addition to any narrower iteration) |
 |----------------|----------------------------------------------------------------------------------|
 | `nutonic/shared`, `androidApp`, `desktopApp`, Gradle config affecting them | **`nutonic-ci-local`**; if compile/resources/JS store affected → **`nutonic-build-verify`** (`11` §9.2 A + B) |
-| `nutonic/webApp` or `nutonic/kotlin-js-store` | **`nutonic-build-verify`** (includes JS/Wasm webpack paths) |
+| `nutonic/webApp` or `nutonic/kotlin-js-store` | **`nutonic-build-verify`** (includes JS webpack production bundle) |
 | Python under `data/scripts/` or `inference/` (or future `server/`) | Documented **Python** test/lint commands; **prefer** PM2 one-shot once defined; otherwise §9.4 with **`logs/`**-style capture |
 | Cross-cutting **rules**, **CI workflows**, or **PM2** definitions | Re-run the **smallest** PM2 set that proves the edit did not break client verification—typically **`nutonic-ci-local`** at least |
 

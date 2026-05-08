@@ -12,20 +12,16 @@ import androidx.compose.ui.unit.sp
 /** When true, prefer non-animated transitions (`docs/CLIENT-SETTINGS-SPEC.md` §4.1). */
 val LocalNutonicReducedMotion = compositionLocalOf { false }
 
-/** Legacy photo-gallery toast / chrome accents; prefer [NutonicColors] for new UI. */
-object NutonicPhotoGalleryColors {
-    val ToastBackground = Color(23, 23, 23)
-    val background = Color(0xFFFFFFFF)
-    val onBackground = Color(0xFF19191C)
-
-    val fullScreenImageBackground = Color(0xFF19191C)
-    val filterButtonsBackground = fullScreenImageBackground.copy(alpha = 0.7f)
-    val uiLightBlack = Color(25, 25, 28).copy(alpha = 0.7f)
-    val noteBlockBackground = Color(0xFFF3F3F4)
+/** Default BGM crossfade duration (`docs/SCREEN-MUSIC-SPEC.md`, publishable plan §2.2). */
+object NutonicMotion {
+    const val crossfadeMs: Int = 400
 }
 
 /** Semantic colors from `docs/DESIGN.md` §2–4 (HUD / Void palette). */
 object NutonicColors {
+    /** Transient toast / snack bar surface (shared across entry points). */
+    val toastBackground = Color(23, 23, 23)
+
     val primary = Color(0xFFC3F5FF)
     val primaryContainer = Color(0xFF00E5FF)
     val secondary = Color(0xFFFFB68B)
@@ -36,7 +32,34 @@ object NutonicColors {
     val surfaceContainerLowest = Color(0xFF0A0E19)
     val surfaceContainerLow = Color(0xFF171B27)
     val surfaceContainerHigh = Color(0xFF262A36)
+
+    /** Glass / frosted panels (`docs/DESIGN.md` §2) — surface @ ~55% on supported surfaces. */
+    val surfaceGlass: Color
+        get() = surface.copy(alpha = 0.55f)
+
+    /** Optional card outline “ghost” line (`docs/DESIGN.md` §2 No-Line). */
+    val outlineGhost: Color
+        get() = Color(0xFF3B494C).copy(alpha = 0.15f)
+
+    /** Matte behind cropped bundled reference stills (SCAN clue imagery). */
+    val stillImageMatte = Color(0xFF0F1214)
+
+    /** Placeholder panel while a reference still loads or after a bundle miss. */
+    val stillImagePlaceholder = Color(0xFF2B2D30)
+
+    /** Caption text on [stillImagePlaceholder] and other near-black image chrome. */
+    val onStillImagePlaceholder = Color(0xFFFFFFFF)
+
+    /** Full-screen dimmer for narrative / blocking overlays on top of gameplay. */
+    val overlayScrim = Color(0xAA000000)
 }
+
+/**
+ * Muted foreground for secondary labels; tracks [MaterialTheme.colors.onSurface] so high-contrast
+ * theme overrides stay consistent.
+ */
+@Composable
+fun nutonicOnSurfaceMuted(alpha: Float = 0.75f): Color = MaterialTheme.colors.onSurface.copy(alpha = alpha)
 
 @Composable
 fun NutonicTheme(

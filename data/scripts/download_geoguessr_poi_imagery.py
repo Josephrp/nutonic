@@ -25,6 +25,12 @@ Usage:
   python data/scripts/download_geoguessr_poi_imagery.py --out-dir data/downloads/geoguessr_poi
   # Many POIs (e.g. 120): use --auto-min-separation so spacing is maximized while still filling the count.
   python data/scripts/download_geoguessr_poi_imagery.py --num-points 120 --auto-min-separation --out-dir data/downloads/geoguessr_poi_120
+  # Small smoke: --num-points 8 --max-scan 50_000
+  # Use every geolocated row in the scan window: --num-points 0 --max-scan 0   (entire HF split; can take a long time)
+
+End-to-end LFM-VL raw SFT (HF POIs → geo-jitter re-downloads → tiles + JSONL) is three stages:
+  1) this script  2) ``data/scripts/run_lfm_vl_sft_geo_jitter_pipeline.py``  3) ``build_lfm_vl_sft_dataset.py`` (invoked by step 2).
+  Geo-jitter runs only in step 2 (default ``--geo-variants 2``); step 3 never re-jitters coordinates.
 """
 
 from __future__ import annotations
@@ -45,6 +51,12 @@ import requests
 from datasets import load_dataset
 from pystac_client import Client
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from geo_nutonic import haversine_km
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 try:
@@ -54,17 +66,6 @@ try:
     load_dotenv()
 except ImportError:
     pass
-
-
-def haversine_km(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
-    """Great-circle distance in km; (lon, lat) order matches src/geo_utils.haversine."""
-    r_km = 6371.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlamb = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlamb / 2) ** 2
-    c = 2 * math.asin(min(1.0, math.sqrt(a)))
-    return r_km * c
 
 
 def pairwise_min_distance_km(points: list[dict[str, Any]]) -> float | None:
@@ -201,7 +202,7 @@ def iter_geolocated_rows(
     scanned = 0
     for row in ds:
         scanned += 1
-        if scanned > max_scan:
+        if max_scan > 0 and scanned > max_scan:
             break
         coords = extract_lat_lon(row, lat_keys, lon_keys)
         if coords is None:
@@ -351,6 +352,107 @@ def download_sentinel_for_bbox(
     return errs, warns, item.id
 
 
+def download_poi_imagery_at_location(
+    simsat: Any,
+    session: requests.Session,
+    poi_dir: Path,
+    *,
+    poi_id: str,
+    lat: float,
+    lon: float,
+    bbox_km: float,
+    datetime_range: str,
+    stac_url: str,
+    collection: str,
+    max_cloud_cover: float,
+    skip_existing: bool,
+    optional_keys: frozenset[str],
+    asset_allowlist: frozenset[str] | None,
+    no_mapbox: bool,
+    mapbox_zoom: float,
+    mapbox_size: int,
+    hf_dataset: str,
+    hf_split: str,
+    hf_row_meta: dict[str, Any],
+    sentinel_mode: str,
+    selection_block: dict[str, Any],
+    extra_poi_fields: dict[str, Any] | None = None,
+) -> tuple[list[str], list[str], str | None, dict[str, Any]]:
+    """
+    Download Sentinel-2 L2A (+ optional Mapbox) for one WGS84 point and write ``poi.json``.
+
+    Used by ``download_geoguessr_poi_imagery`` main and by
+    ``run_lfm_vl_sft_geo_jitter_pipeline`` for coordinate-jittered re-downloads.
+    """
+    poi_dir.mkdir(parents=True, exist_ok=True)
+    bbox = bbox_around_point(lon, lat, bbox_km)
+
+    s_errs, s_warns, stac_id = download_sentinel_for_bbox(
+        simsat,
+        session,
+        stac_url=stac_url,
+        collection=collection,
+        bbox=bbox,
+        datetime_range=datetime_range,
+        max_cloud=max_cloud_cover,
+        skip_existing=skip_existing,
+        optional_keys=optional_keys,
+        asset_allowlist=asset_allowlist,
+        out_item_dir=poi_dir / "sentinel-2-l2a",
+    )
+
+    mapbox_path = poi_dir / "mapbox" / f"satellite-v9_{lon:.5f}_{lat:.5f}_z{mapbox_zoom}.png"
+    mapbox_info: dict[str, Any]
+    token = os.environ.get("MAPBOX_ACCESS_TOKEN")
+    if no_mapbox:
+        mapbox_info = {"skipped": True, "reason": "--no-mapbox"}
+    elif not token:
+        mapbox_info = {"skipped": True, "reason": "MAPBOX_ACCESS_TOKEN not set"}
+    else:
+        try:
+            if skip_existing and mapbox_path.exists() and mapbox_path.stat().st_size > 0:
+                mapbox_info = {"path": str(mapbox_path), "skipped": True}
+            else:
+                mapbox_path.parent.mkdir(parents=True, exist_ok=True)
+                simsat.fetch_mapbox_static(
+                    session,
+                    token,
+                    lon,
+                    lat,
+                    mapbox_zoom,
+                    0.0,
+                    0.0,
+                    mapbox_size,
+                    mapbox_size,
+                    True,
+                    mapbox_path,
+                )
+                mapbox_info = {"path": str(mapbox_path), "skipped": False}
+        except Exception as e:  # noqa: BLE001
+            mapbox_info = {"error": str(e)}
+            s_errs.append(f"{poi_id} mapbox: {e}")
+
+    doc: dict[str, Any] = {
+        "poi_id": poi_id,
+        "latitude": lat,
+        "longitude": lon,
+        "bbox_wgs84": list(bbox),
+        "bbox_km_half": bbox_km,
+        "hf_dataset": hf_dataset,
+        "hf_split": hf_split,
+        "hf_row_meta": hf_row_meta,
+        "stac_item_id": stac_id,
+        "datetime_query": datetime_range,
+        "sentinel_mode": sentinel_mode,
+        "mapbox": mapbox_info,
+        "selection": selection_block,
+    }
+    if extra_poi_fields:
+        doc.update(extra_poi_fields)
+    (poi_dir / "poi.json").write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    return s_errs, s_warns, stac_id, mapbox_info
+
+
 def default_datetime_window(days: int) -> str:
     end = time.time()
     start = end - days * 24 * 3600
@@ -367,7 +469,13 @@ def main() -> int:
         default=Path("data/downloads/geoguessr_poi"),
         help="Output root (per-point subfolders)",
     )
-    p.add_argument("--num-points", type=int, default=12, help="How many POIs to capture (after geographic selection).")
+    p.add_argument(
+        "--num-points",
+        type=int,
+        default=12,
+        help="How many POIs to capture after geographic selection. Use 0 for all geolocated rows "
+        "in the scan window (len(candidate pool), capped by --max-scan unless --max-scan 0).",
+    )
     p.add_argument(
         "--min-separation-km",
         type=float,
@@ -414,7 +522,9 @@ def main() -> int:
         "--max-scan",
         type=int,
         default=100_000,
-        help="Max HF rows to scan when building the candidate pool (increase if selection finds too few POIs).",
+        help="Max HF rows to scan when building the candidate pool. Use 0 to scan the entire split "
+        "(can be very slow/large; streaming=True by default avoids pulling image binaries). "
+        "Increase if selection finds too few POIs.",
     )
     p.add_argument(
         "--lat-field",
@@ -482,18 +592,23 @@ def main() -> int:
         )
         return 2
 
-    if len(candidates) < args.num_points:
-        print(
-            f"Need at least {args.num_points} geolocated candidates but only have {len(candidates)}. "
-            "Increase --max-scan or use a larger dataset.",
-            file=sys.stderr,
-        )
-        return 2
+    if args.num_points == 0:
+        n_req = len(candidates)
+        print(f"--num-points 0: using full candidate pool ({n_req} geolocated row(s))", flush=True)
+    else:
+        n_req = args.num_points
+        if len(candidates) < n_req:
+            print(
+                f"Need at least {n_req} geolocated candidates but only have {len(candidates)}. "
+                "Increase --max-scan or use a larger dataset.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.auto_min_separation:
         chosen_sep, points = maximize_min_separation_for_count(
             candidates,
-            args.num_points,
+            n_req,
             args.seed,
             args.auto_separation_hi_km,
         )
@@ -503,7 +618,7 @@ def main() -> int:
         chosen_sep = args.min_separation_km
         points = select_pois(
             candidates,
-            args.num_points,
+            n_req,
             args.min_separation_km,
             args.seed,
         )
@@ -512,9 +627,9 @@ def main() -> int:
 
     p_min = pairwise_min_distance_km(points)
 
-    if len(points) < args.num_points:
+    if len(points) < n_req:
         print(
-            f"Selection produced only {len(points)} POI(s) (requested {args.num_points}). "
+            f"Selection produced only {len(points)} POI(s) (requested {n_req}). "
             f"Candidates={len(candidates)}, effective_min_separation_km={chosen_sep}. "
             "Try --auto-min-separation, increase --max-scan, or lower --min-separation-km.",
             file=sys.stderr,
@@ -542,88 +657,49 @@ def main() -> int:
     all_errors: list[str] = []
     all_warnings: list[str] = []
 
+    selection_block = {
+        "strategy": selection_strategy,
+        "effective_min_separation_km": chosen_sep,
+        "requested_min_separation_km": requested_sep,
+        "auto_min_separation": args.auto_min_separation,
+        "seed": args.seed,
+        "candidate_pool_size": len(candidates),
+        "requested_num_points": n_req,
+        "num_points_cli": args.num_points,
+        "pairwise_min_km_all_pois": p_min,
+    }
+
     for i, pnt in enumerate(points):
         lat, lon = pnt["latitude"], pnt["longitude"]
         poi_id = f"poi_{i:04d}"
         poi_dir = out_root / poi_id
-        bbox = bbox_around_point(lon, lat, args.bbox_km)
-
-        s_errs, s_warns, stac_id = download_sentinel_for_bbox(
+        s_errs, s_warns, stac_id, mapbox_info = download_poi_imagery_at_location(
             simsat,
             session,
+            poi_dir,
+            poi_id=poi_id,
+            lat=lat,
+            lon=lon,
+            bbox_km=args.bbox_km,
+            datetime_range=dt,
             stac_url=args.stac_url,
             collection=args.collection,
-            bbox=bbox,
-            datetime_range=dt,
-            max_cloud=args.max_cloud_cover,
+            max_cloud_cover=args.max_cloud_cover,
             skip_existing=args.skip_existing,
             optional_keys=optional_keys,
             asset_allowlist=asset_allowlist,
-            out_item_dir=poi_dir / "sentinel-2-l2a",
+            no_mapbox=args.no_mapbox,
+            mapbox_zoom=args.mapbox_zoom,
+            mapbox_size=args.mapbox_size,
+            hf_dataset=args.dataset,
+            hf_split=args.split,
+            hf_row_meta=pnt["raw"],
+            sentinel_mode=args.sentinel_mode,
+            selection_block=selection_block,
+            extra_poi_fields=None,
         )
         all_errors.extend(s_errs)
         all_warnings.extend(s_warns)
-
-        mapbox_path = poi_dir / "mapbox" / f"satellite-v9_{lon:.5f}_{lat:.5f}_z{args.mapbox_zoom}.png"
-        mapbox_info: dict[str, Any]
-        token = os.environ.get("MAPBOX_ACCESS_TOKEN")
-        if args.no_mapbox:
-            mapbox_info = {"skipped": True, "reason": "--no-mapbox"}
-        elif not token:
-            mapbox_info = {"skipped": True, "reason": "MAPBOX_ACCESS_TOKEN not set"}
-        else:
-            try:
-                if args.skip_existing and mapbox_path.exists() and mapbox_path.stat().st_size > 0:
-                    mapbox_info = {"path": str(mapbox_path), "skipped": True}
-                else:
-                    simsat.fetch_mapbox_static(
-                        session,
-                        token,
-                        lon,
-                        lat,
-                        args.mapbox_zoom,
-                        0.0,
-                        0.0,
-                        args.mapbox_size,
-                        args.mapbox_size,
-                        True,
-                        mapbox_path,
-                    )
-                    mapbox_info = {"path": str(mapbox_path), "skipped": False}
-            except Exception as e:  # noqa: BLE001
-                mapbox_info = {"error": str(e)}
-                all_errors.append(f"{poi_id} mapbox: {e}")
-
-        (poi_dir / "poi.json").write_text(
-            json.dumps(
-                {
-                    "poi_id": poi_id,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "bbox_wgs84": list(bbox),
-                    "bbox_km_half": args.bbox_km,
-                    "hf_dataset": args.dataset,
-                    "hf_split": args.split,
-                    "hf_row_meta": pnt["raw"],
-                    "stac_item_id": stac_id,
-                    "datetime_query": dt,
-                    "sentinel_mode": args.sentinel_mode,
-                    "mapbox": mapbox_info,
-                    "selection": {
-                        "strategy": selection_strategy,
-                        "effective_min_separation_km": chosen_sep,
-                        "requested_min_separation_km": requested_sep,
-                        "auto_min_separation": args.auto_min_separation,
-                        "seed": args.seed,
-                        "candidate_pool_size": len(candidates),
-                        "requested_num_points": args.num_points,
-                        "pairwise_min_km_all_pois": p_min,
-                    },
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
 
         manifest_points.append(
             {
@@ -644,7 +720,8 @@ def main() -> int:
                 "dataset": args.dataset,
                 "split": args.split,
                 "num_points": len(points),
-                "num_points_requested": args.num_points,
+                "num_points_requested_cli": args.num_points,
+                "num_points_effective_selection": n_req,
                 "selection": {
                     "strategy": selection_strategy,
                     "effective_min_separation_km": chosen_sep,

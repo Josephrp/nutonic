@@ -1,7 +1,7 @@
 # Script specification: `catalog_import_poi.py`
 
 **Path:** `data/scripts/catalog_import_poi.py`  
-**Status:** Planned.  
+**Status:** **Implemented** (v1 — Layout A/B, `maps.yaml` merge, `--maps-file` overrides, `render_policy` fallback when still missing).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase A.
 
 ---
@@ -19,7 +19,8 @@ Ingest POI trees produced by **`download_geoguessr_poi_imagery.py`** (or compati
 | **`--poi-root`** | Default **`data/downloads/geoguessr_poi_12`**. May point to **`data/downloads/geoguessr_poi_120`**. |
 | **Layout A** | **`geoguessr_poi_manifest.json`** at root of `poi-root` listing points (12-set). |
 | **Layout B** | Glob **`poi_*/poi.json`** (120-set). |
-| **`--maps-file`** | Optional override for `data/catalog/maps.yaml` merge rules (titles, `ranked_eligible`, `mission_id`). |
+| **`--maps-file`** | Optional override for `data/catalog/maps.yaml` merge rules (titles, `ranked_pool`, `mission_id`). |
+| **`--ranked-split`** | `none` (default) or **`half`**: stable ~50/50 **`ranked_pool`** assignment by sorted `map_id` (first `n//2` false, remainder `true`). See `data/catalog/README.md`. |
 
 ---
 

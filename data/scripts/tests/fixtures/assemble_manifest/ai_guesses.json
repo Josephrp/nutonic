@@ -1,0 +1,16 @@
+{
+  "ai_guesses": [
+    {
+      "ai_lat": 1.0,
+      "ai_lon": 2.0,
+      "location_id": "asm_fix_a",
+      "map_id": "asm_fix_a"
+    },
+    {
+      "ai_lat": -4.0,
+      "ai_lon": 125.0,
+      "location_id": "asm_fix_b",
+      "map_id": "asm_fix_b"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY pro_vlm_bundles ./pro_vlm_bundles
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .

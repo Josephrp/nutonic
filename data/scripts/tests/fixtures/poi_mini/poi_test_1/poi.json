@@ -1,0 +1,10 @@
+{
+  "poi_id": "poi_test_1",
+  "latitude": -5.0,
+  "longitude": -10.0,
+  "hf_row_meta": {
+    "country_iso_alpha2": "YY",
+    "address": "Fixture Beta"
+  },
+  "mapbox": { "path": "", "skipped": true }
+}

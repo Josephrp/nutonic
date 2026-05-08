@@ -20,7 +20,7 @@
 
 ### 1.1 Purpose
 
-The **PRO** tab is a **non-game coordinate intelligence dashboard** (`rules/01`): the user supplies **WGS84** (typed, pasted, or map pick) and optionally a **short natural-language ask** (schema-capped). The client **POST**s to the **game server**, which forwards to a **standalone PRO materialization service** that:
+The **PRO** tab is a **non-game coordinate intelligence dashboard** (`rules/01`): the user chooses the analysis center through a **map-first AOI picker** with a movable pin; typed or pasted WGS84 is an advanced/accessibility path that stays synchronized with the pin. The client **POST**s `center_lat` / `center_lon` to the **game server**, which forwards to a **standalone PRO materialization service** that:
 
 1. **Acquires** **Mapbox** (or equivalent) **static** basemap tiles/stills and **Sentinel-2** assets via **STAC** (service keys **never** in `commonMain`, `rules/04`).  
 2. **Downsamples / crops / reprojects** rasters to **two families of contracts** documented in OpenAPI:  
@@ -87,7 +87,7 @@ sequenceDiagram
   U->>C: Submit lat, lon (+ optional ask)
   C->>G: POST /api/v1/pro/jobs
   G->>G: Validate JWT, rate-limit, job_id
-  G->>P: POST /internal/pro/materialize (coords, bbox, modes)
+  G->>P: POST /internal/v1/materialize (coords, bbox, modes)
   P->>M: Mapbox static fetch
   P->>S: Sentinel L2A (policy-limited)
   P->>P: Downsample → vlm_image_set + tim_input_contract
@@ -109,7 +109,7 @@ sequenceDiagram
 
 **Alignment:** **Geospatial → resize → TiM / generate** follows `plans/2026-04-07-terramind-gradio-spaces-comprehensive-demo.md` and `plans/2026-04-07-tim-standalone-gradio-poi-dataset.md`; **split deployables** are documented in **`docs/SERVER-AND-INFERENCE-ARCHITECTURE.md`** §5.3.
 
-**Internal HTTP path (disambiguation):** the game server’s call to the standalone materialization tier is **`POST /internal/pro/materialize`** (private network, HMAC/mTLS per thin orchestrator plan). It is **not** a client-visible URL; document the exact path in **`server/docs/TOPOLOGY.md`** if you rename routers.
+**Internal HTTP path (disambiguation):** the game server’s call to the standalone materialization tier is **`POST /internal/v1/materialize`** (private network, HMAC/mTLS per thin orchestrator plan). It is **not** a client-visible URL; document the exact path in **`server/docs/TOPOLOGY.md`** if you rename routers.
 
 ---
 
@@ -123,8 +123,14 @@ sequenceDiagram
 
 ### 3.1 PRO entitlement (initial build)
 
-- **Client:** **PRO** entry points are **gate-aware** (disabled UI, upsell copy, or hidden actions when `features.pro` is false)—product may still show the tab shell.
-- **Game server:** For **valid registered clients**, **`GET /api/v1/pro/entitlement`** (or JWT claim `features.pro`) **always returns allowed** in the **initial build**, so engineering can ship **gated UX** before billing is wired. Tighten to real **SKU / receipt** checks in OpenAPI when product enables paywalls (`plans/2026-04-07-game-server-thin-orchestrator.md`).
+- **Client:** **PRO** entry points are **gate-aware** (disabled UI, upsell copy, or hidden actions when `features.pro_jobs` is false)—product may still show the tab shell.
+- **Game server:** For **valid registered clients**, **`GET /api/v1/config`** exposes `features.pro_jobs`; engineering can ship **gated UX** before billing is wired. Tighten to real **SKU / receipt** checks in OpenAPI when product enables paywalls (`plans/2026-04-07-game-server-thin-orchestrator.md`).
+
+### 3.2 Map-First AOI Workflow
+
+The PRO dashboard must present a map as the primary coordinate input on targets where SCAN already ships map rendering. The user taps or drags a single center pin; pan/zoom keeps the pin as the effective AOI center and previews the `bbox_half_km` footprint. Manual `center_lat` / `center_lon` fields are collapsed by default, labeled for assistive tech, range-validated, and bi-directionally synced with the pin before any `POST /api/v1/pro/jobs` request.
+
+`mapbox_zoom` remains a request field because it affects materialized basemap framing, but `bbox_half_km` is the analysis radius control. Web may ship an interim clickable static basemap if full `MapViewport` parity lags; raw lat/lon-only entry is not acceptable for a production PRO route.
 
 ---
 
@@ -132,7 +138,7 @@ sequenceDiagram
 
 ### 4.1 Game server (thin)
 
-- **Clamp** `latitude` ∈ [−90, 90], `longitude` ∈ [−180, 180]; **reject** NaN/Inf; **precision** ≤ 6 dp in logs (`rules/05`).  
+- **Clamp** `center_lat` ∈ [−90, 90], `center_lon` ∈ [−180, 180]; **reject** NaN/Inf; **precision** ≤ 6 dp in logs (`rules/05`).
 - **Rate limits** per **IP / device id / JWT sub** on `POST .../pro/jobs`; **caps** on `bbox_half_km`, bytes, bundle size (e.g. **≤ 8–12 MiB** gzip mobile), max concurrent jobs.  
 - **`POST .../pro/jobs`** → internal **`PRO_MATERIALIZATION_SERVICE_URL`** (HMAC/mTLS per **`plans/2026-04-07-game-server-thin-orchestrator.md`** §0.1); then optional **`TERRAMIND_TIM_URL`** / **`TERRAMIND_GENERATE_URL`** using **handles** (URLs, checksums) produced by materialization—**not** by re-hosting Sentinel COGs or large NPZ streams inside the game process. **Normative:** the game server is **control plane** (JWT, job ids, **poll JSON**, **signed `bundle_download_url`** or **HTTP redirect** to object storage for **`ProVisionBundle`** bytes per §5); **heavy raster IO** stays in **`inference/pro_materialization_service/`** and TerraMind workers. **No** `torch` in `server/`.
 
@@ -185,13 +191,13 @@ Illustrative JSON header (bytes may be **CBOR** or **zip**; OpenAPI must fix one
 
 ### 6.0 Build, publish, and model artifacts (normative)
 
-- **Ship with the product:** On-device VLM **checkpoint(s)**, tokenizer or runtime metadata, and any **LEAP / engine** files required at inference time are **part of the shipped app artifact**, produced by the same **KMP / Gradle build and store publish pipeline** as the rest of NU:TONIC (e.g. packaged under `composeResources`, Android `assets`, or an equivalent per-target bundle). **CI** must verify expected **files exist**, **size bounds**, and **`model_bundle_id` / revision** alignment with the **`on_device_model_hint`** and **`ProVisionBundle`** contract the materialization tier targets (`plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md` §4.1).
-- **No mystery weights on device:** Production builds do **not** depend on the Hugging Face Hub, `hf` CLI, or arbitrary user-provided URLs for **core** PRO inference (`rules/13-client-cache-and-data-plane.md`). Optional **delta** updates (newer quant) require **OpenAPI-defined** URLs, **integrity hashes**, version gating, and explicit product sign-off—**default** remains **bundled-with-build**.
+- **No model binaries in this repository:** On-device VLM checkpoints, tokenizer/runtime metadata, and engine-side weight bundles are **not** committed to git. Production clients acquire them from **`GET /api/v1/pro/vlm/model-manifest`** plus the manifest's first-party or signed CDN **`download_url`**. The manifest must include **`model_bundle_id`**, **revision**, **size_bytes**, **sha256**, runtime hint, and supported **`contract_ids`**; clients verify size/hash before loading and cache only in the app sandbox.
+- **No mystery weights on device:** Production builds do **not** depend on the Hugging Face Hub, `hf` CLI, Hub tokens, or arbitrary user-provided URLs for **core** PRO inference (`rules/13-client-cache-and-data-plane.md`). Runtime download is allowed only through the **NU:TONIC game server / signed CDN** contract above, with fail-closed integrity checks and product sign-off. App-store binaries may still bundle a tiny runtime shim, but not the large model artifact.
 - **Inference is a port of `refs/VLMExample/`:** The **behavioral contract** for running the shipped model over **`vlm_image_set`**—session setup, multi-image message layout, forward, parse caption + JSON boxes—is **`refs/VLMExample/`**. KMP code uses **`expect`/`actual`** (or shared engine wrappers) to match that behavior per target (§6.2).
 
 ### 6.1 Behavioral port of `refs/VLMExample/` (multi-image)
 
-- **Model acquisition (primary):** Load weights from **app-shipped** assets bundled in the **build/publish** output; revision must match **`model_bundle_id`** / `on_device_model_hint` agreed with materialization. **Optional UX:** reuse the **download / progress** patterns from **`refs/VLMExample/`** (`LeapModelDownloader`, `observeDownloadProgress`) for **first-run copy**, **decompress**, or **warm-load** into fast storage—not as a substitute for shipping weights through CI and store binaries. A **platform-neutral** wrapper is fine where LEAP is not used (`rules/06`).  
+- **Model acquisition (primary):** Fetch the signed/versioned model manifest from the game server, download the artifact from the first-party/signed URL, verify **sha256** and **size**, then load from app sandbox cache. Reuse the **download / progress** patterns from **`refs/VLMExample/`** (`LeapModelDownloader`, `observeDownloadProgress`) for first-run acquisition, decompress, and warm-load. A **platform-neutral** wrapper is fine where LEAP is not used (`rules/06`).  
 - **Inference:** Build **one** `ChatMessage` with `ChatMessageContent.Text` (system + user ask + **`vlm_prompt_injection`** + fixed instruction: *output caption + JSON array of `{label, bbox}` in [0,1] vs `canonical_surface_id`*) and **multiple** `ChatMessageContent.Image` parts in **`vlm_image_set` order**. If the SDK requires **single-image** calls, run a **documented** merge (e.g. grid collage) **only** if bbox normalization is updated to that collage—prefer **native multi-image** when available.  
 - **Outputs:** Parse assistant text into **(a)** human-readable **caption** and **(b)** **bbox list**; validate JSON in **`commonMain`** before drawing.  
 - **One-shot UX:** Aggregate streaming to **one** result state; then run **layer composer** (§7).
@@ -235,7 +241,7 @@ Illustrative JSON header (bytes may be **CBOR** or **zip**; OpenAPI must fix one
 ### 7.3 Client rendering parity
 
 - **Android / iOS / Desktop:** `Canvas` or `graphicsLayer` with **device pixel ratio** scaling so 0–1 boxes align.  
-- **Web (wasm/js):** Same math; test **one** reference bundle across targets in CI snapshot tests (`rules/11`).
+- **Web (Kotlin/JS):** Same math; test **one** reference bundle across targets in CI snapshot tests (`rules/11`).
 
 ### 7.4 Optional on-device bbox parse
 
@@ -265,22 +271,24 @@ If the VLM returns **JSON** in the assistant text, client may **parse** (strict 
 
 ---
 
-## 9. OpenAPI sketch (illustrative)
+## 9. OpenAPI sketch (canonical surface)
 
-Implementers replace paths and wire **OpenAPI** components per product.
+The canonical public client surface is `docs/openapi.yaml`. Keep this sketch aligned with those component names; do not introduce bundle-only aliases here without updating OpenAPI.
 
 - **`POST /api/v1/pro/jobs`**  
-  - Body: `{ "latitude": number, "longitude": number, "bbox_half_km"?: number, "user_ask"?: string, "sentinel_fetch_mode"?: "MINIMAL_RGB" | "TERRAMIND_SPECTRAL" | "FULL_STAC", "enable_tim"?: boolean, "tim_modalities"?: string[], "pro_inference_route"?: "ON_DEVICE_VLM_PRIMARY" | "SERVER_TERRAMIND_GENERATE_PRIMARY" | "HYBRID" }` — **`tim_modalities`** must be a **subset** of IBM-allowed imagined modalities when `enable_tim` is true; server may **override** route or modality list for policy / capacity. Include **`Coordinates`** when product wants **TiM-derived** map pin / **AI-guess** hydration.  
-  - Response: `{ "job_id": "uuid", "poll_url": "...", "estimated_seconds": number }`
+  - Body: `{ "center_lat": number, "center_lon": number, "bbox_half_km"?: number, "mapbox_zoom"?: integer, "analysis_profile"?: "wildfire" | "oceanscout_ship_detection" | "land_use_change" | "flood_pulse" | "brief_only", "sentinel_fetch_mode"?: "MINIMAL_RGB" | "TERRAMIND_SPECTRAL" | "FULL_STAC", "enable_tim"?: boolean, "tim_branch"?: "S2L2A_full" | "RGB_mapbox", "datetime_interval"?: string, "scene_id_t0"?: string, "scene_id_t1"?: string, "scene_id_t2"?: string }` — `center_lat` / `center_lon` come from the map pin unless the advanced numeric fields are explicitly used. Legacy `vessel_monitoring` profile requests are normalized to `oceanscout_ship_detection`.
+  - Response: `{ "job_id": "uuid", "status": "queued", "inference_upstream_ok": null, "materialization_ok": null }`; the health booleans are compatibility fields and new clients poll the job resource for execution health.
 
 - **`GET /api/v1/pro/jobs/{job_id}`**  
-  - Response: `{ "status": "...", "progress": 0.0-1.0, "message_key": "FETCHING_SENTINEL", "bundle_url"?: "...", "content_version"?: "...", "error"?: { "code": "...", "detail": "..." } }`
+  - Response: `{ "job_id": "uuid", "status": "queued|running|completed|failed|cancelled", "progress_pct"?: 0-100, "status_reason"?: string, "error_class"?: "stac_no_coverage|stac_cloud_ceiling|worker_timeout|worker_unreachable|worker_error|input_validation|cancelled|internal", "error_detail"?: string, "analysis_profile"?: string, "artifacts"?: ProArtifactRef[], "analysis_artifacts"?: ProArtifactRef[], "brief_artifacts"?: ProArtifactRef[], "scene_provenance"?: object, "on_device_payload"?: ProOnDevicePayload, "materialization_summary"?: object }`
 
-- **`GET /api/v1/pro/bundles/{bundle_id}`**  
+- **`GET /api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}`**  
   - Headers: `ETag`, `Cache-Control`  
-  - Body: binary per §5
+  - Body: artifact bytes referenced by `download_url`/`artifact_id`; object-store redirects are allowed if signed by the game server.
 
-- **Optional:** **`DELETE /api/v1/pro/jobs/{job_id}`** — best-effort cancel.
+- **`GET /api/v1/pro/jobs?limit=20&status=completed`** — returns recent session-scoped job statuses for dashboard history.
+
+- **`POST /api/v1/pro/jobs/{job_id}/cancel`** — best-effort cancel.
 
 **Auth:** **`POST /api/v1/pro/jobs`** (and poll **`GET`**) use the same **game-server session / JWT** model as other authenticated APIs (`rules/05-networking-leaderboard.md`) so the server can **rate-limit** and **cache** materialization. **Initial entitlement** behavior: **§3.1**.
 
@@ -321,7 +329,7 @@ That repo demonstrates **fine-tuning** LFM VLMs on **VRSBench** (VQA, grounding,
 - [ ] OpenAPI for §9 + §5 schema published beside server.  
 - [ ] KMP DTOs + `ProJobRepository` in `commonMain`; Ktor engines per target (`plans/2026-04-07-complete-implementation-architecture.md` §3.3).  
 - [ ] `ProScreen` composable: chat transcript model, lat/lon inputs, map mini-picker optional, **state machine** §8.  
-- [ ] `OnDeviceVlmPort` **expect/actual** with Android **LEAP** parity to **`refs/VLMExample/`**; **Gradle / CI** packages **pinned** on-device model artifacts with the release.  
+- [ ] `OnDeviceVlmPort` **expect/actual** with Android **LEAP** parity to **`refs/VLMExample/`**; **OpenAPI / CI** verify the pinned remote model manifest, sha256, size, runtime, and `model_bundle_id` instead of committing model binaries to this repo.  
 - [ ] `ProOverlayRenderer` shared math for 0–1 bboxes.  
 - [ ] **PRO materialization service**: Mapbox + Sentinel + resize contracts; contract tests vs VLM + TiM matrix.  
 - [ ] Game server: **control-plane** orchestration **P → TiM → bundle** (JSON + **signed download URLs** / redirects per **§4.1**); **no** Sentinel/COG proxy through `server/`; persist **`tim_modality_outputs`** to **`AiGuessStore`** / Dataset **only** for **`map_id`** clue pipelines (incl. **`Coordinates` → ai_lat/ai_lon** per **§1.1.1**); **PRO** path returns full **`tim_modality_outputs`** **without** writing PRO-only jobs into **`AiGuessStore`**; integration tests with canned lat/lon.  
@@ -339,7 +347,7 @@ That repo demonstrates **fine-tuning** LFM VLMs on **VRSBench** (VQA, grounding,
 | 0.2 | 2026-04-12 | **§3.1** initial entitlement (always-allow valid clients); **§6.2** PRO-only on-device scope; **§9** auth aligns with session JWT; SCAN hints = bundled (authority header) |
 | 0.3 | 2026-04-12 | **Coordinate dashboard** intent; **standalone materialization** + **TiM/merge**; **multi-image** on-device VLM → caption + bboxes; **layered UI** + `pro_inference_route`; **`vlm_image_set`** bundle contract; **§4** split (**game server** vs **materialization** vs **TerraMind worker**) |
 | 0.4 | 2026-04-12 | **`tim_modality_outputs`** replaces single **`tim_summary`** as normative; **all `tim_modalities`** schema-capped; **`Coordinates` → `ai_lat`/`ai_lon`** for **`AiGuessStore`** / **cached AI-guess** (`docs/GAME-ENGINE.md` §12.2); §9 **`tim_modalities`** request field |
-| 0.5 | 2026-04-12 | **§6.0** — on-device VLM weights **ship with build/publish** + CI alignment to `model_bundle_id`; **`refs/VLMExample/`** as normative **inference** port; **§6.1** clarifies bundled weights vs optional warm-load/delta |
+| 0.5 | 2026-04-12 | **§6.0** originally required bundled on-device VLM weights; superseded by the runtime server/CDN model-manifest policy above. **`refs/VLMExample/`** remains the normative **inference** port. |
 | 0.6 | 2026-04-12 | **§1.1.1** — explicit **PRO TiM `Coordinates` vs `AiGuessStore`** persistence boundary, implications, and checklist tightening; **§4.3** / **`tim_modality_outputs`** table clarify display vs catalog writes |
 | 0.7 | 2026-04-12 | **§4.1** — game server **control plane** only (signed **`bundle_download_url`** / redirect); **no** Sentinel/COG re-host through `server/`; **§13** checklist aligned (`plans/2026-04-07-game-server-thin-orchestrator.md` §0.1) |
 

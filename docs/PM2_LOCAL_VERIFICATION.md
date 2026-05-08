@@ -33,7 +33,7 @@ This document records how NU:TONIC runs **Kotlin Multiplatform** checks under **
 | `nutonic-test` | `--no-configuration-cache test` | no | ~seconds–minutes |
 | `nutonic-quality` | `--no-configuration-cache quality` | no | ~seconds–minutes |
 | `nutonic-ci-local` | `--no-configuration-cache --continue quality test` | no | ~tens of seconds |
-| `nutonic-build-verify` | `test` + `:androidApp:assembleDebug` + `:desktopApp:compileKotlinJvm` + JS/Wasm **production** webpack | no | **several minutes** (webpack + wasm) |
+| `nutonic-build-verify` | `test` + `:androidApp:assembleDebug` + `:desktopApp:compileKotlinJvm` + JS **production** webpack | no | **several minutes** (webpack) |
 | `nutonic-test-watch` | `test --continuous` | yes | long-running |
 
 **Start one app at a time** unless you intentionally want parallel Gradle load:
@@ -89,7 +89,7 @@ Environment notes: Gradle **8.13**, Kotlin **2.0.21**, launcher JVM **25** (with
 ### 5.2 `nutonic-build-verify`
 
 - **Duration:** `BUILD SUCCESSFUL in 6m 18s`; **189** actionable tasks (**92** executed).
-- **Notable output:** Webpack **asset size** hints for large JS/Wasm bundles (expected for Compose Multiplatform template).
+- **Notable output:** Webpack **asset size** hints for large JS bundles (expected for Compose Multiplatform template).
 - **Kotlin:** Various **deprecation** and **expect/actual Beta** warnings; build still succeeded.
 
 ### 5.3 `nutonic-test`
@@ -152,6 +152,11 @@ These warnings do **not** come from PM2; they come from the JVM running **`gradl
 
 ---
 
-## 9. Future: Python `server/` tests
+## 9. Python server and inference deploys
 
-When `server/tests` exists, add a PM2 app that runs e.g. **`uv run pytest`** or **`python -m pytest`**, with **`cwd`:** `server`, and **`out_file` / `error_file`** under **`logs/`**, following the same gitignore rule.
+Python server and inference tests now run in GitHub Actions:
+
+- **`.github/workflows/nutonic-ci.yml`** runs `server/tests` plus tested inference/data/tool packages on pull requests and manual dispatch.
+- **`.github/workflows/huggingface-deploy.yml`** runs targeted pytest before each Hugging Face Space deployment, then calls `tools/hf_deploy/deploy_space.py` and `tools/live_inference_smoke.py`.
+
+PM2 remains the local runbook for Gradle/KMP checks only. Do not treat PM2 as the deployment mechanism for the Python game server or inference workers.

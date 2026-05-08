@@ -1,7 +1,7 @@
 # Script specification: `render_mapbox_still.py`
 
 **Path:** `data/scripts/render_mapbox_still.py`  
-**Status:** Planned (**IMP-081**).  
+**Status:** **Implemented** — reuse path (`bundled_relative` → JPEG under `files/maps/`), Mapbox Static Images fetch when token present, `still_index.json` + per-location `*.meta.json` under `--meta-dir` (**IMP-081** track P3).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase B.
 
 ---
@@ -16,7 +16,7 @@ Produce **reference still** JPEG/PNG bytes for each catalog **`location_id`**:
 Emit files suitable for:
 
 - **`nutonic/shared/src/commonMain/composeResources/files/maps/<bundle_id>.jpg`**, and
-- **`server/`** bundle registry (`resolve_bundle_bytes`) via generated index.
+- **`server/`** bundle registry: JPEG filenames under `nutonic_server/bundles/` are listed in **`nutonic_server/bundles/registry.json`** (loaded by `resolve_bundle_bytes`; codegen may extend this list from `still_bundle_id` values in the manifest).
 
 **Downstream consumers (do not break contracts silently)**
 
@@ -32,7 +32,7 @@ Emit files suitable for:
 ## 2. Inputs
 
 - **`data/catalog/locations/*.yaml`** (via `--catalog-root`).
-- **Environment:** `MAPBOX_ACCESS_TOKEN` or equivalent (never committed).
+- **Environment:** `MAPBOX_ACCESS_TOKEN` or `MAPBOX_TOKEN` (never committed). For subprocess tests / hermetic CI, set **`NUTONIC_NO_DOTENV=1`** to skip loading repo-root `.env` so missing-token paths are deterministic.
 - **Policy file** (optional): `--still-policy still_policy.yaml` with `width_px`, `height_px`, `zoom`, `style_id`.
 
 ---
@@ -61,10 +61,11 @@ Emit files suitable for:
 ```text
 python data/scripts/render_mapbox_still.py [--catalog-root data/catalog]
   [--compose-resources-maps-dir nutonic/shared/src/commonMain/composeResources/files/maps]
-  [--reuse-only] [--dry-run]
+  [--reuse-only] [--allow-network] [--dry-run]
 ```
 
 - **`--reuse-only`:** never hit network; fail if no bundled PNG.
+- **`--allow-network`:** when a row has only `render_policy` (no `bundled_relative`), call Mapbox Static Images (requires token). **Default is off** so CI and local runs do not accidentally bill Mapbox.
 
 ---
 
@@ -73,7 +74,8 @@ python data/scripts/render_mapbox_still.py [--catalog-root data/catalog]
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 4 | Missing token when render required |
+| 2 | Catalog / location YAML error, or missing `bundled_relative` file on disk |
+| 4 | Missing token when network render required, `--reuse-only` with no reusable bundled still, or network render requested without `--allow-network` |
 | 5 | Upstream Mapbox HTTP error (retry policy: exponential backoff, max 3) |
 
 ---
@@ -94,4 +96,4 @@ python data/scripts/render_mapbox_still.py [--catalog-root data/catalog]
 
 ---
 
-*Spec version: 2026-04-14 (2026-04-14b: downstream consumers + sidecar + footguns)*
+*Spec version: 2026-04-14 (2026-04-14c: implemented CLI + exit codes + `--allow-network` + `NUTONIC_NO_DOTENV`)*

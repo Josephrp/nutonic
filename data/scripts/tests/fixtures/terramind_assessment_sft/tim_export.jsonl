@@ -1,0 +1,1 @@
+{"map_id": "fixture_map", "location_id": "fixture_loc", "analysis_profile": "wildfire", "tim_modality_outputs": {"Coordinates": {"kind": "coordinates_wgs84", "confidence": 0.42, "latitude": 34.0522, "longitude": -118.2437}, "LULC": {"internal_key": "tok_lulc@224", "mean": 0.1}}}

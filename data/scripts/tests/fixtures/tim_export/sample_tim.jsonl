@@ -1,0 +1,2 @@
+{"location_id": "asm_fix_a", "map_id": "asm_fix_a", "tim_modality_outputs": {"Coordinates": {"kind": "coordinates_wgs84", "confidence": 0.42, "latitude": 11.5, "longitude": 21.25}}}
+{"location_id": "asm_fix_b", "map_id": "asm_fix_b", "tim_modality_outputs": {"Coordinates": {"kind": "coordinates_wgs84", "latitude": -4.0, "longitude": 128.5}}}

@@ -3,6 +3,16 @@
 # Gitleaks is built on first use (requires Go in PATH). Docker alternative: hook id gitleaks-docker in gitleaks repo.
 
 repos:
+  - repo: local
+    hooks:
+      # Windows often omits the Unix executable bit; Linux CI runs ./gradlew (exit 126 if 100644).
+      - id: gradlew-git-executable
+        name: nutonic/gradlew executable in Git index
+        language: system
+        entry: git update-index --chmod=+x nutonic/gradlew
+        pass_filenames: false
+        files: ^nutonic/gradlew$
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
     hooks:

@@ -1,0 +1,91 @@
+# =============================================================================
+# GeoGuessr POI batch — **TerraMind-compatible** encoder inputs (E2E)
+# =============================================================================
+#
+# TerraMind ``RGB`` is **Sentinel-2 RGB reflectance** (``untok_sen2rgb@224``), not
+# Mapbox / street-view JPEGs. Use ``rgb_mode: s2_rgb`` so RED/GREEN/BLUE are
+# sliced from the same STAC 12-band stack as ``S2L2A`` (one STAC fetch per row).
+#
+# With **uv** (recommended), from the **repository root** ``nutonic/``:
+#   cd path/to/nutonic
+#   uv sync --project inference/terramind_tim_local --extra dev --extra s2
+#   uv run --directory inference/terramind_tim_local python -m nutonic_terramind_tim_local run ^
+#     --config config.geoguessr_live_3row_s2_compatible.yaml ^
+#     --output-dir ../../data/downloads/tim_geoguessr_s2_compatible_run
+#
+# ``uv run --directory …`` sets cwd to ``inference/terramind_tim_local``, so
+# ``paths.repo_root`` points at the monorepo root for ``data/downloads/...``.
+#
+# POI coordinates + ``datetime_query`` come from ``data/downloads/geoguessr_poi_120``
+# ``poi.json`` files; imagery is pulled live from Earth Search STAC (same pipeline
+# as ``s2_stac.load_s2l2a_patch_np``). Batch rows were refreshed from a random
+# sample of three POIs in that tree (re-sample by editing ``batch`` below).
+# =============================================================================
+
+content_version: nutonic.tim_local.geoguessr_s2_compatible.v1
+
+paths:
+  repo_root: ../..
+
+model_id: terramind_v1_large_tim
+pretrained: true
+merge_method: mean
+
+modalities:
+  - RGB
+  - S2L2A
+
+tim_modalities:
+  - LULC
+  - NDVI
+  - location
+
+device: cpu
+
+inputs:
+  batch_size: 1
+  s2_mode: stac
+  datetime: "2026-01-10/2026-04-10"
+  s2:
+    stac_url: https://earth-search.aws.element84.com/v1
+    collection: sentinel-2-l2a
+    half_km: 14.0
+    patch_hw: 224
+    max_cloud: 80
+    max_items: 30
+
+serialization:
+  tensor_sample_limit: 0
+  encoder_tensor_sample_limit: 0
+  include_encoder_trace: true
+  encoder_trace_mode: all
+  tim_outputs: full
+  include_tim_raw_keys: true
+
+export:
+  include_ai_guess_row: true
+
+batch:
+  - map_id: poi_0013
+    location_id: poi_0013
+    rgb_mode: s2_rgb
+    lat: -3.7498162
+    lon: -38.5287303
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0053
+    location_id: poi_0053
+    rgb_mode: s2_rgb
+    lat: -13.6496882
+    lon: 132.130589
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac
+
+  - map_id: poi_0058
+    location_id: poi_0058
+    rgb_mode: s2_rgb
+    lat: 55.9981271
+    lon: 92.1045091
+    datetime: "2026-01-10/2026-04-10"
+    s2_mode: stac

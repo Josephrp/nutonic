@@ -117,7 +117,8 @@ That repository is a **geospatial ML pipeline** for **TerraMesh** (satellite / m
 ### 5.2 Explicit separation: primary still vs optional assists vs optional EO round types
 
 - **Primary geographic reference (SCAN):** each round ships a **downsampled Mapbox still** aligned to the target; the player matches it on the **world map** with their guess marker.
-- **Optional assists (SCAN, all pre-cached in bundle / manifest):** (1) **Street View description pack**—AI-generated **text** from **LFM-VL** (or equivalent) over **cached** multi-pano frames at **decoy / sampling** viewpoints for that target (see **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`**); (2) **Useful hints**—**three tiers** of increasing specificity vs golden answer (e.g. continent / regional EO landmark names / country), **script- or job-generated** and **schema-capped**—never raw coordinates in hint text unless product ships teach mode. **Ranked:** opening these forfeits verified placement (**`docs/RANKED-MODE.md`**). **Non-ranked:** no score consequence.
+- **Optional assists (SCAN, all pre-cached in bundle / manifest):** (1) **Street View description pack**—AI-generated **text** from **LFM-VL** (or equivalent) over **cached** multi-pano frames at **decoy / sampling** viewpoints for that target (see **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`**); (2) **Useful hints**—**up to six** monotonic specificity bands (continent → marine/hydro framing → subnational → country-scale synthesis, **script-generated** by default), **schema-capped**, and **coordinate-free in every band including the strongest**—never raw latitude/longitude literals in hint text unless product ships an explicit teach mode. **Ranked:** opening these forfeits verified placement (**`docs/RANKED-MODE.md`**). **Non-ranked:** no score consequence.
+- **Optional PRO-to-gameplay handoff:** PRO mini-app outputs can be displayed in SCAN only through an explicit user-selected overlay path. They do not rewrite manifest `ai_guesses`, `AiGuessStore` defaults, ranked truth, or local scoring inputs. UI must label marker provenance (`manifest` vs `PRO run`) whenever a PRO-derived marker is shown.
 - **TerraMesh** or other EO modalities may appear in **future `round_type`s**; if added, treat as a **separate** pipeline while sharing **haversine scoring**.
 
 ---
@@ -170,6 +171,8 @@ If OpenAPI or analytics still carry **`difficulty_profile_id`**, map it to **`ch
 
 **Human phase progression** (when to leave **`PLAY`** for resolution) is driven by **player submit** or **explicit** product actions (e.g. abandon control if shipped)—**not** by reaching **`play_budget_ms`**.
 
+**Shipped UI:** Any HUD that surfaces **`elapsed_play_ms`** or **`play_budget_ms`** must use **player-facing** copy that states the timer is **not scored** (see **`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`** §2.5). **Internal** phase names (`PLAY`, `AI_GUESS`, …) belong in **debug** tooling only (`rules/15-publishable-ui-and-release-readiness.md`).
+
 ---
 
 ## 8. State machines
@@ -206,7 +209,7 @@ When `z == max_zooms`, further hint requests may return **narrative-only** hints
 | **Mapbox still** | **Primary** visual anchor the player matches on the world map | Allowed—clue manifest may still omit golden coords |
 | **World map + guess modal** | Placement and **one** committed submit | Allowed |
 | **Street View description pack** | **Pre-cached** prose from multi-viewpoint Street View + VLM batch jobs (`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`) | **Optional assist** — **forfeit** verified ranked row if consumed before `submit` |
-| **Useful hints (3 tiers)** | **Pre-cached** strings increasing specificity (continent → regional EO landmark / hydrology → country); generated offline | **Tier 0 / “closed”** may be empty; **any revealed tier** in ranked = same **forfeit** policy as other ranked assists unless OpenAPI defines a **ranked-safe** subset (default: **all tiers forfeit**) |
+| **Useful hints (≤ 6 tiers)** | **Pre-cached** strings increasing specificity (broad continental → marine/hydro → subnational → country-scale, **no coordinate literals in any tier**); generated offline (`data/scripts/compile_useful_hint_tiers.py`) | **Tier 0 / “closed”** may be empty; **any revealed tier** in ranked = same **forfeit** policy as other ranked assists unless OpenAPI defines a **ranked-safe** subset (default: **all shipped tiers forfeit**) |
 | **Peer marker (Reveal uplink)** | Optional **hint** from another player’s stored guess | **Forfeit** if shown before `submit` (**`docs/RANKED-MODE.md`**) |
 
 **UX:** Each of still, assists, narrative, and peer affordance must be **collapsible** so players can maximize map workspace (`rules/04-maps-and-gameplay.md`).
@@ -219,7 +222,7 @@ When `z == max_zooms`, further hint requests may return **narrative-only** hints
 
 - **`map_id` / `round_id`** handles, **WGS84** truth for non-ranked local scoring (or ranked clue manifest without truth), **URI or inline ref** to the **downsampled Mapbox PNG/WebP**, `content_version`, optional **`ruleset_version`**.
 - **`streetview_hint_pack`** (optional): ordered **text** entries + metadata (viewpoint ids, **no** golden pano id in ranked bundles unless redaction policy allows).
-- **`useful_hints`** (optional): `{ "tier_1": string, "tier_2": string, "tier_3": string }` or equivalent—**fixed three-level** contract; strings **length-capped**; no lat/lon literals unless teach mode.
+- **`useful_hints`** (optional): `{ "tier_1": string, … "tier_6": string }` — **OpenAPI** allows **`tier_4`–`tier_6`** as optional extensions; strings are **length-capped**; **no latitude/longitude literals in any tier** (including **`tier_6`**) unless teach mode. Older bundles may ship only **`tier_1`–`tier_3`**.
 
 ### 9.2 Failure behavior
 
@@ -399,6 +402,8 @@ Normative contracts live with the reference server. Illustrative endpoints (REST
 | [`RANKED-MODE.md`](RANKED-MODE.md) | Ranked missions: server-secret rounds, verified scores, round_ticket |
 | [`docs/DESIGN.md`](DESIGN.md) | Shipped visual system (chat, HUD, typography) |
 | [`refs/stitch/nu_tonic_interface_design_specification.html`](refs/stitch/nu_tonic_interface_design_specification.html) | UX footguns and flows |
+| [`plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md`](../plans/2026-04-21-publishable-ui-stitch-parity-and-ship-criteria.md) | Store-ready client UI: cosmetic timer copy, offline/manifest messaging, debug vs release |
+| [`docs/PUBLISHABLE-UI-EXIT-CRITERIA.md`](PUBLISHABLE-UI-EXIT-CRITERIA.md) | Release checklist tying engine UX to shippable builds |
 
 ---
 
@@ -426,6 +431,8 @@ Normative contracts live with the reference server. Illustrative endpoints (REST
 | 0.18 | 2026-04-12 | **§12.2** — explicit bullet: **PRO** TiM **`Coordinates`** **must not** default into **`AiGuessStore`**; cross-link **`docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` §1.1.1** |
 | 0.19 | 2026-04-12 | **Solo-first / transport:** §1.1 / §6.2 / §8.1 / §12.1 / §14–§15 / §17 — **REST + local state** for players; **no** player-facing realtime session channel; **`match_id`** = optional correlation only; engine events = **in-process** naming |
 | 0.20 | 2026-04-12 | Cross-links: **`docs/RANKED-MODE.md`** (renamed from `RANKED-AND-PRO-MODE.md`)—ranked vs **PRO** tab vocabulary |
+| 0.21 | 2026-04-14 | **§9 useful hints:** up to **six** coordinate-free tiers; OpenAPI optional **`tier_4`–`tier_6`**; pipeline **`hint_compile_facts`** + **`compile_useful_hint_tiers`** |
+| 0.22 | 2026-04-21 | **§20** related docs: publishable UI plan + exit criteria (player-facing copy for timer §7.3 and manifest offline states). |
 
 ---
 

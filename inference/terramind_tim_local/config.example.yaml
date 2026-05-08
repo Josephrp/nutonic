@@ -1,0 +1,32 @@
+# Example: TerraMind TiM tiny on RGB with LULC + WGS84 location tokens.
+# See README.md for modality naming (use `location`, not `Coordinates`).
+
+model_id: terramind_v1_large_tim
+pretrained: true
+modalities:
+  - RGB
+tim_modalities:
+  - LULC
+  - location
+merge_method: mean
+
+device: cpu
+
+inputs:
+  mode: random
+  batch_size: 1
+
+serialization:
+  # 0 = dtype/shape/stats only (keeps JSONL small for git + CI). Raise for debugging.
+  tensor_sample_limit: 0
+  encoder_tensor_sample_limit: 0
+  include_encoder_trace: true
+  encoder_trace_mode: last
+  coordinate_key: coords
+  # tim_outputs: product   # product (default) | full — see README.md
+  # include_tim_raw_keys: false
+
+export:
+  map_id: smoke_map
+  location_id: smoke_loc
+  include_ai_guess_row: true

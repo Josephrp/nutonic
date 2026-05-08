@@ -1,0 +1,490 @@
+# Builds Linux .deb, Windows .msi, and macOS .dmg on every matching push to `main` (workflow artifacts only).
+# **GitHub Release** upload runs only on `workflow_dispatch` (tag + optional draft).
+# **Mobile (optional, workflow_dispatch only):** signed Android release APK, iOS archive → IPA, optional TestFlight upload,
+# optional attach of `.apk` / `.ipa` to the same GitHub Release.
+# Android secrets: NUTONIC_ANDROID_KEYSTORE_BASE64, NUTONIC_ANDROID_KEYSTORE_PASSWORD, NUTONIC_ANDROID_KEY_ALIAS,
+#   NUTONIC_ANDROID_KEY_PASSWORD; optional NUTONIC_MAPS_API_KEY_RELEASE.
+# Android variable (optional): NUTONIC_DEMO_SERVER_ORIGIN — used when workflow input android_nutonic_server_origin is empty.
+# iOS signing secrets: IOS_DISTRIBUTION_P12_BASE64, IOS_DISTRIBUTION_P12_PASSWORD, IOS_PROVISIONING_PROFILE_BASE64,
+#   IOS_PROVISIONING_PROFILE_NAME (exact profile Name in Apple Developer), APPLE_TEAM_ID.
+# TestFlight (App Store Connect API): APPSTORE_ISSUER_ID, APPSTORE_API_KEY_ID, APPSTORE_API_PRIVATE_KEY (.p8 body).
+# Publish job needs **Actions → General → Workflow permissions: Read and write** for `GITHUB_TOKEN`.
+
+name: nutonic — release (installers + optional GitHub Release)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0). Created at the workflow commit if it does not exist."
+        required: true
+        type: string
+      draft:
+        description: "Create as draft release"
+        required: false
+        default: false
+        type: boolean
+      build_android_release_apk:
+        description: "Build signed Android release APK (requires keystore secrets)"
+        required: false
+        default: false
+        type: boolean
+      build_ios_release_ipa:
+        description: "Build signed iOS IPA (App Store / TestFlight export; requires cert + profile secrets)"
+        required: false
+        default: false
+        type: boolean
+      upload_ios_to_testflight:
+        description: "Upload IPA to TestFlight via App Store Connect API (implies iOS IPA build)"
+        required: false
+        default: false
+        type: boolean
+      attach_mobile_to_github_release:
+        description: "Attach built .apk / .ipa to the GitHub Release for this tag (after publish job)"
+        required: false
+        default: false
+        type: boolean
+      android_version_code:
+        description: "Android versionCode (integer). Empty = Gradle default from androidApp/build.gradle.kts"
+        required: false
+        default: ""
+        type: string
+      android_version_name:
+        description: "Android versionName. Empty = Gradle default"
+        required: false
+        default: ""
+        type: string
+      android_nutonic_server_origin:
+        description: "Android BuildConfig NUTONIC_SERVER_ORIGIN (no /api/v1). Empty = variable NUTONIC_DEMO_SERVER_ORIGIN, else Gradle default"
+        required: false
+        default: ""
+        type: string
+      ios_bundle_id:
+        description: "iOS bundle id for export (must match provisioning profile + App Store Connect)"
+        required: false
+        default: "com.nutonic.ios"
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - "nutonic/**"
+      - ".github/workflows/nutonic-release.yml"
+      - "docs/openapi.yaml"
+      - "rules/**"
+
+concurrency:
+  group: nutonic-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: nutonic
+
+jobs:
+  build-linux-deb:
+    name: Release build — Linux .deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Package release .deb
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDeb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux-deb
+          path: nutonic/desktopApp/build/compose/binaries/main-release/deb/*.deb
+
+  build-windows-msi:
+    name: Release build — Windows .msi
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Local properties for CI
+        shell: bash
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Prepare WiX 3.x (pin WIX_PATH for jpackage)
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset WIX_PATH || true
+          ./gradlew.bat --no-configuration-cache :downloadWix :unzipWix
+          ROOT="$(pwd)"
+          WIX_ROOT="$ROOT/build/wix311"
+          if [[ -f "$WIX_ROOT/candle.exe" ]]; then
+            echo "WIX_PATH=$WIX_ROOT" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          CANDLE="$(find "$WIX_ROOT" -name candle.exe -type f -print -quit 2>/dev/null || true)"
+          if [[ -n "$CANDLE" ]]; then
+            echo "WIX_PATH=$(dirname "$CANDLE")" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "WiX candle.exe not found under $WIX_ROOT" >&2
+          find "$WIX_ROOT" -maxdepth 4 -type f 2>/dev/null | head -40 >&2 || true
+          exit 1
+
+      - name: Package release MSI
+        shell: bash
+        env:
+          TEMP: D:/jpktmp
+          TMP: D:/jpktmp
+          TMPDIR: D:/jpktmp
+        run: |
+          set -euo pipefail
+          mkdir -p "D:/jpktmp" 2>/dev/null || true
+          ./gradlew.bat --no-configuration-cache :desktopApp:packageReleaseMsi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows-msi
+          path: nutonic/desktopApp/build/compose/binaries/main-release/msi/*.msi
+
+  build-macos-dmg:
+    name: Release build — macOS .dmg
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: Local properties for CI
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Package release DMG
+        run: ./gradlew --no-configuration-cache :desktopApp:packageReleaseDmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-dmg
+          path: nutonic/desktopApp/build/compose/binaries/main-release/dmg/*.dmg
+
+  # --- Optional mobile (workflow_dispatch). Android: NUTONIC_ANDROID_KEYSTORE_BASE64, NUTONIC_ANDROID_KEYSTORE_PASSWORD,
+  # NUTONIC_ANDROID_KEY_ALIAS, NUTONIC_ANDROID_KEY_PASSWORD. Optional NUTONIC_MAPS_API_KEY_RELEASE.
+  build-android-signed-apk:
+    name: Release build — Android signed APK
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_android_release_apk == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: local.properties (SDK + Maps)
+        env:
+          MAPS_KEY: ${{ secrets.NUTONIC_MAPS_API_KEY_RELEASE }}
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          if [ -n "${MAPS_KEY:-}" ]; then echo "MAPS_API_KEY=${MAPS_KEY}" >> local.properties
+          else echo "MAPS_API_KEY=CI_STUB" >> local.properties
+          fi
+      - name: Decode Android release keystore
+        env:
+          KS_B64: ${{ secrets.NUTONIC_ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${KS_B64:-}" ]; then echo "Missing secret NUTONIC_ANDROID_KEYSTORE_BASE64"; exit 1; fi
+          echo "$KS_B64" | base64 -d > "${RUNNER_TEMP}/nutonic-release.keystore"
+      - name: Optional PRO VLM Android asset
+        if: vars.NUTONIC_PRO_VLM_EMBED_IN_ANDROID == 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          NUTONIC_PRO_VLM_MODEL_SOURCE_URL: ${{ vars.NUTONIC_PRO_VLM_MODEL_SOURCE_URL }}
+          NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256: ${{ vars.NUTONIC_PRO_VLM_MODEL_EXPECTED_SHA256 }}
+        run: |
+          python tools/stage_pro_vlm_bundle.py \
+            --required \
+            --output nutonic/shared/src/androidMain/assets/pro_vlm/pro-vlm.bundle
+      - name: Assemble signed release APK
+        env:
+          STORE_PW: ${{ secrets.NUTONIC_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.NUTONIC_ANDROID_KEY_ALIAS }}
+          KEY_PW: ${{ secrets.NUTONIC_ANDROID_KEY_PASSWORD }}
+          DEMO_ORIGIN_FALLBACK: ${{ vars.NUTONIC_DEMO_SERVER_ORIGIN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${STORE_PW:-}" ] || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PW:-}" ]; then
+            echo "Missing one of: NUTONIC_ANDROID_KEYSTORE_PASSWORD, NUTONIC_ANDROID_KEY_ALIAS, NUTONIC_ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+          GRADLE_ARGS=(--no-configuration-cache :androidApp:assembleRelease)
+          GRADLE_ARGS+=(-Pandroid.injected.signing.store.file="${RUNNER_TEMP}/nutonic-release.keystore")
+          GRADLE_ARGS+=(-Pandroid.injected.signing.store.password="${STORE_PW}")
+          GRADLE_ARGS+=(-Pandroid.injected.signing.key.alias="${KEY_ALIAS}")
+          GRADLE_ARGS+=(-Pandroid.injected.signing.key.password="${KEY_PW}")
+          VC="${{ github.event.inputs.android_version_code }}"
+          VN="${{ github.event.inputs.android_version_name }}"
+          SO="${{ github.event.inputs.android_nutonic_server_origin }}"
+          SO="${SO%%/}"
+          if [ -z "${SO:-}" ] && [ -n "${DEMO_ORIGIN_FALLBACK:-}" ]; then
+            SO="${DEMO_ORIGIN_FALLBACK%%/}"
+          fi
+          [ -n "$VC" ] && GRADLE_ARGS+=(-PnutonicVersionCode="$VC")
+          [ -n "$VN" ] && GRADLE_ARGS+=(-PnutonicVersionName="$VN")
+          [ -n "$SO" ] && GRADLE_ARGS+=(-PnutonicServerOrigin="$SO")
+          ./gradlew "${GRADLE_ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android-signed-apk
+          path: nutonic/androidApp/build/outputs/apk/release/*.apk
+
+  # iOS: IOS_DISTRIBUTION_P12_BASE64, IOS_DISTRIBUTION_P12_PASSWORD, IOS_PROVISIONING_PROFILE_BASE64,
+  # IOS_PROVISIONING_PROFILE_NAME (profile Name in developer portal), APPLE_TEAM_ID.
+  build-ios-release-ipa:
+    name: Release build — iOS IPA (signed)
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.build_ios_release_ipa == 'true' || github.event.inputs.upload_ios_to_testflight == 'true')
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: nutonic
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+      - name: local.properties for Gradle (KMP embed script)
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+      - name: Import distribution certificate + provisioning profile
+        env:
+          P12_B64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          P12_PW: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          PP_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+        run: |
+          set -euo pipefail
+          for v in P12_B64 P12_PW PP_B64 TEAM_ID PROFILE_NAME; do
+            eval "x=\${$v:-}"
+            if [ -z "${x}" ]; then echo "Missing secret for iOS signing (see workflow header comments)."; exit 1; fi
+          done
+          KEYCHAIN="${RUNNER_TEMP}/nutonic-signing.keychain-db"
+          security create-keychain -p actions "${KEYCHAIN}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security unlock-keychain -p actions "${KEYCHAIN}"
+          security list-keychains -d user -s "${KEYCHAIN}"
+          decode_b64() { base64 --decode 2>/dev/null || base64 -D; }
+          echo "${P12_B64}" | decode_b64 > /tmp/nutonic-dist.p12
+          security import /tmp/nutonic-dist.p12 -k "${KEYCHAIN}" -P "${P12_PW}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "${KEYCHAIN}"
+          mkdir -p "${HOME}/Library/MobileDevice/Provisioning Profiles"
+          echo "${PP_B64}" | decode_b64 > /tmp/nutonic.mobileprovision
+          security cms -D -i /tmp/nutonic.mobileprovision > /tmp/nutonic-profile.plist
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /tmp/nutonic-profile.plist)
+          cp /tmp/nutonic.mobileprovision "${HOME}/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+          echo "NUTONIC_IOS_KEYCHAIN=${KEYCHAIN}" >> "${GITHUB_ENV}"
+      - name: Write ExportOptions.plist (app-store)
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          BUNDLE_ID: ${{ github.event.inputs.ios_bundle_id }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+        run: |
+          python3 <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          out = Path(os.environ["RUNNER_TEMP"]) / "ExportOptions.plist"
+          data = {
+              "method": "app-store",
+              "teamID": os.environ["TEAM_ID"],
+              "signingStyle": "manual",
+              "uploadSymbols": True,
+              "provisioningProfiles": {os.environ["BUNDLE_ID"]: os.environ["PROFILE_NAME"]},
+          }
+          out.write_bytes(plistlib.dumps(data, fmt=plistlib.FMT_XML))
+          PY
+      - name: Xcode archive + export IPA
+        env:
+          KEYCHAIN: ${{ env.NUTONIC_IOS_KEYCHAIN }}
+        run: |
+          set -euo pipefail
+          security unlock-keychain -p actions "${KEYCHAIN}"
+          cd "${GITHUB_WORKSPACE}/nutonic/iosApp"
+          ARCHIVE="${RUNNER_TEMP}/Nutonic-iosApp.xcarchive"
+          OUT="${RUNNER_TEMP}/Nutonic-ipa"
+          rm -rf "$ARCHIVE" "$OUT"
+          xcodebuild -skipMacroValidation \
+            -project iosApp.xcodeproj -scheme iosApp -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE" \
+            archive \
+            BUNDLE_ID="${{ github.event.inputs.ios_bundle_id }}" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}"
+          mkdir -p "$OUT"
+          xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$OUT" \
+            -exportOptionsPlist "${RUNNER_TEMP}/ExportOptions.plist"
+          ls -la "$OUT"
+      - name: Tear down signing keychain
+        if: always()
+        env:
+          KEYCHAIN: ${{ env.NUTONIC_IOS_KEYCHAIN }}
+        run: |
+          if [ -n "${KEYCHAIN:-}" ] && [ -f "${KEYCHAIN}" ]; then security delete-keychain "${KEYCHAIN}" || true; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-ios-ipa
+          path: ${{ runner.temp }}/Nutonic-ipa/
+
+  publish-github-release:
+    name: Publish GitHub Release
+    if: github.event_name == 'workflow_dispatch'
+    needs: [build-linux-deb, build-windows-msi, build-macos-dmg]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Flatten installers for release upload
+        run: |
+          mkdir -p upload
+          find dist -type f \( -name '*.deb' -o -name '*.msi' -o -name '*.dmg' \) -exec cp -v {} upload/ \;
+          ls -la upload/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2.6.2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.tag }}
+          draft: ${{ github.event.inputs.draft }}
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+          files: upload/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Appends assets to the release created above (same tag). Secrets: APPSTORE_ISSUER_ID, APPSTORE_API_KEY_ID, APPSTORE_API_PRIVATE_KEY.
+  upload-ios-testflight:
+    name: Upload IPA to TestFlight (App Store Connect API)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.upload_ios_to_testflight == 'true'
+    needs: [build-ios-release-ipa]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-ios-ipa
+          path: ipa-dir
+      - name: Resolve IPA path
+        id: ipa
+        run: |
+          shopt -s nullglob
+          arr=(ipa-dir/*.ipa)
+          if [ ${#arr[@]} -eq 0 ]; then echo "No .ipa in artifact"; exit 1; fi
+          echo "path=${arr[0]}" >> "$GITHUB_OUTPUT"
+      - name: Upload to TestFlight
+        uses: apple-actions/upload-testflight-build@v4
+        with:
+          app-path: ${{ steps.ipa.outputs.path }}
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          uses-non-exempt-encryption: "false"
+          wait-for-processing: "false"
+
+  attach-android-apk-to-github-release:
+    name: Attach signed Android APK to GitHub Release
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.attach_mobile_to_github_release == 'true' &&
+      github.event.inputs.build_android_release_apk == 'true'
+    needs: [publish-github-release, build-android-signed-apk]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-android-signed-apk
+          path: mobile-android
+      - uses: softprops/action-gh-release@v2.6.2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          draft: ${{ github.event.inputs.draft }}
+          fail_on_unmatched_files: false
+          files: mobile-android/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  attach-ios-ipa-to-github-release:
+    name: Attach iOS IPA to GitHub Release
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.attach_mobile_to_github_release == 'true' &&
+      (github.event.inputs.build_ios_release_ipa == 'true' || github.event.inputs.upload_ios_to_testflight == 'true')
+    needs: [publish-github-release, build-ios-release-ipa]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-ios-ipa
+          path: mobile-ios
+      - uses: softprops/action-gh-release@v2.6.2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          draft: ${{ github.event.inputs.draft }}
+          fail_on_unmatched_files: false
+          files: mobile-ios/*.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

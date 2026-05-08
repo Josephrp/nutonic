@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling>=1.21.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nutonic-lfm-vl-satellite-caption-service"
+version = "0.1.0"
+description = "Satellite still → caption via LFM-VL (stub | transformers | OpenAI-compatible)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.0.0,<3",
+    "httpx>=0.27.0,<1",
+    "pillow>=10.0.0,<12",
+]
+
+[project.optional-dependencies]
+model = [
+    "torch>=2.2.0,<3",
+    "torchvision>=0.17.0,<1",
+    "transformers>=5.2.0,<6",
+    "accelerate>=0.33.0,<1",
+]
+serve = [
+    "gradio>=4.44.0,<6",
+    "spaces>=0.44.0,<1",
+]
+dev = ["pytest>=8.0.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lfm_vl_satellite_caption_service"]

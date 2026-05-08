@@ -1,0 +1,74 @@
+[
+  {
+    "event_id": "fire_canada_2023_01",
+    "lat": 62.454,
+    "lon": -114.372,
+    "event_date": "2023-08-17",
+    "region": "Yellowknife NWT (Behchokǫ̀/Yellowknife complex ZF015)",
+    "notes": "NWT 2023 season; mandatory evacuation ordered 16–17 Aug 2023 as Behchokǫ̀/Yellowknife fire approached the city (North Slave complex)."
+  },
+  {
+    "event_id": "fire_greece_2023_01",
+    "lat": 36.012,
+    "lon": 27.924,
+    "event_date": "2023-07-23",
+    "region": "Rhodes (SE coast / Gennadi–Lardos corridor)",
+    "notes": "Rhodes wildfire ignited 18 Jul 2023; rapid spread in meltemi winds; major evacuations; strong Sentinel signal late Jul 2023 (e.g. EMSN159 / NASA Worldview 26 Jul)."
+  },
+  {
+    "event_id": "fire_california_2024_01",
+    "lat": 39.7789,
+    "lon": -121.7617,
+    "event_date": "2024-07-24",
+    "region": "Butte County CA (Park Fire, Upper Bidwell Park / east of Chico)",
+    "notes": "CAL FIRE incident: ignition ~2024-07-24 near Upper Park Rd; became largest CA wildfire of 2024; centroid per incident reporting."
+  },
+  {
+    "event_id": "fire_greece_evros_2023",
+    "lat": 40.847,
+    "lon": 25.874,
+    "event_date": "2023-08-23",
+    "region": "Evros / Alexandroupolis (Dadia–Lefkimmi–Soufli NP corridor)",
+    "notes": "Aug 2023 EU-record complex; major smoke and burn signal around Alexandropolis and Dadia forest (Aug 19–29 active phase)."
+  },
+  {
+    "event_id": "fire_chile_valparaiso_2024",
+    "lat": -32.95,
+    "lon": -71.54,
+    "event_date": "2024-02-04",
+    "region": "Valparaíso (Viña del Mar / central coast)",
+    "notes": "Feb 2024 Chilean wildfires; extreme losses in Valparaíso region; drought + heatwave; among deadliest fire episodes in Chilean history."
+  },
+  {
+    "event_id": "fire_hawaii_maui_2023",
+    "lat": 20.878,
+    "lon": -156.682,
+    "event_date": "2023-08-09",
+    "region": "Maui HI (Lahaina wildfire)",
+    "notes": "Wind-driven urban–interface firestorm Aug 2023; extreme EO contrast pre/post in West Maui."
+  },
+  {
+    "event_id": "fire_canada_jasper_2024",
+    "lat": 52.873,
+    "lon": -118.081,
+    "event_date": "2024-07-24",
+    "region": "Jasper AB (Jasper wildfire complex)",
+    "notes": "Parks Canada: lightning-ignited complex from ~22 Jul 2024; town evacuation Jul 2024; includes North/South/Utopia fires (Miette area)."
+  },
+  {
+    "event_id": "fire_canada_ns_tantallon_2023",
+    "lat": 44.72,
+    "lon": -63.82,
+    "event_date": "2023-05-29",
+    "region": "Nova Scotia (Upper Tantallon / Halifax WUI)",
+    "notes": "May 2023 Halifax-area interface wildfires (Tantallon / Hammonds Plains); major Canadian Atlantic season episode."
+  },
+  {
+    "event_id": "fire_texas_smokehouse_creek_2024",
+    "lat": 35.83,
+    "lon": -101.19,
+    "event_date": "2024-02-27",
+    "region": "Texas Panhandle (Smokehouse Creek, Hutchinson County)",
+    "notes": "Largest Texas wildfire on record; GOES / CIMSS first detection ~26 Feb 2024; origin near Stinnett; crossed into OK."
+  }
+]

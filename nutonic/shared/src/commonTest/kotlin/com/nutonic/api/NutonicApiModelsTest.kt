@@ -86,7 +86,7 @@ class NutonicApiModelsTest {
             ],"locations":[
               {"map_id":"demo","location_id":"demo-vienna-001","truth_lat":48.2082,"truth_lon":16.3738,
                "ruleset_version":"v1","still_bundled_resource":"files/3.jpg","still_http_url":null,
-               "useful_hints":{"tier_1":"a","tier_2":"b","tier_3":"c"},"play_budget_ms":180000,"ai_marker_phase_enabled":true}
+               "useful_hints":{"tier_1":"a","tier_2":"b","tier_3":"c","tier_4":"d","tier_5":null,"tier_6":null},"play_budget_ms":180000,"ai_marker_phase_enabled":true}
             ],"ai_guesses":[
               {"map_id":"demo","location_id":"demo-vienna-001","ai_lat":41.9,"ai_lon":12.5}
             ]}
@@ -97,6 +97,8 @@ class NutonicApiModelsTest {
         assertEquals("demo-vienna-001", v.locations[0].locationId)
         assertEquals(1, v.aiGuesses.size)
         assertEquals(41.9, v.aiGuesses[0].aiLat)
+        assertEquals("d", v.locations[0].usefulHints?.tier4)
+        assertEquals(null, v.locations[0].usefulHints?.tier5)
     }
 
     @Test
@@ -120,5 +122,12 @@ class NutonicApiModelsTest {
         val body = RankedForfeitIn(reason = "peer_reveal")
         val s = NutonicJson.encodeToString(RankedForfeitIn.serializer(), body)
         assertTrue(s.contains("peer_reveal"))
+    }
+
+    @Test
+    fun pro_job_profile_from_wire_defaults_unknown_to_brief_only() {
+        assertEquals(ProJobProfile.OCEANSCOUT_SHIP_DETECTION, ProJobProfile.fromWireOrDefault("vessel_monitoring"))
+        assertEquals(ProJobProfile.BRIEF_ONLY, ProJobProfile.fromWireOrDefault("future_profile"))
+        assertEquals("flood_pulse", ProJobProfile.FLOOD_PULSE.wireToken())
     }
 }

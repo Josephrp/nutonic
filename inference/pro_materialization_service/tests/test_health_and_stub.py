@@ -1,0 +1,516 @@
+from __future__ import annotations
+
+import base64
+import io
+
+import numpy as np
+import pytest
+from fastapi.testclient import TestClient
+
+from pro_materialization_service.main import app
+
+
+def _scl_patch_if_requested(**kwargs: object) -> np.ndarray | None:
+    if not kwargs.get("include_scl"):
+        return None
+    scl = np.zeros((224, 224), dtype=np.float32)
+    scl[60:100, 60:100] = 9.0
+    return scl
+
+
+def test_health_and_internal_healthz() -> None:
+    client = TestClient(app)
+    h = client.get("/health")
+    assert h.status_code == 200
+    assert h.json()["service"] == "pro_materialization_service"
+
+    z = client.get("/internal/v1/healthz")
+    assert z.status_code == 200
+    body = z.json()
+    assert body["ok"] is True
+    assert "version" in body
+    assert body.get("s2_asset_mapping_version")
+
+
+def test_materialize_stub_returns_roles_with_mocked_s2(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack = np.zeros((12, 224, 224), dtype=np.float32) + 100.0
+    meta = {
+        "stac_item_id": "S2A_STUB",
+        "stac_datetime": "2024-01-01T00:00:00Z",
+        "eo_cloud_cover": 1.0,
+        "scl_asset_key": "scl",
+    }
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        return stack, meta, _scl_patch_if_requested(**kwargs)
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/api/v1/materialize/stub",
+        json={"latitude": 48.8566, "longitude": 2.3522},
+    )
+    assert r.status_code == 200, r.text
+    roles = set(r.json()["vlm_roles"])
+    assert roles == {"sentinel_fc", "cloud_mask_thumb"}
+
+
+def test_internal_materialize_rejects_mapbox_vlm_contract() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 40.7128,
+            "longitude": -74.006,
+            "enable_tim": True,
+            "tim_branch": "RGB_mapbox",
+            "mapbox_size": 256,
+            "sentinel_fetch_mode": "MINIMAL_RGB",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "VLM_CONTRACT_INCLUDES_MAPBOX_RGB"
+
+
+def test_minimal_rgb_tim_wrong_branch() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "sentinel_fetch_mode": "MINIMAL_RGB",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "enable_tim": True,
+            "tim_branch": "S2L2A_full",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "TIM_BRANCH_REQUIRES_RGB_MAPBOX"
+
+
+@pytest.mark.parametrize("profile", ["wildfire", "oceanscout_ship_detection", "land_use_change", "flood_pulse"])
+def test_profile_requires_tim_and_sentinel_stack(profile: str) -> None:
+    client = TestClient(app)
+    no_tim = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "analysis_profile": profile,
+        },
+    )
+    assert no_tim.status_code == 422
+    assert no_tim.json()["detail"]["code"] == "PROFILE_REQUIRES_TIM"
+
+    minimal_rgb = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "analysis_profile": profile,
+            "enable_tim": True,
+            "sentinel_fetch_mode": "MINIMAL_RGB",
+        },
+    )
+    assert minimal_rgb.status_code == 422
+    assert minimal_rgb.json()["detail"]["code"] == "PROFILE_REQUIRES_SENTINEL_STACK"
+
+
+@pytest.mark.parametrize("profile", ["wildfire", "oceanscout_ship_detection", "land_use_change", "flood_pulse"])
+def test_profile_requires_s2_tim_branch(profile: str) -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "analysis_profile": profile,
+            "sentinel_fetch_mode": "FULL_STAC",
+            "enable_tim": True,
+            "tim_branch": "RGB_mapbox",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "PROFILE_REQUIRES_S2L2A_FULL"
+
+
+def test_terramind_spectral_requires_s2_tim_when_rgb_tim() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "enable_tim": True,
+            "tim_branch": "RGB_mapbox",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "TIM_BRANCH_REQUIRES_S2L2A_FULL"
+
+
+def test_terramind_spectral_s2_npz_mocked(monkeypatch: pytest.MonkeyPatch) -> None:
+    stack = np.zeros((12, 224, 224), dtype=np.float32) + 100.0
+    meta = {
+        "stac_item_id": "S2A_TEST",
+        "stac_datetime": "2024-01-01T00:00:00Z",
+        "eo_cloud_cover": 1.0,
+        "scl_asset_key": "scl",
+    }
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        return stack, meta, _scl_patch_if_requested(**kwargs)
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "enable_tim": True,
+            "tim_branch": "S2L2A_full",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["run_manifest"]["stac"]["item_id"] == "S2A_TEST"
+    assert data["tim_payload"]["modalities_keys"] == ["S2L2A"]
+    raw = base64.standard_b64decode(data["tim_payload"]["npz_base64"])
+    z = np.load(io.BytesIO(raw))
+    assert z["S2L2A"].shape == (1, 12, 224, 224)
+
+
+def test_s2_dependencies_missing_returns_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(**kwargs):  # noqa: ANN003
+        raise ImportError("no rasterio")
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _boom,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "sentinel_fetch_mode": "FULL_STAC",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+        },
+    )
+    assert r.status_code == 503
+    assert r.json()["detail"]["code"] == "S2_DEPENDENCIES_MISSING"
+
+
+def test_minimal_rgb_fetch_mode_rejected() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "sentinel_fetch_mode": "MINIMAL_RGB",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "MINIMAL_RGB_UNSUPPORTED_USE_TERRAMIND_SPECTRAL"
+
+
+def test_unknown_vlm_contract() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={"latitude": 1.0, "longitude": 1.0, "vlm_contract_id": "unknown.contract"},
+    )
+    assert r.status_code == 422
+
+
+def test_vlm_fc_scl_contract_rejected_includes_mapbox_rgb() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 1.0,
+            "longitude": 1.0,
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_fc_scl",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "VLM_CONTRACT_INCLUDES_MAPBOX_RGB"
+
+
+def test_terramind_spectral_s2_only_contract_no_mapbox_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MAPBOX_ACCESS_TOKEN", raising=False)
+    stack = np.zeros((12, 224, 224), dtype=np.float32) + 100.0
+    stack[7] += 2000.0
+    stack[11] += 1500.0
+    meta = {
+        "stac_item_id": "S2A_TEST",
+        "stac_datetime": "2024-01-01T00:00:00Z",
+        "eo_cloud_cover": 1.0,
+        "band_asset_keys": [],
+        "scl_asset_key": "scl",
+    }
+    scl = np.zeros((224, 224), dtype=np.float32)
+    scl[60:100, 60:100] = 9.0
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        assert kwargs.get("include_scl") is True
+        return stack, meta, scl
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    roles = [a["role"] for a in data["vlm_artifacts"]]
+    assert roles == ["sentinel_fc", "cloud_mask_thumb"]
+    assert data["run_manifest"]["mapbox_source"]["provider"] == "none"
+
+
+def test_full_stac_s2_only_rgb_tim_requires_mapbox_contract() -> None:
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "sentinel_fetch_mode": "FULL_STAC",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "enable_tim": True,
+            "tim_branch": "RGB_mapbox",
+        },
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "TIM_RGB_REQUIRES_MAPBOX_VLM_CONTRACT"
+
+
+def test_profile_materialization_records_temporal_scenes_and_profile_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        calls.append(kwargs)
+        stack = np.zeros((12, 224, 224), dtype=np.float32) + len(calls)
+        meta = {
+            "stac_item_id": f"S2_{len(calls)}",
+            "stac_datetime": kwargs["datetime_range"].split("/")[-1],
+            "eo_cloud_cover": 1.0,
+            "band_asset_keys": ["coastal"] * 12,
+            "scene_id_requested": kwargs.get("scene_id"),
+            "scl_asset_key": "scl",
+        }
+        return stack, meta, _scl_patch_if_requested(**kwargs)
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "analysis_profile": "wildfire",
+            "enable_tim": True,
+            "tim_branch": "S2L2A_full",
+            "scene_id_t0": "PINNED_T0",
+            "datetime_interval": "2024-04-01/2024-04-30",
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(calls) == 2
+    assert calls[0]["scene_id"] == "PINNED_T0"
+    assert data["run_manifest"]["temporal_slices"] == ["t0", "t1"]
+    assert data["run_manifest"]["scene_provenance"]["t0"]["scene_id_requested"] == "PINNED_T0"
+    roles = {artifact["role"] for artifact in data["vlm_artifacts"]}
+    assert {
+        "scene_provenance",
+        "wildfire_aoi_overlay",
+        "firewatch_burn_change_heatmap",
+        "firewatch_metrics",
+        "firewatch_hotspots",
+        "firewatch_hotspots_geojson",
+        "profile_artifact_index",
+    } <= roles
+    metrics = next(a for a in data["vlm_artifacts"] if a["role"] == "firewatch_metrics")
+    assert metrics["mime"] == "application/json"
+    heatmap = next(a for a in data["vlm_artifacts"] if a["role"] == "firewatch_burn_change_heatmap")
+    assert heatmap["mime"] == "image/png"
+
+
+def test_oceanscout_materialization_emits_candidate_and_coverage_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_load(**kwargs):  # noqa: ANN003
+        stack = np.zeros((12, 224, 224), dtype=np.float32)
+        stack[2, 20:40, 20:40] = 0.8
+        stack[7, 20:40, 20:40] = 0.1
+        stack[11, 20:40, 20:40] = 0.9
+        meta = {
+            "stac_item_id": f"S2_{kwargs['datetime_range']}",
+            "stac_datetime": kwargs["datetime_range"].split("/")[-1],
+            "eo_cloud_cover": 10.0,
+            "band_asset_keys": ["coastal"] * 12,
+            "scl_asset_key": "scl",
+        }
+        return stack, meta, _scl_patch_if_requested(**kwargs)
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 34.0522,
+            "longitude": -118.2437,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "analysis_profile": "oceanscout_ship_detection",
+            "enable_tim": True,
+            "tim_branch": "S2L2A_full",
+            "datetime_interval": "2024-04-01/2024-04-30",
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    roles = {artifact["role"] for artifact in r.json()["vlm_artifacts"]}
+    assert {
+        "observation_coverage",
+        "vessel_candidates",
+        "vessel_overlay",
+        "lane_heatmap",
+        "incursion_events",
+    } <= roles
+
+
+def test_landshift_materialization_emits_transition_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        nonlocal calls
+        calls += 1
+        stack = np.zeros((12, 224, 224), dtype=np.float32)
+        if calls == 1:
+            stack[7, :, :] = 0.8
+            stack[3, :, :] = 0.1
+        else:
+            stack[11, :, :] = 0.8
+            stack[7, :, :] = 0.1
+        meta = {
+            "stac_item_id": f"S2_{calls}",
+            "stac_datetime": kwargs["datetime_range"].split("/")[-1],
+            "eo_cloud_cover": 2.0,
+            "band_asset_keys": ["coastal"] * 12,
+            "scl_asset_key": "scl",
+        }
+        return stack, meta, _scl_patch_if_requested(**kwargs)
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 35.0,
+            "longitude": -120.0,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "analysis_profile": "land_use_change",
+            "enable_tim": True,
+            "tim_branch": "S2L2A_full",
+            "datetime_interval": "2024-04-01/2024-04-30",
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    roles = {artifact["role"] for artifact in r.json()["vlm_artifacts"]}
+    assert {"land_transition_matrix", "land_top_transitions", "land_change_hotspots", "land_change_heatmap"} <= roles
+
+
+def test_floodpulse_materialization_emits_water_change_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def _fake_load(**kwargs):  # noqa: ANN003
+        nonlocal calls
+        calls += 1
+        stack = np.zeros((12, 224, 224), dtype=np.float32)
+        stack[2, :, :] = 0.1
+        stack[7, :, :] = 0.8
+        if calls == 2:
+            stack[2, 20:80, 20:80] = 0.9
+            stack[7, 20:80, 20:80] = 0.1
+        meta = {
+            "stac_item_id": f"S2_{calls}",
+            "stac_datetime": kwargs["datetime_range"].split("/")[-1],
+            "eo_cloud_cover": 2.0,
+            "band_asset_keys": ["coastal"] * 12,
+            "scl_asset_key": "scl",
+        }
+        return stack, meta, _scl_patch_if_requested(**kwargs)
+
+    monkeypatch.setattr(
+        "pro_materialization_service.geospatial.pipeline.load_s2l2a_patch_np",
+        _fake_load,
+    )
+    client = TestClient(app)
+    r = client.post(
+        "/internal/v1/materialize",
+        json={
+            "latitude": 35.0,
+            "longitude": -120.0,
+            "sentinel_fetch_mode": "TERRAMIND_SPECTRAL",
+            "vlm_contract_id": "nutonic.pro.vlm.v1_512_s2_only",
+            "analysis_profile": "flood_pulse",
+            "enable_tim": True,
+            "tim_branch": "S2L2A_full",
+            "datetime_interval": "2024-04-01/2024-04-30",
+        },
+    )
+
+    assert r.status_code == 200, r.text
+    roles = {artifact["role"] for artifact in r.json()["vlm_artifacts"]}
+    assert {
+        "flood_water_change_metrics",
+        "flood_inundation_polygons",
+        "flood_before_water_extent",
+        "flood_after_water_extent",
+        "flood_expansion_heatmap",
+    } <= roles

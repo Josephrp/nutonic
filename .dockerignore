@@ -1,0 +1,24 @@
+# Shrink Docker build context for ``tools/hf_jobs/Dockerfile.*`` (especially TiM: avoid copying local .venv).
+# See: https://docs.docker.com/build/building/context/dockerignore/
+
+**/.git/
+**/.venv/
+.venv/
+venv/
+env/
+
+data/cache/
+data/downloads/
+
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.eggs/
+**/*.egg-info/
+**/node_modules/
+
+**/.terraform/
+**/.cursor/
+.cache/

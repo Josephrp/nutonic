@@ -18,3 +18,15 @@ class MemoryUtf8BlobStore : Utf8BlobStore {
 }
 
 expect fun createLocalLeaderboardBlobStore(): Utf8BlobStore
+
+/** Guess-record POST outbox (`GuessRecordOutboxRepository`). */
+expect fun createGuessSyncOutboxBlobStore(): Utf8BlobStore
+
+/** Client settings JSON (`PersistedSettingsRepository`). */
+expect fun createSettingsBlobStore(): Utf8BlobStore
+
+/** Local career / screen-visit counters (`PlayerProgressRepository`). */
+expect fun createPlayerProgressBlobStore(): Utf8BlobStore
+
+/** PRO on-device VLM model manifest and cache metadata. Model binaries are never stored in git. */
+expect fun createProVlmModelBlobStore(): Utf8BlobStore

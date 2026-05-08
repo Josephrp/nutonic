@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "name": "ne_50m_coastline",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {},
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [130.0, 9.0],
+          [130.0, 12.0]
+        ]
+      }
+    }
+  ]
+}

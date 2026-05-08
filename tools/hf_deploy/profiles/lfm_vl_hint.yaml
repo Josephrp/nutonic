@@ -1,0 +1,21 @@
+# Production-oriented Space runtime for inference/lfm_vl_hint_service (Tonic / ZeroGPU).
+# Secrets: set matching GitHub Actions *repository* secrets (see tools/hf_deploy/README.md).
+# Each `secrets` entry is HuggingFace secret key -> name of env var on the runner holding the value.
+#
+# GPU / ZeroGPU Spaces must stay under the **Tonic** Hub org; `deploy_space.py` enforces `hf_space_owner_org`.
+hf_space_owner_org: Tonic
+
+space_hardware: zero-a10g
+space_sdk: gradio
+sleep_time_seconds: -1
+
+variables:
+  LFM_VL_BACKEND: transformers
+  LFM_VL_MOUNT_GRADIO: "1"
+  PORT: "7860"
+  LFM_VL_EAGER_LOAD: "0"
+
+# Optional: only applied when the runner exports the right-hand env var (non-empty).
+secrets:
+  OPENAI_API_KEY: TONIC_LFM_OPENAI_API_KEY
+  OPENAI_BASE_URL: TONIC_LFM_OPENAI_BASE_URL

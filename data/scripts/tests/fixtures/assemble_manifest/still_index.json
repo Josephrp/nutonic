@@ -1,0 +1,34 @@
+{
+  "locations": [
+    {
+      "center_lat": 10.0,
+      "center_lon": 20.0,
+      "height_px": 640,
+      "location_id": "asm_fix_a",
+      "map_id": "asm_fix_a",
+      "source": "fixture",
+      "still_bundle_id": "nutonic.still.v1.asm_fix_a",
+      "still_bundled_resource": "files/maps/asm_fix_a.jpg",
+      "still_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "still_policy_mismatch": false,
+      "style_id": "satellite-v9",
+      "width_px": 640,
+      "zoom": 11.0
+    },
+    {
+      "center_lat": -5.5,
+      "center_lon": 130.0,
+      "height_px": 640,
+      "location_id": "asm_fix_b",
+      "map_id": "asm_fix_b",
+      "source": "fixture",
+      "still_bundle_id": "nutonic.still.v1.asm_fix_b",
+      "still_bundled_resource": "files/maps/asm_fix_b.jpg",
+      "still_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "still_policy_mismatch": false,
+      "style_id": "satellite-v9",
+      "width_px": 640,
+      "zoom": 10.0
+    }
+  ]
+}

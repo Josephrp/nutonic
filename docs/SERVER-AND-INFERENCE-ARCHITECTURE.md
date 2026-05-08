@@ -14,6 +14,17 @@ It complements **`rules/12-python-gradio-terramind-server.md`** (thin **`server/
 
 **Optional inference plane (labs / PRO / EO tooling):** **`inference/streetview_pano_service/`**, **`inference/lfm_vl_hint_service/`**, **`inference/lfm_vl_satellite_caption_service/`**, and **`inference/pro_materialization_service/`** stay **separate** from **`server/`** when used; see **`plans/2026-04-07-lfm-vl-inference-spaces-satellite-and-streetview.md`**, **`plans/2026-04-07-streetview-lfm-vl-hint-inference-plane.md`**, and **`docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md`**.
 
+**Current CI deployment reality (2026-04):** **`.github/workflows/huggingface-deploy.yml`** deploys the required long-lived Docker Spaces after targeted pytest:
+
+| Target | Source | Space repo | Notes |
+|--------|--------|------------|-------|
+| Game server | `server/` | `NuTonic/nutonic-game-server` | CPU Space, feature flags default off through `tools/hf_deploy/profiles/game_server.yaml`. |
+| PRO materialization | `inference/pro_materialization_service/` | `NuTonic/nutonic-pro-materialization` | CPU Space, inbound HMAC required by `tools/hf_deploy/profiles/pro_materialization.yaml`. |
+| Street View pano | `inference/streetview_pano_service/` | `Tonic/nutonic-streetview-pano` | CPU Space, stub provider by default; optional Google key for real imagery. |
+| LFM-VL hints / PRO brief fusion | `inference/lfm_vl_hint_service/` | `Tonic/nutonic-lfm-vl-streetview` | ZeroGPU profile with `LFM_VL_BACKEND=transformers` and Gradio mounted. |
+| LFM-VL satellite captions | `inference/lfm_vl_satellite_caption_service/` | `Tonic/nutonic-lfm-vl-satellite` | ZeroGPU profile with `LFM_SATELLITE_BACKEND=transformers`. |
+| TerraMind TiM | `inference/terramind_tim_local/` | `Tonic/nutonic-terramind-tim` | ZeroGPU profile for the Space API. |
+
 **0. Vocabulary — thin game `server/` + workers (no TerraTorch in `server/`).** **Shipped public game API** `server/` is the **thin orchestrator** in **`plans/2026-04-07-game-server-thin-orchestrator.md`**: **no** `torch` / **`terratorch`** in that deployable’s dependencies; **`httpx`** (or equivalent) to **`inference/*`**, **`PRO_MATERIALIZATION_SERVICE_URL`**, and **`TERRAMIND_*`** workers. **`rules/12-python-gradio-terramind-server.md`** describes how **FastAPI** owns **`/api/*`** and how **Gradio** may mount at **`/ops`** on **that same thin process** for operators—**without** loading TerraTorch in `server/`. Heavy ML lives only in **`inference/*`**, **TerraMind workers**, **HF Jobs**, or **`demos/terramind_space/`**.
 
 **0.1 Normative shape — scripts first, then discrete Python services.** Cached SCAN data, PRO materialization inputs, and other **read-mostly** payloads are **hydrated first** with **specialized `data/scripts/`**, CI, and **HF Jobs → Datasets** (`docs/GAME-ENGINE.md` §9, **`plans/2026-04-07-gradio-terramind-backend.md` §2**). Each **`inference/*`** HTTP service (and the **TerraMind** worker) is **introduced only where validated script logic** must become a **long-lived, addressable deployable** (batch refresh, PRO on-demand paths, ops)—never by loading TerraTorch inside the **`server/`** game API process.
@@ -46,7 +57,7 @@ It complements **`rules/12-python-gradio-terramind-server.md`** (thin **`server/
 ### 2.1 Default production
 
 - **Game / API node (“central node”)** — **Python** thin **`server/`** in this plan. Owns: OpenAPI routes clients call, **optional** community leaderboard ingest, **ranked** `round_ticket` lifecycle, JWT validation for gated writes, **manifest URLs** for clients, **orchestration** (call workers with timeouts). Does **not** need to load TerraTorch if workers handle all GPU paths.
-- **Inference workers** — **Typically multiple** **Python** deployables (each optional per feature flag): FastAPI microservices under **`inference/*`**, Celery workers, **HF Spaces** exposing `POST /v1/...`, and/or a **dedicated TerraMind GPU worker**. They are **peers of each other**, not submodules inside `server/`; the thin server **fans out** with per-upstream timeouts. May use **Gradio** internally for debugging only; **players** still use the game node’s REST contract.
+- **Inference workers** — **Typically multiple** **Python** deployables (each optional per feature flag): FastAPI microservices under **`inference/*`**, Celery workers, **HF Spaces** exposing `POST /v1/...`, and/or a **dedicated TerraMind GPU worker**. They are **peers of each other**, not submodules inside `server/`; the thin server **fans out** with per-upstream timeouts. May use **Gradio** internally for debugging only; **players** still use the game node’s REST contract. The current CI deploy path covers the Space-backed workers listed above; new long-lived workers should follow the same profile/template/smoke pattern.
 - **Internal transport** — HTTP/gRPC from game node → workers; or **queue** (Redis, SQS) for async batch—**not** part of the mobile OpenAPI doc unless product exposes the same to clients (usually **no**).
 
 **Implication:** Document **two** OpenAPI surfaces if needed: **public** (`/api/v1/...` for clients) and **internal** (`/internal/v1/infer` between your own services), or keep internal undocumented but versioned in repo.

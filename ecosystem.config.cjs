@@ -60,10 +60,17 @@ module.exports = {
         ":androidApp:assembleDebug",
         ":desktopApp:compileKotlinJvm",
         ":webApp:jsBrowserProductionWebpack",
-        ":webApp:wasmJsBrowserProductionWebpack",
       ],
       out_file: log("nutonic-build-verify.out.log"),
       error_file: log("nutonic-build-verify.err.log"),
+      merge_logs: true,
+    },
+    {
+      ...gradleRunner,
+      name: "nutonic-build",
+      args: ["--no-configuration-cache", "build"],
+      out_file: log("nutonic-build.out.log"),
+      error_file: log("nutonic-build.err.log"),
       merge_logs: true,
     },
     {

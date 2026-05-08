@@ -1,7 +1,7 @@
 # Script specification: `fetch_geo_baselines.py`
 
 **Path:** `data/scripts/fetch_geo_baselines.py`  
-**Status:** Planned.  
+**Status:** **Implemented.**  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase A.
 
 ---
@@ -31,10 +31,11 @@ Under **`data/geo/`** (exact subpaths are implementation-defined but must be **d
 ## 3. CLI
 
 ```text
-python data/scripts/fetch_geo_baselines.py [--output-dir data/geo] [--ne-version 5.1.2] [--skip-geonames]
+python data/scripts/fetch_geo_baselines.py [--output-dir data/geo] [--ne-version 5.1.2] [--fetch-geonames] [--dry-run] [--force] [--timeout SEC]
 ```
 
-- **Idempotent:** re-run skips files that match expected SHA256 recorded in **`data/geo/MANIFEST.json`** (script-generated manifest of downloaded zips).
+- **GeoNames default:** GeoNames is **not** downloaded unless **`--fetch-geonames`** is set (equivalent to prior sketch’s **`--skip-geonames` default**).
+- **Idempotent:** re-run skips downloads when each cached zip’s SHA256 matches the last run’s **`MANIFEST.json`** entry; **`--force`** re-fetches and re-extracts.
 
 ---
 

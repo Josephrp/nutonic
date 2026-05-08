@@ -1,7 +1,7 @@
 # Script specification: `catalog_lint.py`
 
 **Path:** `data/scripts/catalog_lint.py`  
-**Status:** Planned.  
+**Status:** **Implemented** (v1 — checks §2; optional `--json-errors` for one JSON line per violation on stderr).  
 **Plan:** [`plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md`](../../plans/2026-04-14-shipped-cache-narrative-hint-pipeline.md) Phase A; CI gate in §8.
 
 ---
@@ -25,7 +25,7 @@ Validate **`data/catalog/`** for structural integrity **before** expensive phase
 ## 3. CLI
 
 ```text
-python data/scripts/catalog_lint.py [--catalog-root data/catalog] [--verbose]
+python data/scripts/catalog_lint.py [--catalog-root data/catalog] [--verbose] [--json-errors]
 ```
 
 ---
@@ -41,7 +41,7 @@ python data/scripts/catalog_lint.py [--catalog-root data/catalog] [--verbose]
 
 ## 5. Related — Gradle `:shared:validateCatalog`
 
-**Not this script:** Gradle task validates that **`still_bundled_resource`** paths referenced by packaged catalog subset exist under **`nutonic/shared/.../composeResources`**. That task **must** invoke or duplicate path checks consistent with §2.3 here.
+**Implemented:** `:shared:validateCatalog` runs **`data/scripts/validate_shipped_compose_resources.py`** against **`composeResources/files/cache/manifest.full.json`**, resolving each **`still_bundled_resource`** under the **`composeResources/`** root (e.g. `files/3.jpg` → `composeResources/files/3.jpg`; path traversal rejected). The root **`quality`** task depends on it.
 
 ---
 

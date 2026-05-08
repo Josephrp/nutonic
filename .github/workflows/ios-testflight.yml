@@ -1,0 +1,187 @@
+name: iOS — build IPA + upload TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      ios_bundle_id:
+        description: "Bundle identifier (must match provisioning profile + App Store Connect app)"
+        required: true
+        default: "com.nutonic.ios"
+        type: string
+      scheme:
+        description: "Xcode scheme"
+        required: true
+        default: "iosApp"
+        type: string
+      upload_to_testflight:
+        description: "Upload to TestFlight (requires App Store Connect API key secrets)"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: ios-testflight-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: nutonic
+
+jobs:
+  build-ios-ipa:
+    name: Build signed IPA (App Store export)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # KMP project includes Android targets; keep Gradle parity with other workflows.
+      - uses: android-actions/setup-android@v3
+
+      - name: local.properties for Gradle (KMP embed script)
+        run: |
+          echo "sdk.dir=${ANDROID_SDK_ROOT}" >> local.properties
+          echo "MAPS_API_KEY=CI_STUB" >> local.properties
+
+      - name: Import distribution certificate + provisioning profile
+        env:
+          P12_B64: ${{ secrets.IOS_DISTRIBUTION_P12_BASE64 }}
+          P12_PW: ${{ secrets.IOS_DISTRIBUTION_P12_PASSWORD }}
+          PP_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+        run: |
+          set -euo pipefail
+          for v in P12_B64 P12_PW PP_B64 TEAM_ID PROFILE_NAME; do
+            eval "x=\${$v:-}"
+            if [ -z "${x}" ]; then echo "Missing secret for iOS signing: $v"; exit 1; fi
+          done
+
+          decode_b64() { base64 --decode 2>/dev/null || base64 -D; }
+
+          KEYCHAIN="${RUNNER_TEMP}/nutonic-signing.keychain-db"
+          security create-keychain -p actions "${KEYCHAIN}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security unlock-keychain -p actions "${KEYCHAIN}"
+          security list-keychains -d user -s "${KEYCHAIN}"
+
+          echo "${P12_B64}" | decode_b64 > /tmp/nutonic-dist.p12
+          security import /tmp/nutonic-dist.p12 -k "${KEYCHAIN}" -P "${P12_PW}" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "${KEYCHAIN}"
+
+          mkdir -p "${HOME}/Library/MobileDevice/Provisioning Profiles"
+          echo "${PP_B64}" | decode_b64 > /tmp/nutonic.mobileprovision
+          security cms -D -i /tmp/nutonic.mobileprovision > /tmp/nutonic-profile.plist
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /tmp/nutonic-profile.plist)
+          cp /tmp/nutonic.mobileprovision "${HOME}/Library/MobileDevice/Provisioning Profiles/${PROFILE_UUID}.mobileprovision"
+
+          echo "NUTONIC_IOS_KEYCHAIN=${KEYCHAIN}" >> "${GITHUB_ENV}"
+
+      - name: Write ExportOptions.plist (app-store)
+        env:
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          BUNDLE_ID: ${{ github.event.inputs.ios_bundle_id }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+        run: |
+          python3 <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          out = Path(os.environ["RUNNER_TEMP"]) / "ExportOptions.plist"
+          data = {
+              "method": "app-store",
+              "teamID": os.environ["TEAM_ID"],
+              "signingStyle": "manual",
+              "uploadSymbols": True,
+              "provisioningProfiles": {os.environ["BUNDLE_ID"]: os.environ["PROFILE_NAME"]},
+          }
+          out.write_bytes(plistlib.dumps(data, fmt=plistlib.FMT_XML))
+          PY
+
+      - name: Xcode archive + export IPA
+        env:
+          KEYCHAIN: ${{ env.NUTONIC_IOS_KEYCHAIN }}
+          SCHEME: ${{ github.event.inputs.scheme }}
+          BUNDLE_ID: ${{ github.event.inputs.ios_bundle_id }}
+        run: |
+          set -euo pipefail
+          security unlock-keychain -p actions "${KEYCHAIN}"
+          cd "${GITHUB_WORKSPACE}/nutonic/iosApp"
+
+          ARCHIVE="${RUNNER_TEMP}/Nutonic-iosApp.xcarchive"
+          OUT="${RUNNER_TEMP}/Nutonic-ipa"
+          rm -rf "$ARCHIVE" "$OUT"
+
+          xcodebuild -skipMacroValidation \
+            -project iosApp.xcodeproj -scheme "${SCHEME}" -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE" \
+            archive \
+            BUNDLE_ID="${BUNDLE_ID}" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}"
+
+          mkdir -p "$OUT"
+          xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$OUT" \
+            -exportOptionsPlist "${RUNNER_TEMP}/ExportOptions.plist"
+
+          ls -la "$OUT"
+
+      - name: Tear down signing keychain
+        if: always()
+        env:
+          KEYCHAIN: ${{ env.NUTONIC_IOS_KEYCHAIN }}
+        run: |
+          if [ -n "${KEYCHAIN:-}" ] && [ -f "${KEYCHAIN}" ]; then security delete-keychain "${KEYCHAIN}" || true; fi
+
+      - name: Upload IPA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: ${{ runner.temp }}/Nutonic-ipa/
+          if-no-files-found: warn
+
+  upload-testflight:
+    name: Upload to TestFlight
+    if: github.event.inputs.upload_to_testflight == true
+    needs: [build-ios-ipa]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa
+          path: ipa-dir
+
+      - name: Resolve IPA path
+        id: ipa
+        run: |
+          shopt -s nullglob
+          arr=(ipa-dir/*.ipa)
+          if [ ${#arr[@]} -eq 0 ]; then echo "No .ipa in artifact"; exit 1; fi
+          echo "path=${arr[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to TestFlight (App Store Connect API)
+        uses: apple-actions/upload-testflight-build@v4
+        with:
+          app-path: ${{ steps.ipa.outputs.path }}
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          uses-non-exempt-encryption: "false"
+          wait-for-processing: "false"
+

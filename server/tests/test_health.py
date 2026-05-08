@@ -7,7 +7,10 @@ import yaml
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
+from nutonic_server import catalog as game_catalog
 from nutonic_server.main import app
+
+from catalog_samples import sample_map_id
 
 client = TestClient(app)
 
@@ -52,6 +55,7 @@ def test_openapi_yaml_parseable() -> None:
         "/api/v1/maps",
         "/api/v1/cache/manifest",
         "/api/v1/maps/{map_id}/leaderboard",
+        "/api/v1/maps/{map_id}/leaderboard/ranked",
         "/api/v1/bundles/{bundle_id}",
         "/api/v1/maps/{map_id}/guesses/record",
         "/api/v1/ranked/rounds/start",
@@ -59,6 +63,8 @@ def test_openapi_yaml_parseable() -> None:
         "/api/v1/ranked/rounds/{round_id}/submit",
         "/api/v1/pro/jobs",
         "/api/v1/pro/jobs/{job_id}",
+        "/api/v1/pro/jobs/{job_id}/cancel",
+        "/api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}",
     ):
         assert key in paths, f"missing path {key}"
 
@@ -116,14 +122,14 @@ def test_auth_token_and_gated_debug() -> None:
 
 def test_leaderboard_demo_get_and_post(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FEATURE_COMMUNITY_LB_POST", "true")
-    rows = client.get("/api/v1/maps/demo/leaderboard")
+    mid = sample_map_id()
+    rows = client.get(f"/api/v1/maps/{mid}/leaderboard")
     assert rows.status_code == 200
     assert isinstance(rows.json(), list)
-    assert len(rows.json()) >= 1
 
     tok = client.post("/api/v1/auth/token").json()["access_token"]
     post = client.post(
-        "/api/v1/maps/demo/leaderboard",
+        f"/api/v1/maps/{mid}/leaderboard",
         headers={"Authorization": f"Bearer {tok}"},
         json={
             "display_handle": "TEST",
@@ -136,7 +142,7 @@ def test_leaderboard_demo_get_and_post(monkeypatch: pytest.MonkeyPatch) -> None:
     assert post.json()["display_handle"] == "TEST"
 
     denied = client.post(
-        "/api/v1/maps/demo/leaderboard",
+        f"/api/v1/maps/{mid}/leaderboard",
         json={"display_handle": "X", "player_role": "HUMAN", "score_points": 1},
     )
     assert denied.status_code == 401
@@ -150,7 +156,7 @@ def test_maps_list_returns_catalog() -> None:
     first = data[0]
     assert "map_id" in first and "title" in first
     ids = {row["map_id"] for row in data}
-    assert "demo" in ids
+    assert sample_map_id() in ids
 
 
 def test_cache_manifest_etag_and_not_modified() -> None:
@@ -176,17 +182,20 @@ def test_cache_manifest_matches_maps_list_ids() -> None:
 def test_cache_manifest_includes_round_fixtures_and_ai_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NUTONIC_EXPOSE_MANIFEST_ROUND_TRUTH", "true")
     man = client.get("/api/v1/cache/manifest").json()
-    assert man["content_version"] == "nutonic.manifest.v2"
+    assert man["content_version"] == game_catalog.CATALOG_MANIFEST_CONTENT_VERSION
     locs = man["locations"]
-    assert isinstance(locs, list) and len(locs) >= 2
-    demo_loc = next(x for x in locs if x["map_id"] == "demo")
-    assert demo_loc["location_id"] == "demo-vienna-001"
-    assert demo_loc["truth_lat"] == 48.2082
-    assert demo_loc["still_bundled_resource"] == "files/3.jpg"
+    assert isinstance(locs, list) and len(locs) >= 1
+    mid = sample_map_id()
+    loc = next(x for x in locs if x["map_id"] == mid)
+    assert loc["location_id"]
+    assert isinstance(loc["truth_lat"], (int, float))
+    assert isinstance(loc["truth_lon"], (int, float))
+    assert loc.get("still_bundled_resource")
     guesses = man["ai_guesses"]
-    assert isinstance(guesses, list) and len(guesses) >= 2
-    g0 = next(x for x in guesses if x["map_id"] == "demo")
-    assert g0["ai_lat"] == 41.9028
+    assert isinstance(guesses, list) and len(guesses) >= 1
+    g0 = next(x for x in guesses if x["map_id"] == mid)
+    assert isinstance(g0["ai_lat"], (int, float))
+    assert isinstance(g0["ai_lon"], (int, float))
 
 
 def test_cache_manifest_redacts_round_fixtures_by_default() -> None:
@@ -208,7 +217,7 @@ def test_cache_manifest_if_none_match_accepts_comma_separated_list() -> None:
 
 def test_community_lb_get_disabled_returns_403(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FEATURE_COMMUNITY_LB_GET", "false")
-    r = client.get("/api/v1/maps/demo/leaderboard")
+    r = client.get(f"/api/v1/maps/{sample_map_id()}/leaderboard")
     assert r.status_code == 403
     assert r.json()["error"] == "feature_disabled"
     assert r.json()["feature"] == "community_lb_get"
@@ -217,7 +226,7 @@ def test_community_lb_get_disabled_returns_403(monkeypatch: pytest.MonkeyPatch) 
 def test_community_lb_post_disabled_returns_403_before_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FEATURE_COMMUNITY_LB_POST", "false")
     r = client.post(
-        "/api/v1/maps/demo/leaderboard",
+        f"/api/v1/maps/{sample_map_id()}/leaderboard",
         json={"display_handle": "X", "player_role": "HUMAN", "score_points": 1},
     )
     assert r.status_code == 403
@@ -239,8 +248,9 @@ def test_leaderboard_post_idempotency_key(monkeypatch: pytest.MonkeyPatch) -> No
         "player_role": "ALIEN",
         "score_points": 200,
     }
-    r1 = client.post("/api/v1/maps/idempotency-map/leaderboard", headers=headers, json=body_a)
-    r2 = client.post("/api/v1/maps/idempotency-map/leaderboard", headers=headers, json=body_b)
+    mid = sample_map_id()
+    r1 = client.post(f"/api/v1/maps/{mid}/leaderboard", headers=headers, json=body_a)
+    r2 = client.post(f"/api/v1/maps/{mid}/leaderboard", headers=headers, json=body_b)
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json()["display_handle"] == "FIRST"

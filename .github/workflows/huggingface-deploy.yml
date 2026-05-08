@@ -15,6 +15,7 @@ on:
       - "inference/lfm_vl_hint_service/**"
       - "inference/lfm_vl_satellite_caption_service/**"
       - "inference/terramind_tim_local/**"
+      - "inference/pro_gradio_demo/**"
       - "server/**"
       - "inference/pro_materialization_service/**"
       - "tools/hf_deploy/**"
@@ -33,6 +34,7 @@ on:
           - lfm_vl_hint
           - lfm_vl_satellite
           - terramind_tim
+          - pro_gradio_demo
           - game_server
           - pro_materialization
         default: all
@@ -53,6 +55,7 @@ jobs:
       lfm: ${{ steps.set.outputs.lfm }}
       satellite: ${{ steps.set.outputs.satellite }}
       tim: ${{ steps.set.outputs.tim }}
+      pro_demo: ${{ steps.set.outputs.pro_demo }}
       server: ${{ steps.set.outputs.server }}
       pro: ${{ steps.set.outputs.pro }}
     steps:
@@ -71,6 +74,8 @@ jobs:
               - 'inference/lfm_vl_satellite_caption_service/**'
             tim:
               - 'inference/terramind_tim_local/**'
+            pro_demo:
+              - 'inference/pro_gradio_demo/**'
             server:
               - 'server/**'
             pro:
@@ -90,41 +95,45 @@ jobs:
             echo "lfm=$2" >> "$GITHUB_OUTPUT"
             echo "satellite=$3" >> "$GITHUB_OUTPUT"
             echo "tim=$4" >> "$GITHUB_OUTPUT"
-            echo "server=$5" >> "$GITHUB_OUTPUT"
-            echo "pro=$6" >> "$GITHUB_OUTPUT"
+            echo "pro_demo=$5" >> "$GITHUB_OUTPUT"
+            echo "server=$6" >> "$GITHUB_OUTPUT"
+            echo "pro=$7" >> "$GITHUB_OUTPUT"
           }
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             T="${{ github.event.inputs.targets }}"
             case "$T" in
               all)
-                set_deploy_flags true true true true true true ;;
+                set_deploy_flags true true true true true true true ;;
               streetview_pano)
-                set_deploy_flags true false false false false false ;;
+                set_deploy_flags true false false false false false false ;;
               lfm_vl_hint)
-                set_deploy_flags false true false false false false ;;
+                set_deploy_flags false true false false false false false ;;
               lfm_vl_satellite)
-                set_deploy_flags false false true false false false ;;
+                set_deploy_flags false false true false false false false ;;
               terramind_tim)
-                set_deploy_flags false false false true false false ;;
+                set_deploy_flags false false false true false false false ;;
+              pro_gradio_demo)
+                set_deploy_flags false false false false true false false ;;
               game_server)
-                set_deploy_flags false false false false true false ;;
+                set_deploy_flags false false false false false true false ;;
               pro_materialization)
-                set_deploy_flags false false false false false true ;;
+                set_deploy_flags false false false false false false true ;;
               *)
-                set_deploy_flags true true true true true true ;;
+                set_deploy_flags true true true true true true true ;;
             esac
           else
             STREETVIEW='${{ steps.filter.outputs.streetview }}'
             LFM='${{ steps.filter.outputs.lfm }}'
             SAT='${{ steps.filter.outputs.satellite }}'
             TIM='${{ steps.filter.outputs.tim }}'
+            DEMO='${{ steps.filter.outputs.pro_demo }}'
             SRV='${{ steps.filter.outputs.server }}'
             PRO='${{ steps.filter.outputs.pro }}'
             TOOLS='${{ steps.filter.outputs.tools }}'
             if [ "$TOOLS" = "true" ]; then
-              set_deploy_flags true true true true true true
+              set_deploy_flags true true true true true true true
             else
-              set_deploy_flags "${STREETVIEW:-false}" "${LFM:-false}" "${SAT:-false}" "${TIM:-false}" "${SRV:-false}" "${PRO:-false}"
+              set_deploy_flags "${STREETVIEW:-false}" "${LFM:-false}" "${SAT:-false}" "${TIM:-false}" "${DEMO:-false}" "${SRV:-false}" "${PRO:-false}"
             fi
           fi
 
@@ -246,6 +255,26 @@ jobs:
           pip install pytest
           pip install -e "./inference/pro_materialization_service"
           python -m pytest inference/pro_materialization_service/tests -q
+
+  pytest-pro-gradio-demo:
+    name: Pytest — pro_gradio_demo
+    needs: changes
+    if: needs.changes.outputs.pro_demo == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + import check
+        run: |
+          pip install -U pip
+          pip install pytest
+          pip install -e "./inference/pro_gradio_demo"
+          python -m pytest inference/pro_gradio_demo/tests -q
 
   deploy-streetview-pano:
     name: HF deploy — Street View pano (Tonic)
@@ -407,6 +436,33 @@ jobs:
           name: hf-smoke-terramind
           path: artifacts/hf-smoke-terramind.json
           if-no-files-found: warn
+
+  deploy-pro-gradio-demo:
+    name: HF deploy — PRO ZeroGPU demo (Tonic)
+    needs: [changes, pytest-pro-gradio-demo]
+    if: needs.changes.outputs.pro_demo == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install huggingface_hub (hf CLI)
+        run: |
+          pip install -U pip
+          pip install -r tools/hf_deploy/requirements.txt
+          hf --version
+      - name: Deploy Space (hf upload + runtime sync)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN_TONIC || secrets.HF_TOKEN || secrets.HF_API_WRITE }}
+        run: >
+          python tools/hf_deploy/deploy_space.py
+          --service pro_gradio_demo
+          --repo-id Tonic/nutonic-pro-demo
+          --token-env HF_TOKEN
 
   deploy-game-server:
     name: HF deploy — game server (NuTonic)

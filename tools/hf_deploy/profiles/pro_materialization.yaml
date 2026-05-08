@@ -3,7 +3,11 @@
 space_hardware: cpu-basic
 
 variables:
-  NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC: "1"
+  # NOTE: For the public demo stack, we allow unsigned health probes so the game server
+  # can verify readiness even when no shared secret is configured. If you want strict
+  # protection, set this back to "1" and provide the same NUTONIC_INFERENCE_HMAC_SECRET
+  # to both the game_server and pro_materialization Spaces.
+  NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC: "0"
 
 secrets:
   MAPBOX_ACCESS_TOKEN: NUTONIC_MAPBOX_ACCESS_TOKEN

@@ -20,7 +20,7 @@ model = [
     "torch>=2.2.0,<3",
     "torchvision>=0.17.0,<1",
     "transformers>=5.2.0,<6",
-    "accelerate>=0.33.0,<1",
+    "accelerate>=0.33.0",
 ]
 serve = [
     "gradio>=4.44.0,<6",

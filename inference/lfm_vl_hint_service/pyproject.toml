@@ -19,7 +19,7 @@ dependencies = [
 model = [
     "torch>=2.2.0,<3",
     "transformers>=5.2.0,<6",
-    "accelerate>=0.33.0,<1",
+    "accelerate>=0.33.0",
 ]
 # Gradio SDK + Hugging Face ``spaces`` (``@spaces.GPU`` / ZeroGPU). Not required for CI stub tests.
 serve = [

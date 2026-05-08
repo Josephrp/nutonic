@@ -12,7 +12,7 @@ from nutonic_pro_gradio_demo.image_fetch import fetch_vlm_images
 from nutonic_pro_gradio_demo.render import decode_image, draw_boxes
 from nutonic_pro_gradio_demo.settings import get_settings
 from nutonic_pro_gradio_demo.vlm_parse import parse_vlm_output
-from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, infer_caption_and_boxes
+from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, zerogpu_infer_caption_and_boxes
 
 LEAFLET_JS = ""
 
@@ -141,6 +141,7 @@ def _run_job(
     bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
     try:
         client = _get_shared_client()
+        bearer = client._ensure_bearer()
         created = client.post_pro_job(
             ProJobCreateIn(
                 center_lat=center_lat,
@@ -162,7 +163,7 @@ def _run_job(
         last: ProJobStatusOut | None = None
         started = time.time()
         while True:
-            last = client.get_pro_job(job_id)
+            last = client.get_pro_job(job_id, bearer_token=bearer)
             if last.status in {"completed", "failed", "cancelled"}:
                 break
             if time.time() - started > settings.poll_timeout_seconds:
@@ -197,6 +198,7 @@ def _run_full_pipeline(
     bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
     try:
         client = _get_shared_client()
+        bearer = client._ensure_bearer()
         created = client.post_pro_job(
             ProJobCreateIn(
                 center_lat=center_lat,
@@ -218,6 +220,7 @@ def _run_full_pipeline(
             job_id=created.job_id,
             poll_interval_seconds=settings.poll_interval_seconds,
             poll_timeout_seconds=settings.poll_timeout_seconds,
+            bearer_token=bearer,
         )
         if job.status != "completed":
             # Workaround: bypass orchestrator and call workers directly.
@@ -244,7 +247,7 @@ def _run_full_pipeline(
                 )
             return job.model_dump(mode="json"), None, None, {"error": f"Job ended with status {job.status}"}
 
-        images = fetch_vlm_images(client=client, job=job)
+        images = fetch_vlm_images(client=client, job=job, bearer_token=bearer)
         if not images:
             return job.model_dump(mode="json"), None, None, {"error": "No vlm_image_set images found on job"}
 
@@ -257,7 +260,7 @@ def _run_full_pipeline(
 
         t0 = time.time()
         loaded = ensure_model_loaded(client=client, settings=settings)
-        raw_text = infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
+        raw_text = zerogpu_infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
         t1 = time.time()
 
         parsed = parse_vlm_output(
@@ -365,7 +368,7 @@ def _run_via_direct_workers(
     prompt = _build_vlm_prompt(prompt_injection=None)
     t0 = time.time()
     loaded = ensure_model_loaded(client=client, settings=settings)
-    raw_text = infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
+    raw_text = zerogpu_infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
     t1 = time.time()
     parsed = parse_vlm_output(
         raw_text=raw_text,

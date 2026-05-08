@@ -127,20 +127,11 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
             "Failed to load the model processor. This model requires extra vision deps.\n"
             "For NU:TONIC PRO demo, ensure `torchvision` is installed in the Space environment."
         ) from e
-    # `device_map="auto"` requires `accelerate`. If it's missing in the Space runtime,
-    # fall back to default device placement (ZeroGPU will still provide CUDA when available).
-    model_kwargs: dict[str, Any] = {
-        "torch_dtype": "auto",
-        "trust_remote_code": True,
-    }
-    try:
-        import accelerate  # noqa: F401
-
-        model_kwargs["device_map"] = "auto"
-    except Exception:
-        # IMPORTANT: do not pass `device_map=None` at all; `transformers` treats the presence
-        # of the kwarg as opting into the accelerate integration path.
-        pass
+    # NOTE: Do NOT pass `device_map` here.
+    # Some Spaces runtimes end up without `accelerate` even when it's listed in requirements,
+    # and `transformers` will crash hard if `device_map` is present. We'll instead load on the
+    # default device and move to CUDA inside the `@spaces.GPU` inference call when available.
+    model_kwargs: dict[str, Any] = {"torch_dtype": "auto", "trust_remote_code": True}
 
     if AutoModelForVision2Seq is not None:
         try:
@@ -158,6 +149,15 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
             str(model_dir),
             **model_kwargs,
         )
+    # ZeroGPU supports a CUDA emulation mode outside @spaces.GPU. Put the model on CUDA
+    # once at load time to avoid repeated transfers inside the decorated GPU call.
+    try:
+        import torch
+
+        model = model.to(torch.device("cuda"))
+    except Exception:
+        # If CUDA emulation or `.to("cuda")` isn't supported for a remote-code model, continue.
+        pass
     model.eval()
     return model, processor
 
@@ -185,4 +185,30 @@ def infer_caption_and_boxes(*, loaded: LoadedModel, prompt: str, image_rgb: Any,
         output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
     text = processor.batch_decode(output_ids, skip_special_tokens=True)
     return (text[0] if text else "").strip()
+
+
+# --- ZeroGPU: decorate the actual inference call ---
+try:
+    import spaces  # type: ignore
+
+    @spaces.GPU(duration=120)  # type: ignore[misc]
+    def zerogpu_infer_caption_and_boxes(
+        *,
+        loaded: LoadedModel,
+        prompt: str,
+        image_rgb: Any,
+        max_new_tokens: int = 512,
+    ) -> str:
+        return infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=image_rgb, max_new_tokens=max_new_tokens)
+
+except Exception:
+
+    def zerogpu_infer_caption_and_boxes(
+        *,
+        loaded: LoadedModel,
+        prompt: str,
+        image_rgb: Any,
+        max_new_tokens: int = 512,
+    ) -> str:
+        return infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=image_rgb, max_new_tokens=max_new_tokens)
 

@@ -12,6 +12,7 @@ import httpx
 from nutonic_pro_gradio_demo.hmac_signing import nutonic_hmac_headers
 from nutonic_pro_gradio_demo.models import ProJobCreateIn, ProJobCreateOut, ProJobStatusOut, ProVlmModelManifest, TokenResponse
 from nutonic_pro_gradio_demo.settings import Settings
+import threading
 
 
 def _is_absolute_url(url: str) -> bool:
@@ -54,6 +55,7 @@ class NutonicServerClient:
         )
         self._session_token: str | None = None
         self._session_token_expires_at: float = 0.0
+        self._token_lock = threading.Lock()
         self._maybe_canonicalize_origin()
 
     @property
@@ -105,24 +107,26 @@ class NutonicServerClient:
         except Exception:
             return
 
-    def post_pro_job(self, body: ProJobCreateIn) -> ProJobCreateOut:
+    def post_pro_job(self, body: ProJobCreateIn, *, bearer_token: str | None = None) -> ProJobCreateOut:
         r = self._request_with_backoff(
             "POST",
             "/api/v1/pro/jobs",
             json_body=body.model_dump(mode="json"),
             require_bearer=True,
+            bearer_token=bearer_token,
         )
         return ProJobCreateOut.model_validate(r.json())
 
-    def get_pro_job(self, job_id: str) -> ProJobStatusOut:
-        r = self._request_with_backoff("GET", f"/api/v1/pro/jobs/{job_id}", require_bearer=True)
+    def get_pro_job(self, job_id: str, *, bearer_token: str | None = None) -> ProJobStatusOut:
+        r = self._request_with_backoff("GET", f"/api/v1/pro/jobs/{job_id}", require_bearer=True, bearer_token=bearer_token)
         return ProJobStatusOut.model_validate(r.json())
 
-    def get_artifact(self, *, job_id: str, artifact_id: str) -> bytes:
+    def get_artifact(self, *, job_id: str, artifact_id: str, bearer_token: str | None = None) -> bytes:
         r = self._request_with_backoff(
             "GET",
             f"/api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}",
             require_bearer=True,
+            bearer_token=bearer_token,
         )
         return r.content
 
@@ -131,8 +135,8 @@ class NutonicServerClient:
         r = self._request_with_backoff("GET", url, absolute=True)
         return r.content
 
-    def get_vlm_model_manifest(self) -> ProVlmModelManifest:
-        r = self._request_with_backoff("GET", "/api/v1/pro/vlm/model-manifest", require_bearer=True)
+    def get_vlm_model_manifest(self, *, bearer_token: str | None = None) -> ProVlmModelManifest:
+        r = self._request_with_backoff("GET", "/api/v1/pro/vlm/model-manifest", require_bearer=True, bearer_token=bearer_token)
         return ProVlmModelManifest.model_validate(r.json())
 
     def post_auth_token(self) -> TokenResponse:
@@ -140,14 +144,15 @@ class NutonicServerClient:
         return TokenResponse.model_validate(r.json())
 
     def _ensure_bearer(self) -> str:
-        now = time.time()
-        if self._session_token and now < self._session_token_expires_at:
+        with self._token_lock:
+            now = time.time()
+            if self._session_token and now < self._session_token_expires_at:
+                return self._session_token
+            issued = self.post_auth_token()
+            self._session_token = issued.access_token
+            # Refresh a bit early to avoid edge-of-expiry 401s.
+            self._session_token_expires_at = now + max(10, int(issued.expires_in) - 15)
             return self._session_token
-        issued = self.post_auth_token()
-        self._session_token = issued.access_token
-        # Refresh a bit early to avoid edge-of-expiry 401s.
-        self._session_token_expires_at = now + max(10, int(issued.expires_in) - 15)
-        return self._session_token
 
     def _signed_headers(self, *, method: str, url: str, body: bytes) -> dict[str, str]:
         if not self._hmac_secret:
@@ -163,6 +168,7 @@ class NutonicServerClient:
         max_retries: int = 4,
         json_body: Any | None = None,
         require_bearer: bool = False,
+        bearer_token: str | None = None,
     ) -> httpx.Response:
         """
         Hugging Face Spaces can return 429 under load. Handle 429 (and some transient 5xx)
@@ -184,7 +190,8 @@ class NutonicServerClient:
             url = path_or_url if absolute else self._url(path_or_url)
             headers: dict[str, str] = self._signed_headers(method=method, url=url, body=body_bytes)
             if require_bearer:
-                headers["Authorization"] = f"Bearer {self._ensure_bearer()}"
+                tok = bearer_token or self._ensure_bearer()
+                headers["Authorization"] = f"Bearer {tok}"
             request_kwargs: dict[str, Any] = {}
             if json_body is not None:
                 # Send the same exact bytes we hashed; otherwise httpx may re-serialize
@@ -219,6 +226,7 @@ class NutonicServerClient:
         poll_interval_seconds: float,
         poll_timeout_seconds: float,
         on_progress: callable | None = None,
+        bearer_token: str | None = None,
     ) -> ProJobStatusOut:
         import time
 
@@ -227,7 +235,7 @@ class NutonicServerClient:
         while True:
             if time.time() > deadline:
                 raise TimeoutError(f"Timed out polling PRO job {job_id}")
-            status = self.get_pro_job(job_id)
+            status = self.get_pro_job(job_id, bearer_token=bearer_token)
             last = status
             if on_progress is not None:
                 try:

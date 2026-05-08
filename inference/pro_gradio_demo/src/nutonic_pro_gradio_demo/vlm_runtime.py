@@ -119,7 +119,14 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
     except Exception:
         AutoModelForVision2Seq = None  # type: ignore[assignment]
 
-    processor = AutoProcessor.from_pretrained(str(model_dir), trust_remote_code=True)
+    try:
+        processor = AutoProcessor.from_pretrained(str(model_dir), trust_remote_code=True)
+    except ImportError as e:
+        # Common: Lfm2VlImageProcessor requires torchvision.
+        raise ImportError(
+            "Failed to load the model processor. This model requires extra vision deps.\n"
+            "For NU:TONIC PRO demo, ensure `torchvision` is installed in the Space environment."
+        ) from e
     if AutoModelForVision2Seq is not None:
         try:
             model = AutoModelForVision2Seq.from_pretrained(

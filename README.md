@@ -93,7 +93,6 @@ Use a prebuilt artifact rather than building locally.
 ### Build and launch desktop from source
 
 If you want to run the desktop app locally instead of downloading an installer, point it at the hosted NU:TONIC server origin. Do **not** include `/api/v1`; the client adds API paths itself.
-
 From the repository root:
 
 ```powershell
@@ -183,7 +182,7 @@ Read the full public-facing write-up in [Teaching Satellites to Remember: Patago
 | [`data/scripts/`](data/scripts/) | Dataset and satellite training-data generation pipelines. |
 | [`server/`](server/) | Thin FastAPI orchestration layer for hosted demos and app data. |
 
-### Recommended Review Path
+### Recommended review path
 
 1. Read the public article: [Teaching Satellites to Remember](https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth).
 2. Install the app using the platform artifact table above.

@@ -172,6 +172,28 @@ def _run_full_pipeline(
             poll_timeout_seconds=settings.poll_timeout_seconds,
         )
         if job.status != "completed":
+            # Workaround: bypass orchestrator and call workers directly.
+            if (
+                settings.enable_direct_worker_fallback
+                and job.error_class == "worker_unreachable"
+                and job.status_reason == "worker_unreachable"
+            ):
+                return _run_via_direct_workers(
+                    client=client,
+                    center_lat=center_lat,
+                    center_lon=center_lon,
+                    bbox_half_km=bbox_half_km,
+                    mapbox_zoom=mapbox_zoom,
+                    analysis_profile=analysis_profile,
+                    enable_tim=enable_tim,
+                    tim_branch=tim_branch,
+                    sentinel_fetch_mode=sentinel_fetch_mode,
+                    vlm_contract_id=vlm_contract_id,
+                    datetime_interval=datetime_interval,
+                    scene_id_t0=scene_id_t0,
+                    scene_id_t1=scene_id_t1,
+                    scene_id_t2=scene_id_t2,
+                )
             return job.model_dump(mode="json"), None, None, {"error": f"Job ended with status {job.status}"}
 
         images = fetch_vlm_images(client=client, job=job)
@@ -219,6 +241,93 @@ def _run_full_pipeline(
         return {"error": err}, None, None, err
     finally:
         client.close()
+
+
+def _run_via_direct_workers(
+    *,
+    client: NutonicServerClient,
+    center_lat: float,
+    center_lon: float,
+    bbox_half_km: float,
+    mapbox_zoom: int,
+    analysis_profile: str,
+    enable_tim: bool,
+    tim_branch: str,
+    sentinel_fetch_mode: str,
+    vlm_contract_id: str,
+    datetime_interval: str | None,
+    scene_id_t0: str | None,
+    scene_id_t1: str | None,
+    scene_id_t2: str | None,
+) -> tuple[dict[str, Any], Any, Any, dict[str, Any]]:
+    settings = get_settings()
+    mat_origin = settings.pro_materialization_origin
+    if not client.probe_health_origin(mat_origin):
+        err = {"error": "direct_worker_unhealthy", "worker": "pro_materialization", "origin": mat_origin}
+        return {"error": err}, None, None, err
+
+    # Call materialization directly. This is the same payload the orchestrator would send.
+    mat = client.post_json_to_origin(
+        origin=mat_origin,
+        path="/internal/v1/materialize",
+        json_body={
+            "latitude": center_lat,
+            "longitude": center_lon,
+            "bbox_half_km": bbox_half_km,
+            "datetime_interval": datetime_interval or None,
+            "sentinel_fetch_mode": sentinel_fetch_mode,
+            "analysis_profile": analysis_profile,
+            "mapbox_zoom": mapbox_zoom,
+            "vlm_contract_id": vlm_contract_id,
+            "enable_tim": bool(enable_tim),
+            "tim_branch": tim_branch,
+            "scene_id_t0": scene_id_t0 or None,
+            "scene_id_t1": scene_id_t1 or None,
+            "scene_id_t2": scene_id_t2 or None,
+        },
+    )
+
+    artifacts = mat.get("vlm_artifacts") if isinstance(mat, dict) else None
+    if not isinstance(artifacts, list) or not artifacts:
+        err = {"error": "no_vlm_artifacts", "materialization_result": mat}
+        return {"materialization": mat}, None, None, err
+
+    # Pick first artifact with inline_base64.
+    import base64
+
+    first = next((a for a in artifacts if isinstance(a, dict) and a.get("inline_base64")), None)
+    if not first:
+        err = {"error": "no_inline_base64", "materialization_result": mat}
+        return {"materialization": mat}, None, None, err
+
+    img_bytes = base64.b64decode(str(first["inline_base64"]))
+    pil = decode_image(img_bytes)
+
+    prompt = (
+        "NU:TONIC PRO vision analysis. Describe the provided EO image using visible evidence.\n"
+        "Return a concise caption followed by strict JSON with key `boxes`.\n"
+        "Each box must be `{label,bbox,confidence}` with bbox normalized [x1,y1,x2,y2] in 0..1."
+    )
+    t0 = time.time()
+    loaded = ensure_model_loaded(client=client, settings=settings)
+    raw_text = infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
+    t1 = time.time()
+    parsed = parse_vlm_output(
+        raw_text=raw_text,
+        model_bundle_id=loaded.manifest.model_bundle_id,
+        revision=loaded.manifest.revision,
+        source="hf_space_vlm",
+    )
+    annotated = draw_boxes(pil, parsed.boxes)
+    meta = {
+        "path": "direct_workers",
+        "inference_seconds": round(t1 - t0, 3),
+        "model_bundle_id": loaded.manifest.model_bundle_id,
+        "revision": loaded.manifest.revision,
+        "materialization_id": mat.get("materialization_id") if isinstance(mat, dict) else None,
+        "cache_key": mat.get("cache_key") if isinstance(mat, dict) else None,
+    }
+    return {"materialization": mat}, pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
 
 
 def build_demo() -> gr.Blocks:

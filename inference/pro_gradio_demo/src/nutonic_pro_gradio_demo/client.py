@@ -245,6 +245,25 @@ class NutonicServerClient:
                 return status
             time.sleep(max(0.2, poll_interval_seconds))
 
+    def probe_health_origin(self, origin: str) -> bool:
+        """GET `{origin}/health` expecting `{'status':'ok'|'healthy'}`. Supports HMAC signing when configured."""
+        url = _join_origin(origin, "/health")
+        try:
+            r = self._request_with_backoff("GET", url, absolute=True)
+        except Exception:
+            return False
+        try:
+            data = r.json()
+        except Exception:
+            return False
+        status = str(data.get("status") or "").strip().lower()
+        return status in {"ok", "healthy"}
+
+    def post_json_to_origin(self, *, origin: str, path: str, json_body: Any) -> dict[str, Any]:
+        url = _join_origin(origin, path)
+        r = self._request_with_backoff("POST", url, absolute=True, json_body=json_body)
+        return r.json()
+
 
 def pretty_json(obj: Any) -> str:
     return json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False)
@@ -257,4 +276,13 @@ def _json_bytes(json_body: Any) -> bytes:
     wire (mirrors `server.../inference_client._json_bytes`).
     """
     return json.dumps(json_body, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def _join_origin(origin: str, path: str) -> str:
+    base = (origin or "").strip().rstrip("/")
+    if not base:
+        raise ValueError("origin is required")
+    if not path.startswith("/"):
+        path = "/" + path
+    return base + path
 

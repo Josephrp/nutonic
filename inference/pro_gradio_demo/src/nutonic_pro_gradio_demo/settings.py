@@ -54,6 +54,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Direct-worker fallback (workaround when game_server PRO jobs are degraded).
+    pro_materialization_origin: str = Field(
+        default="https://NuTonic-nutonic-pro-materialization.hf.space",
+        validation_alias=AliasChoices("NUTONIC_PRO_MATERIALIZATION_ORIGIN", "pro_materialization_origin"),
+    )
+    lfm_brief_origin: str = Field(
+        default="https://Tonic-nutonic-lfm-vl-streetview.hf.space",
+        validation_alias=AliasChoices("NUTONIC_LFM_BRIEF_ORIGIN", "lfm_brief_origin"),
+    )
+    enable_direct_worker_fallback: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("NUTONIC_ENABLE_DIRECT_WORKERS", "enable_direct_worker_fallback"),
+        description="If true, bypass the game server and call workers directly when PRO jobs fail worker_unreachable.",
+    )
+
 
 def get_settings() -> Settings:
     return Settings()

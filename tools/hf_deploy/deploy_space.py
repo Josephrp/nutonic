@@ -60,7 +60,9 @@ SERVICE_SPECS: dict[str, dict[str, Path]] = {
     "pro_gradio_demo": {
         "source_dir": REPO_ROOT / "inference" / "pro_gradio_demo",
         "readme_template": REPO_ROOT / "tools" / "hf_deploy" / "templates" / "readme_pro_gradio_demo.md",
-        "gradio_extras": ["serve"],
+        "gradio_extras": ["serve", "model"],
+        # CI guardrail: ensure staged requirements include model deps.
+        "required_requirement_names": REPO_ROOT / "tools" / "hf_deploy" / "profiles" / "pro_gradio_demo.required.txt",
     },
 }
 
@@ -101,6 +103,7 @@ def _stage_service(service: str) -> Path:
         requirements = _build_gradio_requirements(src=src, extras=spec.get("gradio_extras"))
         if requirements:
             (stage / "requirements.txt").write_text("".join(f"{line}\n" for line in requirements), encoding="utf-8")
+        _assert_required_requirements(service=service, requirements=requirements, spec=spec)
     else:
         raise ValueError(f"Unsupported space_sdk {space_sdk!r} for service {service}")
 
@@ -124,6 +127,28 @@ def _stage_service(service: str) -> Path:
                 shutil.copytree(source_bundle_dir, bundle_dir, dirs_exist_ok=True)
     shutil.copy2(tmpl, stage / "README.md")
     return stage
+
+
+def _assert_required_requirements(*, service: str, requirements: list[str], spec: dict[str, Any]) -> None:
+    """
+    Fail fast in CI if a Space would be deployed without required dependencies.
+
+    This is intentionally conservative: it checks the *names* of the requirements
+    generated from pyproject metadata + extras, which is the exact file uploaded to Spaces.
+    """
+    req_file = spec.get("required_requirement_names")
+    if not isinstance(req_file, Path) or not req_file.is_file():
+        return
+    required = [line.strip().lower() for line in req_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not required:
+        return
+    present = {_requirement_name(r) for r in (requirements or [])}
+    missing = [name for name in required if name not in present]
+    if missing:
+        raise RuntimeError(
+            f"Refusing deploy: service {service!r} is missing required dependencies in staged requirements.txt: "
+            + ", ".join(missing)
+        )
 
 
 def _build_gradio_requirements(*, src: Path, extras: Any) -> list[str]:

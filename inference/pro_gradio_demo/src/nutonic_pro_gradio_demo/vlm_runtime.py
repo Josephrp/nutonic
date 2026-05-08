@@ -127,26 +127,35 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
             "Failed to load the model processor. This model requires extra vision deps.\n"
             "For NU:TONIC PRO demo, ensure `torchvision` is installed in the Space environment."
         ) from e
+    # `device_map="auto"` requires `accelerate`. If it's missing in the Space runtime,
+    # fall back to default device placement (ZeroGPU will still provide CUDA when available).
+    try:
+        import accelerate  # noqa: F401
+
+        device_map: str | None = "auto"
+    except Exception:
+        device_map = None
+
     if AutoModelForVision2Seq is not None:
         try:
             model = AutoModelForVision2Seq.from_pretrained(
                 str(model_dir),
                 torch_dtype="auto",
-                device_map="auto",
+                device_map=device_map,
                 trust_remote_code=True,
             )
         except Exception:
             model = AutoModel.from_pretrained(
                 str(model_dir),
                 torch_dtype="auto",
-                device_map="auto",
+                device_map=device_map,
                 trust_remote_code=True,
             )
     else:
         model = AutoModel.from_pretrained(
             str(model_dir),
             torch_dtype="auto",
-            device_map="auto",
+            device_map=device_map,
             trust_remote_code=True,
         )
     model.eval()

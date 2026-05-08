@@ -14,13 +14,15 @@ dependencies = [
   "pillow>=10.0.0,<12",
   "huggingface_hub>=0.23.0,<2",
   "safetensors>=0.4.0,<1",
+]
+
+[project.optional-dependencies]
+model = [
   "torch>=2.2.0,<3",
   "torchvision>=0.17.0,<1",
   "transformers>=5.2.0,<6",
   "accelerate>=0.33.0,<1",
 ]
-
-[project.optional-dependencies]
 serve = [
   "gradio>=4.44.0,<6",
   "spaces>=0.44.0,<1",

@@ -16,6 +16,36 @@ from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, infer_capti
 
 LEAFLET_JS = ""
 
+ON_DEVICE_VLM_USER_INSTRUCTION_LINES = "\n".join(
+    [
+        "NU:TONIC PRO on-device vision — describe the provided EO image set using visible evidence.",
+        (
+            "You are a geospatial analyst specializing in satellite imagery interpretation. "
+            "Analyze the provided Sentinel-2 satellite images and report findings grounded in visible evidence. "
+            "Use [x1, y1, x2, y2] bounding boxes normalized to 0-1 relative to image dimensions."
+        ),
+        (
+            "This is optical-only observation. Avoid certainty claims beyond visible evidence, "
+            "and state confidence and limitations where appropriate."
+        ),
+        (
+            "Return a concise caption followed by strict JSON with key `boxes`. "
+            "Each box must be `{label,bbox,confidence}` with bbox normalized [x1,y1,x2,y2] in 0..1."
+        ),
+    ]
+)
+
+
+def _build_vlm_prompt(*, prompt_injection: dict[str, Any] | None = None) -> str:
+    """
+    Prompt aligned with `nutonic/shared/.../ProModelPromptContract.ON_DEVICE_VLM_USER_INSTRUCTION_LINES`.
+    We append a compact context JSON block when present (server-supplied).
+    """
+    injection = prompt_injection or {}
+    if not injection:
+        return ON_DEVICE_VLM_USER_INSTRUCTION_LINES
+    return ON_DEVICE_VLM_USER_INSTRUCTION_LINES + "\n\nCONTEXT_JSON:\n" + str(injection)
+
 
 def _bbox_half_km_for_zoom(zoom: int) -> float:
     z = int(zoom)
@@ -205,12 +235,7 @@ def _run_full_pipeline(
         pil = decode_image(main.bytes)
 
         prompt_injection = (job.on_device_payload.vlm_prompt_injection if job.on_device_payload else None) or {}
-        prompt = (
-            "NU:TONIC PRO vision analysis. Describe the provided EO image using visible evidence.\n"
-            "Return a concise caption followed by strict JSON with key `boxes`.\n"
-            "Each box must be `{label,bbox,confidence}` with bbox normalized [x1,y1,x2,y2] in 0..1.\n\n"
-            f"CONTEXT_JSON:\n{prompt_injection}"
-        )
+        prompt = _build_vlm_prompt(prompt_injection=prompt_injection)
 
         t0 = time.time()
         loaded = ensure_model_loaded(client=client, settings=settings)
@@ -303,11 +328,7 @@ def _run_via_direct_workers(
     img_bytes = base64.b64decode(str(first["inline_base64"]))
     pil = decode_image(img_bytes)
 
-    prompt = (
-        "NU:TONIC PRO vision analysis. Describe the provided EO image using visible evidence.\n"
-        "Return a concise caption followed by strict JSON with key `boxes`.\n"
-        "Each box must be `{label,bbox,confidence}` with bbox normalized [x1,y1,x2,y2] in 0..1."
-    )
+    prompt = _build_vlm_prompt(prompt_injection=None)
     t0 = time.time()
     loaded = ensure_model_loaded(client=client, settings=settings)
     raw_text = infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)

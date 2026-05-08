@@ -1,0 +1,6 @@
+torch
+torchvision
+transformers
+accelerate
+huggingface-hub
+safetensors

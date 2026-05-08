@@ -55,6 +55,26 @@ The project brings together:
 - **Priority-oriented UX:** app surfaces are packaged for Android, iOS, desktop, and web so judges and testers can use the system without building from source.
 - **Reproducible evaluation:** the Patagonia benchmark compares base and fine-tuned models on glacier, marine, forest, steppe, wetland, and coastal scenes.
 
+## Architecture / data flow
+
+```mermaid
+flowchart TD
+  User[User] --> OnDeviceUI[OnDeviceUI]
+  OnDeviceUI -->|submit| ProJobCreate[POST_/api/v1/pro/jobs]
+  OnDeviceUI -->|poll| ProJobPoll[GET_/api/v1/pro/jobs/{job_id}]
+  ProJobPoll -->|on_device_payload| Payload[ProOnDevicePayload]
+  Payload --> ImageRefs[vlm_image_set[]]
+  ImageRefs -->|fetch| ArtifactFetch[GET_/api/v1/pro/jobs/{job_id}/artifacts/{artifact_id}]
+  OnDeviceUI -->|fetch| ModelManifest[GET_/api/v1/pro/vlm/model-manifest]
+  ModelManifest -->|download| ModelWeights[model.safetensors]
+  ArtifactFetch --> LocalVlm[Local_VLM_inference_ZeroGPU]
+  ModelWeights --> LocalVlm
+  LocalVlm --> Parse[Parse_caption_and_boxes_JSON]
+  Parse --> Annotate[Draw_boxes_on_image]
+  Annotate --> Outputs[Annotated_image+JSON]
+```
+
+
 ## Solution Overview
 
 NU:TONIC works as an end-to-end Earth intelligence loop:

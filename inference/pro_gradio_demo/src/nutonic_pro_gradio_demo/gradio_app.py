@@ -16,6 +16,26 @@ from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, infer_capti
 
 LEAFLET_JS = ""
 
+import threading
+
+_CLIENT_LOCK = threading.Lock()
+_SHARED_CLIENT: NutonicServerClient | None = None
+_SHARED_CLIENT_ORIGIN: str | None = None
+
+
+def _get_shared_client() -> NutonicServerClient:
+    """
+    Reuse a single NutonicServerClient per process to avoid hammering
+    `/api/v1/auth/token` (HF Spaces rate limits can return 429).
+    """
+    global _SHARED_CLIENT, _SHARED_CLIENT_ORIGIN
+    settings = get_settings()
+    with _CLIENT_LOCK:
+        if _SHARED_CLIENT is None or _SHARED_CLIENT_ORIGIN != settings.nutonic_server_origin.strip():
+            _SHARED_CLIENT = NutonicServerClient(settings)
+            _SHARED_CLIENT_ORIGIN = settings.nutonic_server_origin.strip()
+        return _SHARED_CLIENT
+
 ON_DEVICE_VLM_USER_INSTRUCTION_LINES = "\n".join(
     [
         "NU:TONIC PRO on-device vision — describe the provided EO image set using visible evidence.",
@@ -119,8 +139,8 @@ def _run_job(
 ) -> dict[str, Any]:
     settings = get_settings()
     bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
-    client = NutonicServerClient(settings)
     try:
+        client = _get_shared_client()
         created = client.post_pro_job(
             ProJobCreateIn(
                 center_lat=center_lat,
@@ -157,8 +177,6 @@ def _run_job(
             "detail": str(e),
             "hint": "The upstream game server Space may be rate-limiting (429). Wait and retry, or reduce repeated clicks.",
         }
-    finally:
-        client.close()
 
 def _run_full_pipeline(
     *,
@@ -177,8 +195,8 @@ def _run_full_pipeline(
 ) -> tuple[dict[str, Any], Any, Any, dict[str, Any]]:
     settings = get_settings()
     bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
-    client = NutonicServerClient(settings)
     try:
+        client = _get_shared_client()
         created = client.post_pro_job(
             ProJobCreateIn(
                 center_lat=center_lat,
@@ -257,6 +275,24 @@ def _run_full_pipeline(
         return job.model_dump(mode="json"), pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
     except httpx.HTTPStatusError as e:
         resp = e.response
+        # If the game server is rate-limiting auth/token, bypass orchestrator immediately.
+        if settings.enable_direct_worker_fallback and resp is not None and resp.status_code == 429:
+            return _run_via_direct_workers(
+                client=_get_shared_client(),
+                center_lat=center_lat,
+                center_lon=center_lon,
+                bbox_half_km=bbox_half_km,
+                mapbox_zoom=mapbox_zoom,
+                analysis_profile=analysis_profile,
+                enable_tim=enable_tim,
+                tim_branch=tim_branch,
+                sentinel_fetch_mode=sentinel_fetch_mode,
+                vlm_contract_id=vlm_contract_id,
+                datetime_interval=datetime_interval,
+                scene_id_t0=scene_id_t0,
+                scene_id_t1=scene_id_t1,
+                scene_id_t2=scene_id_t2,
+            )
         err = {
             "error": "upstream_http_error",
             "status_code": resp.status_code if resp is not None else None,
@@ -264,8 +300,6 @@ def _run_full_pipeline(
             "hint": "If this is 429, the upstream Space is rate-limiting. Wait and retry; consider adding auth later.",
         }
         return {"error": err}, None, None, err
-    finally:
-        client.close()
 
 
 def _run_via_direct_workers(

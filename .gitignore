@@ -2,6 +2,7 @@ refs
 !refs/leap-finetune-main
 stitch/
 artifacts
+Patagonia_Eval
 
 # Large/local payloads stay untracked; version tooling under data/scripts only.
 data/*

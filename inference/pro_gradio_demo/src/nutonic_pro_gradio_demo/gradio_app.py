@@ -16,25 +16,15 @@ from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, zerogpu_inf
 
 LEAFLET_JS = ""
 
-import threading
-
-_CLIENT_LOCK = threading.Lock()
-_SHARED_CLIENT: NutonicServerClient | None = None
-_SHARED_CLIENT_ORIGIN: str | None = None
-
-
-def _get_shared_client() -> NutonicServerClient:
+def _new_client() -> NutonicServerClient:
     """
-    Reuse a single NutonicServerClient per process to avoid hammering
-    `/api/v1/auth/token` (HF Spaces rate limits can return 429).
+    Create a fresh client per Gradio invocation.
+
+    This avoids cross-user/session token reuse: PRO artifacts are session-bound on the
+    game server (`session_id` in JWT), so sharing a token across concurrent Space users
+    can cause intermittent 401s when fetching artifacts for a job created by a different session.
     """
-    global _SHARED_CLIENT, _SHARED_CLIENT_ORIGIN
-    settings = get_settings()
-    with _CLIENT_LOCK:
-        if _SHARED_CLIENT is None or _SHARED_CLIENT_ORIGIN != settings.nutonic_server_origin.strip():
-            _SHARED_CLIENT = NutonicServerClient(settings)
-            _SHARED_CLIENT_ORIGIN = settings.nutonic_server_origin.strip()
-        return _SHARED_CLIENT
+    return NutonicServerClient(get_settings())
 
 ON_DEVICE_VLM_USER_INSTRUCTION_LINES = "\n".join(
     [
@@ -139,9 +129,9 @@ def _run_job(
 ) -> dict[str, Any]:
     settings = get_settings()
     bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
+    client = _new_client()
     try:
-        client = _get_shared_client()
-        bearer = client._ensure_bearer()
+        bearer = client.post_auth_token().access_token
         created = client.post_pro_job(
             ProJobCreateIn(
                 center_lat=center_lat,
@@ -178,6 +168,8 @@ def _run_job(
             "detail": str(e),
             "hint": "The upstream game server Space may be rate-limiting (429). Wait and retry, or reduce repeated clicks.",
         }
+    finally:
+        client.close()
 
 def _run_full_pipeline(
     *,
@@ -196,9 +188,9 @@ def _run_full_pipeline(
 ) -> tuple[dict[str, Any], Any, Any, dict[str, Any]]:
     settings = get_settings()
     bbox_half_km = _bbox_half_km_for_zoom(mapbox_zoom)
+    client = _new_client()
     try:
-        client = _get_shared_client()
-        bearer = client._ensure_bearer()
+        bearer = client.post_auth_token().access_token
         created = client.post_pro_job(
             ProJobCreateIn(
                 center_lat=center_lat,
@@ -281,7 +273,7 @@ def _run_full_pipeline(
         # If the game server is rate-limiting auth/token, bypass orchestrator immediately.
         if settings.enable_direct_worker_fallback and resp is not None and resp.status_code == 429:
             return _run_via_direct_workers(
-                client=_get_shared_client(),
+                client=client,
                 center_lat=center_lat,
                 center_lon=center_lon,
                 bbox_half_km=bbox_half_km,
@@ -303,6 +295,8 @@ def _run_full_pipeline(
             "hint": "If this is 429, the upstream Space is rate-limiting. Wait and retry; consider adding auth later.",
         }
         return {"error": err}, None, None, err
+    finally:
+        client.close()
 
 
 def _run_via_direct_workers(

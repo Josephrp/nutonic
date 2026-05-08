@@ -5,6 +5,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
 ProJobProfile = Literal[
     "wildfire",
     "oceanscout_ship_detection",

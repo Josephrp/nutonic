@@ -14,6 +14,8 @@ from nutonic_pro_gradio_demo.settings import get_settings
 from nutonic_pro_gradio_demo.vlm_parse import parse_vlm_output
 from nutonic_pro_gradio_demo.vlm_runtime import ensure_model_loaded, infer_caption_and_boxes
 
+LEAFLET_JS = ""
+
 
 def _bbox_half_km_for_zoom(zoom: int) -> float:
     z = int(zoom)
@@ -221,6 +223,8 @@ def _run_full_pipeline(
 
 def build_demo() -> gr.Blocks:
     settings = get_settings()
+    # Used by app.py (Gradio 6 moved js= from Blocks(...) to launch()).
+    # Keep it as a local value and return it via a module constant below.
     leaflet_js = r"""
 function() {
   // Load Leaflet (CSS + JS) dynamically (OSM tiles; no Mapbox).
@@ -300,7 +304,10 @@ function() {
 }
 """
 
-    with gr.Blocks(title="NU:TONIC PRO (ZeroGPU demo)", js=leaflet_js) as demo:
+    global LEAFLET_JS
+    LEAFLET_JS = leaflet_js
+
+    with gr.Blocks(title="NU:TONIC PRO (ZeroGPU demo)") as demo:
         if settings.require_server_origin and not settings.nutonic_server_origin.strip():
             gr.Markdown(
                 "## Configuration required\n\n"

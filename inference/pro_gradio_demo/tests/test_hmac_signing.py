@@ -56,6 +56,8 @@ def test_get_is_signed_when_secret_set() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["req"] = request
+        if request.url.path == "/api/v1/auth/token":
+            return httpx.Response(200, json={"access_token": "test-token", "token_type": "bearer", "expires_in": 3600})
         return httpx.Response(
             200,
             json={
@@ -95,6 +97,8 @@ def test_post_signs_exact_body_bytes_when_secret_set() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         captured["req"] = request
         captured["body"] = request.content
+        if request.url.path == "/api/v1/auth/token":
+            return httpx.Response(200, json={"access_token": "test-token", "token_type": "bearer", "expires_in": 3600})
         return httpx.Response(200, json={"job_id": "job-1"})
 
     settings = _settings(secret=SECRET)
@@ -134,6 +138,8 @@ def test_no_signing_headers_when_secret_unset() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["req"] = request
+        if request.url.path == "/api/v1/auth/token":
+            return httpx.Response(200, json={"access_token": "test-token", "token_type": "bearer", "expires_in": 3600})
         return httpx.Response(
             200,
             json={

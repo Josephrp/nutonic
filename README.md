@@ -63,7 +63,7 @@ flowchart TD
   OnDeviceUI -->|submit| ProJobCreate["POST /api/v1/pro/jobs"]
   OnDeviceUI -->|poll| ProJobPoll["GET /api/v1/pro/jobs/\{job_id\}"]
   ProJobPoll -->|on_device_payload| Payload[ProOnDevicePayload]
-  Payload --> ImageRefs[vlm_image_set[]]
+  Payload --> ImageRefs["vlm_image_set[]"]
   ImageRefs -->|fetch| ArtifactFetch["GET /api/v1/pro/jobs/\{job_id\}/artifacts/\{artifact_id\}"]
   OnDeviceUI -->|fetch| ModelManifest["GET /api/v1/pro/vlm/model-manifest"]
   ModelManifest -->|download| ModelWeights[model.safetensors]

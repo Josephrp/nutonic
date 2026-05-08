@@ -102,6 +102,7 @@ kotlin {
         desktopMain.dependencies {
             implementation("ai.liquid.leap:leap-sdk-jvm:0.10.2")
             implementation("io.ktor:ktor-client-cio:$ktorVersion")
+            runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
             implementation(compose.desktop.common)
             implementation(project(":mapview-desktop"))
         }

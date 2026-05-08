@@ -19,8 +19,7 @@ kotlin {
     }
 
     sourceSets {
-        val webMain by creating {
-            dependsOn(commonMain.get())
+        val jsMain by getting {
             dependencies {
                 implementation(project(":shared"))
                 implementation(compose.runtime)
@@ -30,9 +29,6 @@ kotlin {
                 @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
                 implementation(compose.components.resources)
             }
-        }
-        val jsMain by getting {
-            dependsOn(webMain)
         }
     }
 }

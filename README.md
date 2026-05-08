@@ -50,6 +50,33 @@ The project brings together:
 - **Priority-oriented UX:** app surfaces are packaged for Android, iOS, desktop, and web so judges and testers can use the system without building from source.
 - **Reproducible evaluation:** the Patagonia benchmark compares base and fine-tuned models on glacier, marine, forest, steppe, wetland, and coastal scenes.
 
+## Solution Overview
+
+NU:TONIC works as an end-to-end Earth intelligence loop:
+
+1. **Select an area on Earth.** A user, workflow, or benchmark target identifies a place worth monitoring, such as a wetland, glacier margin, wildfire-prone steppe, marine reserve, or coastal zone.
+2. **Materialize satellite evidence.** The system gathers Sentinel-2 imagery and prepares model-ready views of the area. In PRO-style flows, the materialization service packages RGB imagery, Sentinel inputs, and metadata into a bundle.
+3. **Add temporal memory.** TerraMind TiM-style processing reads satellite observations across time, so the system can reason about change instead of treating the latest image as an isolated photograph.
+4. **Explain with a satellite VLM.** The LFM-VL satellite model turns the image and temporal context into plain-language analysis: what the model sees, what appears to be changing, and which regions deserve attention.
+5. **Score and validate the response.** The Patagonia evaluation checks vocabulary, structured output, grounding boxes, faithfulness to satellite analytics, and the lift from temporal context versus image-only prompts.
+6. **Deliver a usable experience.** The app and CI-built installers make the result accessible on desktop, Android, iOS/TestFlight, and web surfaces without requiring judges or users to run the full ML stack locally.
+
+In one sentence: **NU:TONIC turns satellite time series into explainable, reviewable priority signals.**
+
+## Why Space-Based Compute Matters
+
+Space-based compute matters because satellites face the hardest possible data problem: they observe huge areas, generate massive imagery streams, and often have limited downlink windows, bandwidth, power, and response time. Sending every raw frame to Earth for human review is slow, expensive, and increasingly unrealistic.
+
+NU:TONIC is designed around the compute pattern that future orbital systems need:
+
+- **Process closer to the sensor.** Temporal models can summarize what changed before all raw data is downlinked.
+- **Send meaning, not just pixels.** A compact explanation, change flag, or priority region can be more valuable than another unfiltered image tile.
+- **Reduce latency for disasters.** Floods, fires, illegal extraction, and rapid coastal change are time-sensitive; onboard or edge-assisted inference can surface risk earlier.
+- **Use bandwidth intelligently.** If the model identifies the few places that changed most, operators can prioritize those chips for downlink and deeper analysis.
+- **Support human decisions.** Vision-language outputs turn orbital compute into language people can act on: "this wetland expanded," "this burn context changed," or "inspect this region first."
+
+That is why the Patagonia work is relevant to space-based compute specifically. It demonstrates a path from orbital observation to onboard/edge triage: **remember the recent past, explain the present, and prioritize what should be transmitted or reviewed next.**
+
 ## Fastest Way to Try It
 
 Use a prebuilt artifact rather than building locally.
@@ -156,9 +183,9 @@ Read the full public-facing write-up in [Teaching Satellites to Remember: Patago
 | [`data/scripts/`](data/scripts/) | Dataset and satellite training-data generation pipelines. |
 | [`server/`](server/) | Thin FastAPI orchestration layer for hosted demos and app data. |
 
-### Recommended review path:
+### Recommended Review Path
 
-1. Read the public article: https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth .
+1. Read the public article: [Teaching Satellites to Remember](https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth).
 2. Install the app using the platform artifact table above.
 3. Inspect the inference architecture in [`inference/README.md`](inference/README.md).
 4. Review the benchmark artifacts.

@@ -8,6 +8,11 @@
 
 ## Try it Out
 
+> [!WARNING]
+> **Build status notice:** We’ve seen recent instability/issues in the **Android**, **iOS**, and **desktop** builds.
+>
+> If you run into problems on those clients, please use the fully functional [**Hugging Face Space demo**](https://huggingface.co/spaces/Tonic/nutonic-pro-demo) instead (it mirrors the PRO workflow and returns the expected image outputs).
+
 The easiest way to try the implementation is to use the build artifacts produced by GitHub Actions: Android APKs, iOS/TestFlight builds, desktop installers, and web bundles. The codebase also includes the satellite inference services behind the demo: a specialist LFM-VL satellite caption model, TerraMind TiM temporal reasoning, and PRO materialization workers that turn map selections into imagery and model-ready bundles.
 
 For an overview of the Patagonia satellite benchmark and competition narrative, start with reading our [Presentation](https://huggingface.co/blog/Tonic/save-patagonia-by-predicting-earth) .

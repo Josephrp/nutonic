@@ -1,12 +1,29 @@
-# NU:TONIC — local TerraMind **TiM** (TerraTorch) runner
+# NU:TONIC — TerraMind TiM temporal runner
 
-Optional **GPU/CPU** batch tool under `inference/*` (not the thin game `server/`, not `data/scripts/`). Builds **`terramind_v1_*_tim`** via **`BACKBONE_REGISTRY`**, captures **TiM `GenerationSampler` outputs** (per imagined modality), serializes **schema-capped JSON**, and can emit **NDJSON** compatible with:
+TiM is the temporal memory layer in the NU:TONIC satellite intelligence story. A normal image model sees one frame; TiM-style processing helps the system reason over Sentinel-2 observations across time so the VLM can explain change, not just appearance.
+
+For competition audiences, the short version is:
+
+**TiM watches the sequence. The satellite VLM explains the sequence. NU:TONIC turns that explanation into a place people should inspect.**
+
+This package is an optional **GPU/CPU** batch tool under `inference/*` (not the thin `server/`, not `data/scripts/`). It builds **`terramind_v1_*_tim`** via **`BACKBONE_REGISTRY`**, captures **TiM `GenerationSampler` outputs** (per imagined modality), serializes **schema-capped JSON**, and can emit **NDJSON** compatible with:
 
 - `data/scripts/generate_ai_guess_fixture.py --mode terramind_tim_jsonl`
 
 **Authority:** `rules/06-server-vlm-tim-and-on-device-ml.md`, `rules/12-python-gradio-terramind-server.md`, `docs/PRO-TAB-VLM-ORCHESTRATION-SPEC.md` (Coordinates → `ai_lat` / `ai_lon` for catalog pipelines).
 
 **Default backbone:** NU:TONIC pins the largest TerraMind-1.0 TIM variant as ``nutonic_terramind_tim_local.tim_defaults.DEFAULT_TIM_MODEL_ID`` (**``terramind_v1_large_tim``**). Example YAMLs and the HF Space / Gradio demos use that unless you override ``model_id``.
+
+## Product role
+
+TiM is used to support predictive Earth observation workflows:
+
+- Compare the present with recent satellite history.
+- Surface change-oriented signals for wetlands, wildfire contexts, glacier margins, and land-use transitions.
+- Provide compact JSON that can be injected into VLM prompts.
+- Feed PRO-style bundles where users see not only an image, but a change story.
+
+The public Patagonia competition article is [`../../Patagonia_Eval/patagonia_eval_runs/eval.md`](../../Patagonia_Eval/patagonia_eval_runs/eval.md).
 
 ## Install (separate venv recommended)
 

@@ -1,5 +1,19 @@
 # Hugging Face Space deploy (NU:TONIC)
 
+Hugging Face Spaces host the live service side of the NU:TONIC Earth intelligence demo: satellite VLM captions, TerraMind TiM, PRO materialization, and supporting workers. Users and competition judges should normally start with the app installers described in the root [`README.md`](../../README.md); this document is for maintainers who deploy or verify the hosted inference layer.
+
+## Competition deployment map
+
+| Demo capability | Space/service |
+| --- | --- |
+| Satellite image explanation | `lfm_vl_satellite` / `Tonic/nutonic-lfm-vl-satellite` |
+| Temporal satellite memory | `terramind_tim` / `Tonic/nutonic-terramind-tim` |
+| PRO bundle materialization | `pro_materialization` / `NuTonic/nutonic-pro-materialization` |
+| App data/orchestration | `game_server` / `NuTonic/nutonic-game-server` |
+| General Street View support | `streetview_pano`, `lfm_vl_hint` |
+
+For a competition run-through, deploy or verify the three satellite-focused services first: `lfm_vl_satellite`, `terramind_tim`, and `pro_materialization`.
+
 The workflow **`.github/workflows/huggingface-deploy.yml`** runs **pytest**, then **`tools/hf_deploy/deploy_space.py`**, which:
 
 1. Stages a Space tree (`pyproject.toml`, `src/`, Space `README.md` from `templates/`, plus either `Dockerfile` for Docker SDK profiles or `app.py` for Gradio SDK profiles).

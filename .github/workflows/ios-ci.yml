@@ -56,7 +56,9 @@ jobs:
           cd "${GITHUB_WORKSPACE}/nutonic/iosApp"
           # Use generic simulator destination so CI does not depend on a specific device
           # (e.g. "iPhone 15") that newer Xcode images may omit from preinstalled simulators.
-          xcodebuild -project iosApp.xcodeproj -scheme iosApp -configuration Debug \
+          # LeapSDK ships Swift macros; CI has no UI to “enable” them — skip validation like Xcode Cloud.
+          xcodebuild -skipMacroValidation \
+            -project iosApp.xcodeproj -scheme iosApp -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             build \
             CODE_SIGNING_ALLOWED=NO

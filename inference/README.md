@@ -1,28 +1,49 @@
-# Inference plane (optional batch / PRO / EO tooling)
+# Inference plane: satellite intelligence services
 
-This directory hosts **deployables that are not the game server**. Kotlin clients never call these URLs directly (`rules/13-client-cache-and-data-plane.md`). **Initially**, **`data/scripts/`** and **HF Jobs** hydrate **Datasets** and bundles (`docs/GAME-ENGINE.md` §9, **`plans/2026-04-07-gradio-terramind-backend.md` §2**); each package here is a **Python service** built **from that validated script logic** when the pipeline must be **addressable over HTTP** (batch refresh, PRO, ops). The **game API** serves bundles and runs **`httpx`** to these workers when enabled — **`plans/2026-04-07-game-server-thin-orchestrator.md`** (thin **`server/`**: no torch in-process).
+This directory contains the Python services behind the NU:TONIC Earth intelligence demo. The top-level app artifacts are the easiest way to try the product, but these services explain how the system combines map selection, satellite imagery, temporal TiM signals, and VLM explanations.
 
-| Package | Role |
-|---------|------|
-| **`streetview_pano_service/`** | **Street View** batch plane: **`GET /health`** (exposes default **S2** disk **R**, supported **`sampling_mode`** values), **`POST /api/v1/panos/sample`** (preferred; legacy **`POST /v1/panos/sample`** alias). **Default** **`sampling_mode`**: **`STOCHASTIC_S2_FOOTPRINT`** (stub **or** real Google: seeded disk anchors, **`pano=`** + **random** headings when keyed; **`OMNI_SINGLE_PANO`** and **`LEGACY_RADIAL_OFFSET`** also implemented — see **[`plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md`](../plans/2026-04-18-streetview-google-perpendicular-sampling-full-scope.md)** §13). Local **Pillow** stub when no Google keys. Optional **inbound HMAC** when **`NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC=1`** + shared secret (see **IMP-092** below). |
-| **`lfm_vl_hint_service/`** | **Street View captions:** **`POST /v1/suggestions/from_frames`** (+ **`POST /v1/narrative/fuse`**). **`LFM_VL_BACKEND`**: **`stub`** (CI default), **`transformers`** (official **Liquid** HF weights, `pip install -e ".[model]"`), or **`openai_compatible`** (vLLM/SGLang OpenAI API per [Liquid docs](https://docs.liquid.ai/lfm/models/lfm25-vl-450m)). Optional **`[serve]`** extra: **Gradio** UI at **`/gradio`**, **`spaces.GPU`** on transformers forwards, entrypoint **`python -m lfm_vl_hint_service.run_serve`** for **Hugging Face ZeroGPU + Gradio SDK** Spaces. |
-| **`lfm_vl_satellite_caption_service/`** | **Specialized** LFM-VL (your `refs/satellite-vlm/` finetune): satellite RGB → **caption / VQA / grounding JSON**; FastAPI for the game server. **Transformers** path mirrors hints: **`ensure_satellite_model_loaded()`** outside ``@spaces.GPU``, **`model.generate`** wrapped with **`spaces_zero.apply_zero_gpu`**; optional **`LFM_SATELLITE_FORCE_MODEL_CUDA`**, **`LFM_SATELLITE_EAGER_LOAD`**, **`LFM_SATELLITE_ZERO_GPU_DURATION`**. |
-| **`pro_materialization_service/`** | **PRO tab** worker: **`GET /health`**, **`GET /internal/v1/healthz`**, **`POST /internal/v1/materialize`** (**P1** Mapbox+VLM; **P2** STAC 12-band + **`S2L2A`** / **`RGB_mapbox`** TiM NPZ; **`pystac-client`** / **`rasterio`** are core deps since **0.3.1**; Docker image adds GDAL via **`gdal-bin`** / **`libgdal-dev`**). Stub **`POST /api/v1/materialize/stub`**. **`plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md`** (**IMP-113**). Same optional **inbound HMAC** as **`streetview_pano_service`**. |
-| **`terramind_tim_local/`** | **Local TerraTorch TiM** forward + **capped** `tim_modality_outputs` JSON / JSONL + optional batch over catalog rows; **`ingest`** subcommand drives `data/scripts/generate_ai_guess_fixture.py` (`RUN_TERRATORCH_TIM=1` tests). Optional **`[space]`** FastAPI + **`Dockerfile`** for Hugging Face (see package README). |
+The competition-facing architecture is:
+
+1. A place or area is selected.
+2. The system materializes satellite and map imagery.
+3. TerraMind TiM-style processing adds temporal memory.
+4. A satellite VLM turns the imagery and temporal context into readable explanations.
+5. The app or PRO surface presents a bundle people can inspect.
+
+Kotlin clients do not call these URLs directly (`rules/13-client-cache-and-data-plane.md`). The thin `server/` process or offline tools orchestrate workers when live inference is enabled.
+
+| Package | Competition-facing role |
+| --- | --- |
+| **`lfm_vl_satellite_caption_service/`** | The satellite VLM explainer: satellite imagery to captions, VQA-style answers, and grounding-oriented JSON. This is the main "explain the Earth" service. |
+| **`terramind_tim_local/`** | The temporal memory path: TerraMind TiM exports that help the system reason about change instead of only a still image. |
+| **`pro_materialization_service/`** | The PRO bundle builder: map/Sentinel materialization, VLM image contracts, and TiM-ready arrays. |
+| **`streetview_pano_service/`** | Street-level image sampling for non-satellite demo surfaces and comparison workflows. |
+| **`lfm_vl_hint_service/`** | General LFM-VL caption/hint service for non-satellite imagery and narrative support. |
+
+For the Patagonia competition narrative, the most relevant packages are `lfm_vl_satellite_caption_service/`, `terramind_tim_local/`, and `pro_materialization_service/`.
+
+## Reviewer path
+
+Most reviewers should not run these services locally. Use the app artifacts described in the root [`README.md`](../README.md), then read:
+
+- Public article: [`../Patagonia_Eval/patagonia_eval_runs/eval.md`](../Patagonia_Eval/patagonia_eval_runs/eval.md)
+- Satellite VLM service: [`lfm_vl_satellite_caption_service/README.md`](lfm_vl_satellite_caption_service/README.md)
+- TerraMind TiM service: [`terramind_tim_local/README.md`](terramind_tim_local/README.md)
+- PRO materialization: [`pro_materialization_service/README.md`](pro_materialization_service/README.md)
 
 ## CI and deployment status
 
 There are two distinct GitHub Actions paths:
 
 | Workflow | Trigger | What it does |
-|----------|---------|--------------|
-| **`.github/workflows/nutonic-ci.yml`** | Pull requests, manual dispatch | Runs Python tests for `data/scripts`, `tools`, `server/`, and the tested inference packages (`streetview_pano_service`, `lfm_vl_hint_service`, `lfm_vl_satellite_caption_service`, `pro_materialization_service`) plus Kotlin/Gradle quality and packaging jobs. It does **not** deploy Spaces. |
+| --- | --- | --- |
+| **`.github/workflows/nutonic-ci.yml`** | Pull requests, manual dispatch | Runs Python tests for `data/scripts`, `tools`, `server/`, and tested inference packages, then builds app artifacts such as APKs and desktop installers. |
 | **`.github/workflows/huggingface-deploy.yml`** | Push to `main` on deploy-relevant paths, or manual dispatch | Runs targeted pytest for selected deploy targets, stages Docker Space trees, uploads them to Hugging Face, syncs Space runtime variables/secrets/hardware, then runs live smoke checks. |
 
 Current **Hugging Face deployment targets** cover the required long-lived server and inference services:
 
 | Deploy target | Source path | Space repo | Owner token | Runtime profile |
-|---------------|-------------|------------|-------------|-----------------|
+| --- | --- | --- | --- | --- |
 | `streetview_pano` | `inference/streetview_pano_service/` | `Tonic/nutonic-streetview-pano` | `HF_TOKEN_TONIC` fallback chain | `tools/hf_deploy/profiles/streetview_pano.yaml` (`cpu-basic`, stub provider by default) |
 | `lfm_vl_hint` | `inference/lfm_vl_hint_service/` | `Tonic/nutonic-lfm-vl-streetview` | `HF_TOKEN_TONIC` fallback chain | `tools/hf_deploy/profiles/lfm_vl_hint.yaml` (`zero-a10g`, `LFM_VL_BACKEND=transformers`, Gradio mounted) |
 | `lfm_vl_satellite` | `inference/lfm_vl_satellite_caption_service/` | `Tonic/nutonic-lfm-vl-satellite` | `HF_TOKEN_TONIC` fallback chain | `tools/hf_deploy/profiles/lfm_vl_satellite.yaml` (`zero-a10g`, `LFM_SATELLITE_BACKEND=transformers`) |
@@ -39,7 +60,7 @@ The deploy script is **`tools/hf_deploy/deploy_space.py`**. For each target, it 
 Implementations of **`lfm_vl_*`** and TerraMind workers **must not** run inside the thin **`server/`** process, but **may** use any of these **inside `inference/*`, `tools/`, Jobs, or `demos/terramind_space/`**:
 
 | Stack | Typical use | Notes |
-|-------|-------------|--------|
+| --- | --- | --- |
 | **vLLM** | Serve supported **VLM / LM** checkpoints with an OpenAI-compatible HTTP API | Batch scripts and the game node point **`--lfm-vl-url`** (or env) at the vLLM base URL; adapter layer maps responses to **`suggestions[]`** / internal DTOs. Verify model card compatibility with vLLM before committing. |
 | **`transformers` + PyTorch** | **LFM-VL** (or other HF models) in-process behind FastAPI | Matches current Space / Docker patterns (`uvicorn`, optional `@spaces.GPU`). |
 | **TerraTorch** | **TerraMind TiM** and **`terramind_v1_*_generate`** on EO tensors | Per IBM TerraMind docs and `rules/12-python-gradio-terramind-server.md`; **not** used for Street View pano fetch (CPU-only there). |

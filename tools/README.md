@@ -1,5 +1,14 @@
 # Operator tools (`tools/`)
 
+This directory is for maintainers and operators. Competition reviewers should normally use prebuilt app artifacts from GitHub Actions or Releases, then use these tools only to verify live services, deploy Hugging Face Spaces, or reproduce data/evaluation pipelines.
+
+Most relevant competition tools:
+
+- [`live_inference_smoke.py`](live_inference_smoke.py) checks deployed inference services.
+- [`hf_deploy/README.md`](hf_deploy/README.md) explains Hugging Face Space deployment for satellite VLM, TiM, and PRO services.
+- [`hf_jobs/README.md`](hf_jobs/README.md) explains cloud batch jobs for heavier hydration and temporal processing.
+- Patagonia evaluation commands and artifacts live under [`../Patagonia_Eval/patagonia_eval_runs/`](../Patagonia_Eval/patagonia_eval_runs/).
+
 ## Hugging Face Dataset mirror + Jobs (hydration)
 
 - **Pull POI trees from Hub:** [`pull_poidata_from_hub.py`](pull_poidata_from_hub.py) syncs `NuTonic/poidata` into `data/downloads/` via `snapshot_download` (default patterns: `geoguessr_poi_12/**`, `geoguessr_poi_120/**`). Loads `.env` and prefers **`HF_API_READ`** for private snapshots (`pip install huggingface_hub`).

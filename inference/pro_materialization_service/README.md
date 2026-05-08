@@ -1,5 +1,14 @@
 # PRO materialization service
 
+This worker turns a place on the map into the evidence bundle that NU:TONIC's satellite intelligence stack can reason about. It fetches or prepares imagery, Sentinel-2 inputs, VLM-ready PNGs, and TiM-ready arrays so the app can move from "look at this area" to "explain what may be changing here."
+
+For competition reviewers, this is the practical bridge between the public demo and the AI stack:
+
+1. Pick an area.
+2. Materialize the imagery and satellite context.
+3. Feed the VLM and TiM paths.
+4. Return a PRO-style bundle for human inspection.
+
 HTTP worker for **`PRO_MATERIALIZATION_SERVICE_URL`** / **`NUTONIC_PRO_MATERIALIZATION_SERVICE_URL`** (`docs/SERVER-AND-INFERENCE-ARCHITECTURE.md` §5.3, `plans/2026-04-12-pro-materialization-fetch-and-downscale-service.md`). **Kotlin clients do not call this URL** (`rules/13-client-cache-and-data-plane.md`); the thin **`server/`** may orchestrate **`POST /api/v1/pro/jobs`** → **`POST …/internal/v1/materialize`**.
 
 ## Implemented
@@ -25,10 +34,19 @@ HTTP worker for **`PRO_MATERIALIZATION_SERVICE_URL`** / **`NUTONIC_PRO_MATERIALI
 - **No `torch`** / **no `terratorch`** in this package (plan §3.2).
 - **`MAPBOX_ACCESS_TOKEN`** required when the resolved VLM contract includes **`mapbox_rgb`** (including **`MINIMAL_RGB`** and **`nutonic.pro.vlm.v1_512_fc_scl`** on spectral modes). Sentinel-only contracts (**`nutonic.pro.vlm.v1_512_s2_only`**) skip Mapbox entirely.
 
+## Competition-facing role
+
+The service is deliberately separate from the app client and from GPU-heavy TiM/VLM inference. That separation makes the product story stronger:
+
+- The app stays easy to install from CI artifacts.
+- The materialization worker handles data preparation.
+- TiM and VLM workers can scale independently.
+- The same workflow can support conservation review, flood triage, wildfire monitoring, and climate adaptation use cases.
+
 ## Environment
 
 | Variable | Purpose |
-|----------|---------|
+| --- | --- |
 | **`MAPBOX_ACCESS_TOKEN`** | Mapbox Static Images token (omit only for Sentinel-only VLM contracts on **`TERRAMIND_SPECTRAL`** / **`FULL_STAC`**). |
 | **`NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC`** | When `1`, require signed requests. |
 | **`NUTONIC_INFERENCE_HMAC_SECRET`** | Shared HMAC secret. |

@@ -1,6 +1,8 @@
-# NU:TONIC game server (`server/`)
+# NU:TONIC orchestration server (`server/`)
 
-Thin **FastAPI** orchestrator for Kotlin clients: versioned REST under **`/api/v1/*`**, optional Gradio **`/ops`** later, **no** `torch` / TerraTorch / Street View math in-process.
+Thin **FastAPI** orchestrator for Kotlin clients and hosted demos: versioned REST under **`/api/v1/*`**, optional Gradio **`/ops`** later, **no** `torch` / TerraTorch / Street View math in-process.
+
+For the competition-facing satellite story, this server is not the AI model. It is the lightweight coordinator that can serve app data and probe PRO/inference workers while keeping GPU-heavy VLM and TiM workloads in separate services.
 
 **Topology and fan-out URLs:** see [`docs/TOPOLOGY.md`](docs/TOPOLOGY.md).
 
@@ -24,7 +26,7 @@ Optional: copy **`.env.example`** to **`server/.env`** so local runs pick up **`
 ## Environment variables
 
 | Variable | Required | Description |
-|----------|----------|-------------|
+| --- | --- | --- |
 | `CORS_ORIGINS` | No | Comma-separated browser origins allowed for CORS (e.g. `http://localhost:8080`). Empty = CORS middleware not registered. |
 | `FEATURE_RANKED` | No | Default **`false`**. When **`true`**, enables **`POST /api/v1/ranked/rounds/start`**, **`.../submit`**, **`.../forfeit-ranked-integrity`** (**IMP-090** / **IMP-091**), and read **`GET /api/v1/maps/{map_id}/leaderboard/ranked`** (server-verified aggregate). `features.ranked` on **`GET /api/v1/config`**. |
 | `FEATURE_COMMUNITY_LB_GET` | No | Default `true`. `features.community_lb_get`. |
@@ -62,7 +64,7 @@ Normative contract: **`../docs/openapi.yaml`** at repo root (hand-maintained; Fa
 The game server is deployed by **`.github/workflows/huggingface-deploy.yml`**, not by the general **`nutonic-ci.yml`** workflow.
 
 | Item | Current behavior |
-|------|------------------|
+| --- | --- |
 | Trigger | Push to `main` touching `server/**`, `tools/hf_deploy/**`, `tools/live_inference_smoke.py`, `tools/requirements.txt`, or the deploy workflow; or manual **workflow_dispatch** target `game_server` / `all`. |
 | Test gate | `pip install -e "./server[dev]"` followed by `pytest server/tests -q`. |
 | Deploy command | `python tools/hf_deploy/deploy_space.py --service game_server --repo-id NuTonic/nutonic-game-server --token-env HF_TOKEN`. |

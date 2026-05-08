@@ -347,7 +347,8 @@ jobs:
           ARCHIVE="${RUNNER_TEMP}/Nutonic-iosApp.xcarchive"
           OUT="${RUNNER_TEMP}/Nutonic-ipa"
           rm -rf "$ARCHIVE" "$OUT"
-          xcodebuild -project iosApp.xcodeproj -scheme iosApp -configuration Release \
+          xcodebuild -skipMacroValidation \
+            -project iosApp.xcodeproj -scheme iosApp -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$ARCHIVE" \
             archive \

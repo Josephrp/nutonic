@@ -75,7 +75,7 @@ class NutonicServerClient:
             raise ValueError("NUTONIC_SERVER_ORIGIN must be set")
         return self._origin + path
 
-    def _maybe_canonicalize_origin(self) -> None:
+    def _maybe_canonicalize_origin(self, *, force: bool = False) -> None:
         """
         Hugging Face sometimes serves the same Space under multiple hostnames
         (e.g. `nutonic-nutonic-game-server.hf.space` vs `NuTonic-nutonic-game-server.hf.space`)
@@ -86,8 +86,13 @@ class NutonicServerClient:
         """
         if not self._origin:
             return
+        # Skip repeated discovery unless forced (used as a recovery path on 404).
+        if not force and "huggingface.co/spaces/" not in (self._origin or ""):
+            # Still allow normal discovery for hf.space origins.
+            pass
         try:
-            r = self._client.get(self._origin + "/api/v1/health")
+            # Use the same retry/backoff behavior as other upstream calls.
+            r = self._request_with_backoff("GET", "/api/v1/health", require_bearer=False, max_retries=3)
         except Exception:
             return
         link = r.headers.get("link") or r.headers.get("Link")
@@ -119,8 +124,20 @@ class NutonicServerClient:
         return ProJobCreateOut.model_validate(r.json())
 
     def get_pro_job(self, job_id: str, *, bearer_token: str | None = None) -> ProJobStatusOut:
-        r = self._request_with_backoff("GET", f"/api/v1/pro/jobs/{job_id}", require_bearer=True, bearer_token=bearer_token)
-        return ProJobStatusOut.model_validate(r.json())
+        path = f"/api/v1/pro/jobs/{job_id}"
+        try:
+            r = self._request_with_backoff("GET", path, require_bearer=True, bearer_token=bearer_token)
+            return ProJobStatusOut.model_validate(r.json())
+        except httpx.HTTPStatusError as e:
+            # HF Spaces sometimes route different hostnames to different replicas/config states.
+            # If a job is created on one hostname but polled on another, we can see a 404.
+            if e.response is not None and e.response.status_code == 404:
+                before = self._origin
+                self._maybe_canonicalize_origin(force=True)
+                if self._origin and self._origin != before:
+                    r2 = self._request_with_backoff("GET", path, require_bearer=True, bearer_token=bearer_token)
+                    return ProJobStatusOut.model_validate(r2.json())
+            raise
 
     def get_artifact(self, *, job_id: str, artifact_id: str, bearer_token: str | None = None) -> bytes:
         r = self._request_with_backoff(

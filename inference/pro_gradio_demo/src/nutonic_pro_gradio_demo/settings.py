@@ -49,6 +49,35 @@ class Settings(BaseSettings):
         description="Writable directory for cached model weights; empty means choose a default at runtime.",
     )
 
+    # Optional: Space-side override for the local VLM bundle advertised by the game server manifest.
+    # This is intended for experimentation / rapid switching (e.g. base model vs fine-tune) without
+    # redeploying the upstream game server.
+    vlm_override_bundle_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_VLM_OVERRIDE_BUNDLE_ID", "vlm_override_bundle_id"),
+        description="Optional HF model repo id to force (e.g. LiquidAI/LFM2.5-VL-450M).",
+    )
+    vlm_override_revision: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_VLM_OVERRIDE_REVISION", "vlm_override_revision"),
+        description="Optional git revision (commit hash / tag) for the override bundle.",
+    )
+    vlm_override_download_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_VLM_OVERRIDE_DOWNLOAD_URL", "vlm_override_download_url"),
+        description="Optional direct weights URL for non-HF sources (usually leave empty for HF repos).",
+    )
+    vlm_override_sha256: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_VLM_OVERRIDE_SHA256", "vlm_override_sha256"),
+        description="Optional sha256 for model.safetensors verification (recommended when using download_url).",
+    )
+    vlm_override_size_bytes: int = Field(
+        default=0,
+        validation_alias=AliasChoices("NUTONIC_VLM_OVERRIDE_SIZE_BYTES", "vlm_override_size_bytes"),
+        description="Optional size in bytes for download_url caching; 0 disables size checks.",
+    )
+
     inference_hmac_secret: str = Field(
         default="",
         validation_alias=AliasChoices(

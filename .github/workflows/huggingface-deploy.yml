@@ -465,6 +465,12 @@ jobs:
           NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET || secrets.INFERENCE_HMAC_SECRET }}
           # Optional: if set, the demo will skip calling `/api/v1/auth/token` (avoids 429s).
           NUTONIC_SERVER_BEARER_TOKEN: ${{ secrets.NUTONIC_SERVER_BEARER_TOKEN }}
+          # Optional: Space-side override for the local Transformers VLM bundle.
+          NUTONIC_VLM_OVERRIDE_BUNDLE_ID: ${{ secrets.NUTONIC_VLM_OVERRIDE_BUNDLE_ID }}
+          NUTONIC_VLM_OVERRIDE_REVISION: ${{ secrets.NUTONIC_VLM_OVERRIDE_REVISION }}
+          NUTONIC_VLM_OVERRIDE_DOWNLOAD_URL: ${{ secrets.NUTONIC_VLM_OVERRIDE_DOWNLOAD_URL }}
+          NUTONIC_VLM_OVERRIDE_SHA256: ${{ secrets.NUTONIC_VLM_OVERRIDE_SHA256 }}
+          NUTONIC_VLM_OVERRIDE_SIZE_BYTES: ${{ secrets.NUTONIC_VLM_OVERRIDE_SIZE_BYTES }}
         run: >
           python tools/hf_deploy/deploy_space.py
           --service pro_gradio_demo

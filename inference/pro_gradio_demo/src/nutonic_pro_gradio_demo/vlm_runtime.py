@@ -28,6 +28,19 @@ _LOADED: LoadedModel | None = None
 def ensure_model_loaded(*, client: NutonicServerClient, settings: Settings) -> LoadedModel:
     global _LOADED
     manifest = client.get_vlm_model_manifest()
+
+    # Space-side override: allow forcing a different bundle than what the server advertises.
+    if settings.vlm_override_bundle_id.strip():
+        override = settings.vlm_override_bundle_id.strip()
+        manifest = ProVlmModelManifest(
+            model_bundle_id=override,
+            revision=(settings.vlm_override_revision.strip() or manifest.revision),
+            download_url=(settings.vlm_override_download_url.strip() or manifest.download_url),
+            sha256=(settings.vlm_override_sha256.strip() or ""),
+            size_bytes=(int(settings.vlm_override_size_bytes) if settings.vlm_override_size_bytes else 0),
+            runtime=manifest.runtime,
+            contract_ids=manifest.contract_ids,
+        )
     cache_key = f"{manifest.model_bundle_id}-{manifest.revision}".replace("/", "_")
     cache_dir = _resolve_cache_dir(settings=settings, cache_key=cache_key)
     cache_dir.mkdir(parents=True, exist_ok=True)

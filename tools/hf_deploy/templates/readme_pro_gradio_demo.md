@@ -42,5 +42,10 @@ python tools/hf_deploy/deploy_space.py --service pro_gradio_demo --repo-id Tonic
 | Name | Description |
 |------|-------------|
 | `NUTONIC_SERVER_BEARER_TOKEN` | Optional. Pre-issued JWT for the game server. When set, the demo skips calling `/api/v1/auth/token` (avoids 429s under load). |
+| `NUTONIC_VLM_OVERRIDE_BUNDLE_ID` | Optional. Force the local Transformers bundle used by this Space (bypasses the game server model-manifest). Example: `LiquidAI/LFM2.5-VL-450M`. |
+| `NUTONIC_VLM_OVERRIDE_REVISION` | Optional. Revision (commit hash/tag) for the override bundle. |
+| `NUTONIC_VLM_OVERRIDE_DOWNLOAD_URL` | Optional. Direct weights URL for non-HF sources (usually leave empty for HF repos). |
+| `NUTONIC_VLM_OVERRIDE_SHA256` | Optional. sha256 to verify the override weights. Recommended when using `NUTONIC_VLM_OVERRIDE_DOWNLOAD_URL`. |
+| `NUTONIC_VLM_OVERRIDE_SIZE_BYTES` | Optional. Size in bytes for caching when using `NUTONIC_VLM_OVERRIDE_DOWNLOAD_URL`. |
 | `NUTONIC_INFERENCE_HMAC_SECRET` | Optional. Shared HMAC secret for outbound calls to NU:TONIC services. When set, the demo signs requests using the same `X-Nutonic-Timestamp` / `X-Nutonic-Nonce` / `X-Nutonic-Content-SHA256` / `X-Nutonic-Signature` contract as `tools/nutonic_hmac.py`, the game server's `InferenceClient`, and the worker Spaces (`streetview_pano`, `pro_materialization`). Use the **same value** as the upstream services so verification succeeds when `NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC=1` is enabled there. CI populates this from the GitHub repo secret of the same name (fallback `INFERENCE_HMAC_SECRET`). |
 

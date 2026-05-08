@@ -418,4 +418,10 @@ def _build_inputs(
             }
             for label, (_tensor, meta) in temporal_stac.items()
         }
+    try:
+        s2p = stac_s2_params_from_cfg(in_cfg, row)
+        if s2p.get("lat") is not None and s2p.get("lon") is not None:
+            aux["request_wgs84"] = {"latitude": float(s2p["lat"]), "longitude": float(s2p["lon"])}
+    except Exception:
+        pass
     return out, aux

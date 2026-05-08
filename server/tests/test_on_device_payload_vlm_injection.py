@@ -30,11 +30,15 @@ def test_on_device_payload_includes_tim_without_brief_summary() -> None:
         "tim_summary": {"branch": "S2L2A_full", "modalities_keys": ["S2L2A"], "has_npz": True},
         # brief_summary intentionally missing (LFMs unavailable or skipped).
     }
-    out = _on_device_payload(settings, mat, artifacts, artifacts)
+    out = _on_device_payload(settings, mat, artifacts, artifacts, job_analysis_profile="brief_only")
     assert out is not None
     assert out.brief_sections == []
     assert out.confidence_summary is None
     inj = out.vlm_prompt_injection or {}
+    assert inj.get("vlm_prompt_style") == "sft_production_analysis"
+    prod = str(inj.get("production_tim_user_prompt") or "")
+    assert "Production-like analysis input:" in prod
+    assert "brief_only" in prod
     block = str(inj.get("tim_context_block") or "")
     assert "TerraMind / TiM context" in block
     assert "S2L2A_full" in block

@@ -28,6 +28,8 @@ def test_pull_poidata_calls_snapshot_download(monkeypatch: pytest.MonkeyPatch, t
 
 
 def test_submit_hydration_dry_run_json(capsys: pytest.CaptureFixture[str]) -> None:
+    if not hasattr(huggingface_hub, "Volume"):
+        pytest.skip("huggingface_hub too old for Jobs Volume API (install tools/hf_jobs/requirements.txt)")
     from submit_nutonic_hydration_job import main
 
     rc = main(

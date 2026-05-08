@@ -1,0 +1,13 @@
+location_id: poi_0052
+map_id: poi_0052
+truth_lat: 41.3897711
+truth_lon: -92.9213856
+assist_level: standard
+still_source:
+  render_policy:
+    center_lat: 41.3897711
+    center_lon: -92.9213856
+    zoom: 12.0
+    width_px: 1280
+    height_px: 1280
+    style: satellite-v9

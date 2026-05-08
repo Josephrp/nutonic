@@ -1,0 +1,126 @@
+# Curated per-AOI oracle fractions for Patagonia eval.
+# Used by ``--analytics-source synthetic_oracle`` for faithfulness upper-bound experiments.
+#
+# Keys are Dynamic World class names (lfm_vl_sft_dataset.instances.DYNAMIC_WORLD_CLASSES):
+#   water, trees, grass, flooded_vegetation, crops, shrub_and_scrub, built, bare_ground, snow_and_ice
+# Fractions are in [0, 1] over valid (non-cloud, non-shadow) pixels and need not sum to 1.0
+# (they are renormalized in patagonia_eval_analytics_sources._normalize).
+#
+# Numbers are best-effort priors per AOI, not authoritative ground truth. Adjust as new
+# scenes / seasons are evaluated. Comments record the dominant rationale per AOI.
+
+# --- Andean forest / lake controls -----------------------------------------------------------
+
+pat_los_alerces_np:
+  # Temperate Patagonian forest + glacial lakes; little-to-no built area at scale.
+  sentinel_fractions:
+    trees: 0.55
+    water: 0.30
+    bare_ground: 0.07
+    snow_and_ice: 0.05
+    shrub_and_scrub: 0.03
+
+pat_nahuel_huapi:
+  # Andean lake-forest mosaic with somewhat more shrub/grass than Los Alerces.
+  sentinel_fractions:
+    trees: 0.50
+    water: 0.25
+    shrub_and_scrub: 0.10
+    grass: 0.07
+    bare_ground: 0.05
+    snow_and_ice: 0.03
+
+# --- Cryosphere ------------------------------------------------------------------------------
+
+pat_perito_moreno_glacier:
+  # Glacier tongue with surrounding bare/rock and mountain lake water.
+  sentinel_fractions:
+    snow_and_ice: 0.55
+    water: 0.20
+    bare_ground: 0.15
+    trees: 0.07
+    shrub_and_scrub: 0.03
+
+# --- Marine reserves -------------------------------------------------------------------------
+
+pat_yaganes_mpa:
+  # Open ocean MPA center; effectively all water at the sampling scale.
+  sentinel_fractions:
+    water: 1.0
+
+pat_yaganes_nearshore_channel:
+  # Tierra del Fuego nearshore: water dominant, with island/coast bare rock and some shrub.
+  sentinel_fractions:
+    water: 0.70
+    bare_ground: 0.13
+    shrub_and_scrub: 0.08
+    trees: 0.05
+    grass: 0.04
+
+pat_namuncura_burdwood:
+  # Submarine bank well offshore; visible scene is open ocean.
+  sentinel_fractions:
+    water: 1.0
+
+pat_patagonia_austral_marine_park:
+  # Coastal marine park with rocky shore + steppe vegetation patches inland.
+  sentinel_fractions:
+    water: 0.55
+    bare_ground: 0.20
+    shrub_and_scrub: 0.13
+    grass: 0.08
+    built: 0.04
+
+# --- Anthropogenic / coastal control ---------------------------------------------------------
+
+pat_puerto_madryn_port:
+  # Mixed urban-coastal; explicit built footprint with bare ground from arid surroundings.
+  sentinel_fractions:
+    built: 0.40
+    bare_ground: 0.25
+    water: 0.20
+    grass: 0.07
+    shrub_and_scrub: 0.05
+    trees: 0.03
+
+# --- Maritime chokepoint / fjord controls ----------------------------------------------------
+
+pat_strait_magellan:
+  # Strait sector: predominantly water with island/coast bare rock and some shrub.
+  sentinel_fractions:
+    water: 0.75
+    bare_ground: 0.10
+    shrub_and_scrub: 0.07
+    trees: 0.05
+    grass: 0.03
+
+pat_torres_del_paine_fjords:
+  # Mountain + fjord transition; significant bare rock and snow on peaks plus lake water.
+  sentinel_fractions:
+    bare_ground: 0.30
+    water: 0.25
+    snow_and_ice: 0.15
+    trees: 0.15
+    grass: 0.08
+    shrub_and_scrub: 0.07
+
+# --- Steppe / wetlands (new targets) ---------------------------------------------------------
+
+pat_chubut_steppe_wildfire_context:
+  # Patagonian steppe: very dry mosaic dominated by shrubs and bare soil; few trees.
+  sentinel_fractions:
+    shrub_and_scrub: 0.45
+    bare_ground: 0.30
+    grass: 0.15
+    trees: 0.05
+    water: 0.05
+
+pat_golfo_san_matias_marsh:
+  # Coastal wetlands sector: tidal flats / marsh edge with intermittent flooded vegetation.
+  sentinel_fractions:
+    water: 0.45
+    bare_ground: 0.20
+    shrub_and_scrub: 0.13
+    grass: 0.10
+    flooded_vegetation: 0.07
+    trees: 0.05

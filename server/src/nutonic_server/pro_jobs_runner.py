@@ -250,13 +250,23 @@ def summarize_materialize_worker_response(data: dict[str, Any]) -> dict[str, Any
         "run_manifest": slim_rm,
         "vlm_artifacts": artifacts,
     }
+    ap = data.get("analysis_profile")
+    if isinstance(ap, str) and ap.strip():
+        out["analysis_profile"] = ap.strip()
     tim_payload = data.get("tim_payload")
     if isinstance(tim_payload, dict):
-        out["tim_payload"] = {
+        slim_tp: dict[str, Any] = {
             "branch": tim_payload.get("branch"),
             "modalities_keys": tim_payload.get("modalities_keys"),
             "has_npz": bool(tim_payload.get("npz_base64")),
         }
+        tmo = tim_payload.get("tim_modality_outputs")
+        if isinstance(tmo, dict) and tmo:
+            slim_tp["tim_modality_outputs"] = tmo
+        pa = tim_payload.get("profile_analytics")
+        if isinstance(pa, dict) and pa:
+            slim_tp["profile_analytics"] = pa
+        out["tim_payload"] = slim_tp
     return out
 
 
@@ -287,11 +297,18 @@ def _tim_summary_from_materialization(data: dict[str, Any]) -> dict[str, Any]:
     tim_payload = data.get("tim_payload")
     if not isinstance(tim_payload, dict):
         return {"mode": "not_available"}
-    return {
+    out: dict[str, Any] = {
         "branch": tim_payload.get("branch"),
         "modalities_keys": tim_payload.get("modalities_keys"),
         "has_npz": bool(tim_payload.get("npz_base64")),
     }
+    tmo = tim_payload.get("tim_modality_outputs")
+    if isinstance(tmo, dict) and tmo:
+        out["tim_modality_outputs"] = tmo
+    pa = tim_payload.get("profile_analytics")
+    if isinstance(pa, dict) and pa:
+        out["profile_analytics"] = pa
+    return out
 
 
 def _materialization_request(job: ProJobRecord) -> dict[str, Any]:

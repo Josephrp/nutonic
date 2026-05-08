@@ -1,0 +1,215 @@
+content_version: hf-2026-05-07b-stac-live-llm
+engine_version: 0.1.0
+maps:
+- map_id: poi_0000
+  title: POI poi_0000
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0001
+  title: POI poi_0001
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0002
+  title: POI poi_0002
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0003
+  title: POI poi_0003
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0005
+  title: POI poi_0005
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0006
+  title: POI poi_0006
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0007
+  title: POI poi_0007
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0008
+  title: POI poi_0008
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0009
+  title: POI poi_0009
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0011
+  title: POI poi_0011
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0012
+  title: POI poi_0012
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0013
+  title: POI poi_0013
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0015
+  title: POI poi_0015
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0016
+  title: POI poi_0016
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0017
+  title: POI poi_0017
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0018
+  title: POI poi_0018
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0019
+  title: POI poi_0019
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0020
+  title: POI poi_0020
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0021
+  title: POI poi_0021
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0023
+  title: POI poi_0023
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0024
+  title: POI poi_0024
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0025
+  title: POI poi_0025
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0026
+  title: POI poi_0026
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0027
+  title: POI poi_0027
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0028
+  title: POI poi_0028
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0029
+  title: POI poi_0029
+  local_only: true
+  ranked_pool: false
+- map_id: poi_0030
+  title: POI poi_0030
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0031
+  title: POI poi_0031
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0032
+  title: POI poi_0032
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0033
+  title: POI poi_0033
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0034
+  title: POI poi_0034
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0035
+  title: POI poi_0035
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0036
+  title: POI poi_0036
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0038
+  title: POI poi_0038
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0040
+  title: POI poi_0040
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0042
+  title: POI poi_0042
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0043
+  title: POI poi_0043
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0044
+  title: POI poi_0044
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0046
+  title: POI poi_0046
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0048
+  title: POI poi_0048
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0049
+  title: POI poi_0049
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0051
+  title: POI poi_0051
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0052
+  title: POI poi_0052
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0054
+  title: POI poi_0054
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0055
+  title: POI poi_0055
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0057
+  title: POI poi_0057
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0059
+  title: POI poi_0059
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0060
+  title: POI poi_0060
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0061
+  title: POI poi_0061
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0062
+  title: POI poi_0062
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0064
+  title: POI poi_0064
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0065
+  title: POI poi_0065
+  local_only: true
+  ranked_pool: true
+- map_id: poi_0067
+  title: POI poi_0067
+  local_only: true
+  ranked_pool: true

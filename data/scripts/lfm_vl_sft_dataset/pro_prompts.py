@@ -13,6 +13,14 @@ SYSTEM_OPTICAL_LIMITS = (
     "and state confidence and limitations where appropriate."
 )
 
+# TiM + Sentinel production-analysis SFT rows (``sat_bbox_metadata_sft``) and Patagonia TiM E2E eval.
+PRODUCTION_ANALYSIS_SYSTEM = (
+    f"{SYSTEM_GEOSPATIAL_ANALYST} {SYSTEM_OPTICAL_LIMITS} "
+    "You receive Sentinel-2 imagery plus a compact TiM-style analytics JSON block (model-shaped signals). "
+    "Write an analytical summary grounded in the images and that JSON; distinguish what you infer from "
+    "the optical chip from TiM-predicted signals encoded in the JSON."
+)
+
 # Multi-image PRO assessment SFT / on-device VLM (keep aligned with Kotlin ``ProModelPromptContract``).
 SYSTEM_ASSESSMENT = (
     f"{SYSTEM_GEOSPATIAL_ANALYST} {SYSTEM_OPTICAL_LIMITS} "

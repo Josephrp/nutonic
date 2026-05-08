@@ -9,6 +9,10 @@ What it does:
 3) Scores captions against target-specific expected concepts.
 4) Writes a machine-readable JSON report and prints a concise console summary.
 
+**TiM E2E** (``tools/evaluate_vlm_patagonia_tim_e2e.py``) adds multimodal scoring: see
+``tools/patagonia_eval_scoring.py`` (lexical + SCL IoU + structured + composite) and
+``tools/patagonia_eval_gold.py`` (reference boxes from Sentinel-2 SCL).
+
 Sources used for core geographies (investigation baseline):
 - Los Alerces NP: SIB / National Parks / Wikipedia
 - Yaganes MPA: SIB (APN Argentina)
@@ -141,6 +145,12 @@ class EvalTarget:
     claim_risk_any: tuple[str, ...] = ()
     min_words: int = 18
     visual_difficulty: str = "medium"
+    # Optional UX/report tags (e.g. ``optical_probe``, ``tim_synthesis``); does not affect scoring unless wired.
+    lexical_hypothesis_tags: tuple[str, ...] = ()
+    # Optional override for TiM / production_analysis ``analysis_profile`` when category heuristics are ambiguous.
+    analysis_profile_hint: str = ""
+    # Reserved for future multi-scene / bi-temporal prompt wiring (currently unused by the harness).
+    temporal_scenes: tuple[str, ...] = ()
 
 
 @dataclass
@@ -197,6 +207,7 @@ def default_patagonia_targets() -> list[EvalTarget]:
             ),
             claim_risk_any=("los alerces", "national park", "unesco", "chubut", "argentina"),
             visual_difficulty="medium",
+            lexical_hypothesis_tags=("optical_probe", "forest_lake"),
         ),
         EvalTarget(
             target_id="pat_nahuel_huapi",
@@ -346,6 +357,46 @@ def default_patagonia_targets() -> list[EvalTarget]:
             ),
             claim_risk_any=("torres del paine", "chile", "national park"),
             visual_difficulty="medium",
+        ),
+        EvalTarget(
+            target_id="pat_chubut_steppe_wildfire_context",
+            name="Chubut steppe / wildfire-relevant open landscape",
+            lat=-43.35,
+            lon=-69.25,
+            zoom=10,
+            category="steppe_annual_burn_context",
+            notes="Dry steppe or semi-arid mosaic where burn-scar or bare-soil signals may appear; satellite-only cues.",
+            expected_any=(
+                ("grass", "shrub", "steppe", "semi-arid", "bare", "soil"),
+                ("land", "terrain", "plain", "hills"),
+            ),
+            claim_risk_any=("wildfire", "burn", "fire season", "chubut", "argentina"),
+            visual_difficulty="medium",
+            analysis_profile_hint="wildfire",
+            temporal_scenes=(
+                "2024-11-01/2025-01-31",
+                "2025-11-01/2026-01-31",
+            ),
+        ),
+        EvalTarget(
+            target_id="pat_golfo_san_matias_marsh",
+            name="Golfo San Matías coastal wetlands sector",
+            lat=-40.85,
+            lon=-65.15,
+            zoom=10,
+            category="coastal_wetland",
+            notes="Intertidal flats and marsh edge; seasonal water extent (flood-pulse style cues) may be visible.",
+            expected_any=(
+                ("coast", "marsh", "wetland", "flat", "tidal"),
+                ("water", "sea", "gulf", "lagoon"),
+            ),
+            claim_risk_any=("san matías", "san matias", "río negro", "argentina"),
+            visual_difficulty="medium",
+            analysis_profile_hint="flood_pulse",
+            temporal_scenes=(
+                "2025-04-01/2025-06-30",
+                "2025-10-01/2025-12-31",
+            ),
         ),
     ]
 

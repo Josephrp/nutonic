@@ -30,7 +30,7 @@ from lfm_vl_sft_dataset.jsonl_format import (
     make_multi_image_vlm_message,
     split_key,
 )
-from lfm_vl_sft_dataset.pro_prompts import SYSTEM_GEOSPATIAL_ANALYST, SYSTEM_OPTICAL_LIMITS
+from lfm_vl_sft_dataset.pro_prompts import PRODUCTION_ANALYSIS_SYSTEM
 
 # Substrings that must never appear in training prompts / answers (TiM / export bloat).
 BANNED_TRAINING_SUBSTRINGS: tuple[str, ...] = (
@@ -69,13 +69,6 @@ PROCEDURAL_OCEANSCOUT_SHORELINE_POLICY: dict[str, float | str] = {
     "morphology_kernel_px": 3.0,
     "min_water_fraction": 0.3,
 }
-
-PRODUCTION_ANALYSIS_SYSTEM = (
-    f"{SYSTEM_GEOSPATIAL_ANALYST} {SYSTEM_OPTICAL_LIMITS} "
-    "You receive Sentinel-2 imagery plus a compact TiM-style analytics JSON block (model-shaped signals). "
-    "Write an analytical summary grounded in the images and that JSON; distinguish what you infer from "
-    "the optical chip from TiM-predicted signals encoded in the JSON."
-)
 
 LAND_COVER_RGB: dict[str, tuple[int, int, int]] = {
     "water": (45, 115, 210),

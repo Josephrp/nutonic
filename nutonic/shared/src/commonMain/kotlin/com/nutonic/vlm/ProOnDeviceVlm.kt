@@ -95,6 +95,8 @@ data class ProVlmPreparedInput(
     val prompt: String,
     val images: List<ProVlmPreparedImage>,
     val model: ProVlmCacheRecord,
+    /** When set (SFT production-analysis / Patagonia-aligned PRO jobs), overrides [ProModelPromptContract.LEAP_CHAT_SYSTEM_PREAMBLE]. */
+    val leapSystemPreamble: String? = null,
 )
 
 data class ProVlmPreparedImage(
@@ -165,11 +167,26 @@ class ProOnDeviceVlmCoordinator(
         }
 
         if (failure == null) {
+            val injection = payload?.vlmPromptInjection
+            val prodStyle =
+                injection?.get("vlm_prompt_style")?.jsonPrimitive?.contentOrNull == "sft_production_analysis"
+            val systemFromServer =
+                injection
+                    ?.get("production_analysis_system")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
+                    ?.takeIf { it.isNotBlank() }
             val input =
                 ProVlmPreparedInput(
-                    prompt = buildPrompt(payload?.vlmPromptInjection, userAsk),
+                    prompt = buildPrompt(injection, userAsk),
                     images = images,
                     model = checkNotNull(model),
+                    leapSystemPreamble =
+                        if (prodStyle) {
+                            systemFromServer ?: ProModelPromptContract.PRODUCTION_ANALYSIS_SYSTEM
+                        } else {
+                            null
+                        },
                 )
             onStatus(ProVlmStatus.LoadingModel)
             onStatus(ProVlmStatus.Inferencing)
@@ -576,6 +593,16 @@ private val vlmPromptInjectionKeyOrder =
         "tim_summary",
     )
 
+/** Omitted from the legacy k/v prompt when [production_tim_user_prompt] is absent (avoids duplicating SFT blocks). */
+private val vlmPromptInjectionKeysSkipInLegacy =
+    setOf(
+        "vlm_prompt_style",
+        "analysis_profile",
+        "production_analysis_system",
+        "production_tim_user_prompt",
+        "tim_compact_json",
+    )
+
 fun buildPrompt(
     promptInjection: JsonObject?,
     userAsk: String,
@@ -584,6 +611,18 @@ fun buildPrompt(
         userAsk
             .filterNot { it.code < 32 && it != '\n' && it != '\t' }
             .take(MAX_PROMPT_CHARS)
+    val productionBody =
+        promptInjection
+            ?.get("production_tim_user_prompt")
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+    if (productionBody != null) {
+        return listOfNotNull(
+            productionBody,
+            safeAsk.takeIf { it.isNotBlank() }?.let { "User ask: $it" },
+        ).joinToString("\n\n")
+    }
     val injected =
         promptInjection?.let { obj ->
             val seen = mutableSetOf<String>()
@@ -593,6 +632,9 @@ fun buildPrompt(
                         if (k in obj && seen.add(k)) add(k)
                     }
                     for (k in obj.keys.sorted()) {
+                        if (k in vlmPromptInjectionKeysSkipInLegacy) {
+                            continue
+                        }
                         if (seen.add(k)) add(k)
                     }
                 }

@@ -12,6 +12,31 @@ NU:TONIC is built around a simple idea:
 
 **TiM watches change over time. The VLM explains what changed. The app turns that into something people can inspect and act on.**
 
+```mermaid
+flowchart LR
+  subgraph fixedScene [Fixed per AOI]
+    STACStill[STAC RGB still 640px]
+    GoldDelta[SCL delta boxes optional state fallback]
+    DWopt[Dynamic World chip optional]
+  end
+  subgraph temporalSignals [Temporal signals]
+    TiMBatch[TiM STAC window plus per-row datetime slices]
+    GoldSep[Delta gold requires paired acquisitions]
+    EvalTemporal[temporal_scenes for subset AOIs]
+  end
+  subgraph models [VLM comparison]
+    FT[NuTonic lspace]
+    Base[LFM2.5-VL-450M]
+  end
+  STACStill --> FT
+  STACStill --> Base
+  GoldDelta --> ScoreGround[Grounding IoU]
+  DWopt --> ScoreFaith[Faithfulness via procedural_or_dw]
+  TiMBatch --> PromptTiM[TiM JSON in prompt]
+  PromptTiM --> FT
+  PromptTiM --> Base
+```
+
 The project brings together:
 
 - **Temporal satellite memory:** TerraMind TiM-style workflows reason over Sentinel-2 observations across time.

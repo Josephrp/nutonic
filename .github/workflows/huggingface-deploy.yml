@@ -463,6 +463,8 @@ jobs:
           # upstream game server / workers enable inbound HMAC verification. Matches the
           # streetview_pano / pro_materialization deploy steps above.
           NUTONIC_INFERENCE_HMAC_SECRET: ${{ secrets.NUTONIC_INFERENCE_HMAC_SECRET || secrets.INFERENCE_HMAC_SECRET }}
+          # Optional: if set, the demo will skip calling `/api/v1/auth/token` (avoids 429s).
+          NUTONIC_SERVER_BEARER_TOKEN: ${{ secrets.NUTONIC_SERVER_BEARER_TOKEN }}
         run: >
           python tools/hf_deploy/deploy_space.py
           --service pro_gradio_demo

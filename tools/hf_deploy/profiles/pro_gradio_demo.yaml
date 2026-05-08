@@ -24,4 +24,7 @@ secrets:
   # same shared secret. Same env var name and contract as the server and worker profiles
   # (see `tools/hf_deploy/profiles/game_server.yaml` and `tools/hf_deploy/profiles/pro_materialization.yaml`).
   NUTONIC_INFERENCE_HMAC_SECRET: NUTONIC_INFERENCE_HMAC_SECRET
+  # Optional. Pre-issued JWT used for game server requests. When set, the demo will not call
+  # `/api/v1/auth/token` (helps avoid 429 rate limits under load).
+  NUTONIC_SERVER_BEARER_TOKEN: NUTONIC_SERVER_BEARER_TOKEN
 

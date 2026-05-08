@@ -45,6 +45,7 @@ class NutonicServerClient:
             origin = origin.rstrip("/")
         self._origin = origin
         self._hmac_secret = (settings.inference_hmac_secret or "").strip()
+        self._preset_bearer = (settings.nutonic_server_bearer_token or "").strip() or None
         self._timeout = httpx.Timeout(settings.http_timeout_seconds)
         self._client = httpx.Client(
             timeout=self._timeout,
@@ -144,6 +145,8 @@ class NutonicServerClient:
         return TokenResponse.model_validate(r.json())
 
     def _ensure_bearer(self) -> str:
+        if self._preset_bearer:
+            return self._preset_bearer
         with self._token_lock:
             now = time.time()
             if self._session_token and now < self._session_token_expires_at:

@@ -19,6 +19,15 @@ class Settings(BaseSettings):
         description="When true, the Gradio UI fails fast if NUTONIC_SERVER_ORIGIN is unset.",
     )
 
+    nutonic_server_bearer_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("NUTONIC_SERVER_BEARER_TOKEN", "nutonic_server_bearer_token"),
+        description=(
+            "Optional pre-issued JWT to use for game server calls. When set, the demo will not call "
+            "`/api/v1/auth/token`, which helps avoid 429 rate limits under load."
+        ),
+    )
+
     http_timeout_seconds: float = Field(
         default=60.0,
         validation_alias=AliasChoices("NUTONIC_HTTP_TIMEOUT_SECONDS", "http_timeout_seconds"),

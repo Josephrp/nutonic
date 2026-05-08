@@ -113,7 +113,8 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
     NOTE: We don't yet know the exact architecture of `NuTonic/lspace`. This function uses a
     conservative Auto* strategy and will be refined once we validate the model config.
     """
-    from transformers import AutoModel, AutoProcessor
+    import transformers
+    from transformers import AutoConfig, AutoModel, AutoProcessor
     try:
         from transformers import AutoModelForVision2Seq  # type: ignore
     except Exception:
@@ -131,24 +132,35 @@ def _load_transformers_from_dir(*, model_dir: Path) -> tuple[Any, Any]:
     # Some Spaces runtimes end up without `accelerate` even when it's listed in requirements,
     # and `transformers` will crash hard if `device_map` is present. We'll instead load on the
     # default device and move to CUDA inside the `@spaces.GPU` inference call when available.
+    config = AutoConfig.from_pretrained(str(model_dir), trust_remote_code=True)
+
     model_kwargs: dict[str, Any] = {"torch_dtype": "auto", "trust_remote_code": True}
 
-    if AutoModelForVision2Seq is not None:
-        try:
-            model = AutoModelForVision2Seq.from_pretrained(
-                str(model_dir),
-                **model_kwargs,
-            )
-        except Exception:
-            model = AutoModel.from_pretrained(
-                str(model_dir),
-                **model_kwargs,
-            )
-    else:
-        model = AutoModel.from_pretrained(
-            str(model_dir),
-            **model_kwargs,
-        )
+    # Prefer exact architecture to ensure `generate()` exists.
+    architectures = getattr(config, "architectures", None) or []
+    model: Any | None = None
+    if isinstance(architectures, list):
+        for arch in architectures:
+            if not isinstance(arch, str) or not arch.strip():
+                continue
+            cls = getattr(transformers, arch, None)
+            if cls is None:
+                continue
+            try:
+                model = cls.from_pretrained(str(model_dir), **model_kwargs)
+                break
+            except Exception:
+                model = None
+                continue
+
+    if model is None:
+        if AutoModelForVision2Seq is not None:
+            try:
+                model = AutoModelForVision2Seq.from_pretrained(str(model_dir), **model_kwargs)
+            except Exception:
+                model = AutoModel.from_pretrained(str(model_dir), **model_kwargs)
+        else:
+            model = AutoModel.from_pretrained(str(model_dir), **model_kwargs)
     # ZeroGPU supports a CUDA emulation mode outside @spaces.GPU. Put the model on CUDA
     # once at load time to avoid repeated transfers inside the decorated GPU call.
     try:
@@ -175,7 +187,12 @@ def infer_caption_and_boxes(*, loaded: LoadedModel, prompt: str, image_rgb: Any,
     if not hasattr(model, "generate"):
         raise RuntimeError("Loaded Transformers model does not implement generate(); incompatible VLM architecture")
 
-    inputs = processor(images=image_rgb, text=prompt, return_tensors="pt")
+    # Lfm2VlProcessor requires the number of `<image>` tokens in the text to match the number of images.
+    # We always run single-image inference, so inject exactly one image placeholder.
+    image_token = getattr(processor, "image_token", "<image>")
+    text_with_image = f"{image_token}\n{prompt}"
+
+    inputs = processor(images=image_rgb, text=text_with_image, return_tensors="pt")
     # Move tensors to the model's device when possible.
     device = getattr(model, "device", None)
     if device is not None:
@@ -183,8 +200,8 @@ def infer_caption_and_boxes(*, loaded: LoadedModel, prompt: str, image_rgb: Any,
 
     with torch.inference_mode():
         output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
-    text = processor.batch_decode(output_ids, skip_special_tokens=True)
-    return (text[0] if text else "").strip()
+    decoded = processor.batch_decode(output_ids, skip_special_tokens=True)
+    return (decoded[0] if decoded else "").strip()
 
 
 # --- ZeroGPU: decorate the actual inference call ---

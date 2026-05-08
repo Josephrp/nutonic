@@ -324,30 +324,42 @@ def _run_via_direct_workers(
 ) -> tuple[dict[str, Any], Any, Any, dict[str, Any]]:
     settings = get_settings()
     mat_origin = settings.pro_materialization_origin
-    if not client.probe_health_origin(mat_origin):
-        err = {"error": "direct_worker_unhealthy", "worker": "pro_materialization", "origin": mat_origin}
-        return {"error": err}, None, None, err
+    # Best-effort health probe. If it fails, still attempt materialization — some Space
+    # replicas / proxies can make health flaky while the POST path works fine.
+    health_ok = client.probe_health_origin(mat_origin)
 
     # Call materialization directly. This is the same payload the orchestrator would send.
-    mat = client.post_json_to_origin(
-        origin=mat_origin,
-        path="/internal/v1/materialize",
-        json_body={
-            "latitude": center_lat,
-            "longitude": center_lon,
-            "bbox_half_km": bbox_half_km,
-            "datetime_interval": datetime_interval or None,
-            "sentinel_fetch_mode": sentinel_fetch_mode,
-            "analysis_profile": analysis_profile,
-            "mapbox_zoom": mapbox_zoom,
-            "vlm_contract_id": vlm_contract_id,
-            "enable_tim": bool(enable_tim),
-            "tim_branch": tim_branch,
-            "scene_id_t0": scene_id_t0 or None,
-            "scene_id_t1": scene_id_t1 or None,
-            "scene_id_t2": scene_id_t2 or None,
-        },
-    )
+    try:
+        mat = client.post_json_to_origin(
+            origin=mat_origin,
+            path="/internal/v1/materialize",
+            json_body={
+                "latitude": center_lat,
+                "longitude": center_lon,
+                "bbox_half_km": bbox_half_km,
+                "datetime_interval": datetime_interval or None,
+                "sentinel_fetch_mode": sentinel_fetch_mode,
+                "analysis_profile": analysis_profile,
+                "mapbox_zoom": mapbox_zoom,
+                "vlm_contract_id": vlm_contract_id,
+                "enable_tim": bool(enable_tim),
+                "tim_branch": tim_branch,
+                "scene_id_t0": scene_id_t0 or None,
+                "scene_id_t1": scene_id_t1 or None,
+                "scene_id_t2": scene_id_t2 or None,
+            },
+        )
+    except httpx.HTTPStatusError as e:
+        resp = e.response
+        err = {
+            "error": "direct_worker_materialize_failed",
+            "worker": "pro_materialization",
+            "origin": mat_origin,
+            "health_ok": health_ok,
+            "status_code": resp.status_code if resp is not None else None,
+            "detail": str(e),
+        }
+        return {"error": err}, None, None, err
 
     artifacts = mat.get("vlm_artifacts") if isinstance(mat, dict) else None
     if not isinstance(artifacts, list) or not artifacts:

@@ -18,5 +18,10 @@ variables:
   NUTONIC_PRO_POLL_INTERVAL_SECONDS: "2"
   NUTONIC_PRO_POLL_TIMEOUT_SECONDS: "240"
 
-secrets: {}
+secrets:
+  # Optional. When the upstream game server / workers enable inbound HMAC verification
+  # (`NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC=1`), this Space must sign requests with the
+  # same shared secret. Same env var name and contract as the server and worker profiles
+  # (see `tools/hf_deploy/profiles/game_server.yaml` and `tools/hf_deploy/profiles/pro_materialization.yaml`).
+  NUTONIC_INFERENCE_HMAC_SECRET: NUTONIC_INFERENCE_HMAC_SECRET
 

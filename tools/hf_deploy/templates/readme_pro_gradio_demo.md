@@ -37,3 +37,9 @@ python tools/hf_deploy/deploy_space.py --service pro_gradio_demo --repo-id Tonic
 | `NUTONIC_PRO_POLL_TIMEOUT_SECONDS` | Poll timeout for upstream PRO jobs. |
 | `NUTONIC_PRO_POLL_INTERVAL_SECONDS` | Poll interval for upstream PRO jobs. |
 
+## Secrets
+
+| Name | Description |
+|------|-------------|
+| `NUTONIC_INFERENCE_HMAC_SECRET` | Optional. Shared HMAC secret for outbound calls to NU:TONIC services. When set, the demo signs requests using the same `X-Nutonic-Timestamp` / `X-Nutonic-Nonce` / `X-Nutonic-Content-SHA256` / `X-Nutonic-Signature` contract as `tools/nutonic_hmac.py`, the game server's `InferenceClient`, and the worker Spaces (`streetview_pano`, `pro_materialization`). Use the **same value** as the upstream services so verification succeeds when `NUTONIC_INFERENCE_REQUIRE_INBOUND_HMAC=1` is enabled there. CI populates this from the GitHub repo secret of the same name (fallback `INFERENCE_HMAC_SECRET`). |
+

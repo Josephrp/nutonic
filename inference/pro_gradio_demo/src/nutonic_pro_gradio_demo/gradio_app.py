@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 import gradio as gr
+import httpx
 
 from nutonic_pro_gradio_demo.client import NutonicServerClient
 from nutonic_pro_gradio_demo.models import ProJobCreateIn, ProJobStatusOut
@@ -116,6 +117,14 @@ def _run_job(
                 raise TimeoutError(f"Timed out polling PRO job {job_id}")
             time.sleep(max(0.2, settings.poll_interval_seconds))
         return last.model_dump(mode="json") if last else {"job_id": job_id, "status": "unknown"}
+    except httpx.HTTPStatusError as e:
+        resp = e.response
+        return {
+            "error": "upstream_http_error",
+            "status_code": resp.status_code if resp is not None else None,
+            "detail": str(e),
+            "hint": "The upstream game server Space may be rate-limiting (429). Wait and retry, or reduce repeated clicks.",
+        }
     finally:
         client.close()
 
@@ -197,13 +206,101 @@ def _run_full_pipeline(
             "revision": loaded.manifest.revision,
         }
         return job.model_dump(mode="json"), pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
+    except httpx.HTTPStatusError as e:
+        resp = e.response
+        err = {
+            "error": "upstream_http_error",
+            "status_code": resp.status_code if resp is not None else None,
+            "detail": str(e),
+            "hint": "If this is 429, the upstream Space is rate-limiting. Wait and retry; consider adding auth later.",
+        }
+        return {"error": err}, None, None, err
     finally:
         client.close()
 
 
 def build_demo() -> gr.Blocks:
     settings = get_settings()
-    with gr.Blocks(title="NU:TONIC PRO (ZeroGPU demo)") as demo:
+    leaflet_js = r"""
+function() {
+  // Load Leaflet (CSS + JS) dynamically (OSM tiles; no Mapbox).
+  function loadCss(href) {
+    return new Promise((resolve, reject) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.onload = resolve;
+      link.onerror = reject;
+      document.head.appendChild(link);
+    });
+  }
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  }
+
+  async function ensureLeaflet() {
+    if (window.L && window.L.map) return;
+    await loadCss("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css");
+    await loadScript("https://unpkg.com/leaflet@1.9.4/dist/leaflet.js");
+  }
+
+  function setValue(elemId, value) {
+    const el = document.getElementById(elemId);
+    if (!el) return;
+    // Works for Gradio inputs rendered as <input> or <textarea>.
+    el.value = value;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  async function init() {
+    await ensureLeaflet();
+    const mapDiv = document.getElementById("nutonic_map");
+    if (!mapDiv) return;
+    if (mapDiv.dataset.initialized === "1") return;
+    mapDiv.dataset.initialized = "1";
+
+    const defaultLat = 47.6062;
+    const defaultLon = -122.3321;
+    const defaultZoom = 9;
+
+    const map = window.L.map("nutonic_map").setView([defaultLat, defaultLon], defaultZoom);
+    window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    let marker = window.L.marker([defaultLat, defaultLon]).addTo(map);
+
+    function update(lat, lon) {
+      setValue("nutonic_center_lat", lat.toFixed(6));
+      setValue("nutonic_center_lon", lon.toFixed(6));
+      if (marker) marker.setLatLng([lat, lon]);
+    }
+
+    map.on("click", function(e) {
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+      update(lat, lon);
+    });
+
+    // Bootstrap initial values.
+    update(defaultLat, defaultLon);
+  }
+
+  // Defer until Gradio finished rendering.
+  setTimeout(init, 50);
+}
+"""
+
+    with gr.Blocks(title="NU:TONIC PRO (ZeroGPU demo)", js=leaflet_js) as demo:
         if settings.require_server_origin and not settings.nutonic_server_origin.strip():
             gr.Markdown(
                 "## Configuration required\n\n"
@@ -211,16 +308,28 @@ def build_demo() -> gr.Blocks:
                 "(must expose `/api/v1/pro/jobs` and `/api/v1/pro/vlm/model-manifest`)."
             )
             return demo
+        hmac_state = "enabled" if (settings.inference_hmac_secret or "").strip() else "disabled"
         gr.Markdown(
             "## NU:TONIC PRO — ZeroGPU demo\n\n"
             "This Space submits a PRO job to the configured game server, polls it to completion, "
             "then runs the final VLM locally (Transformers) on ZeroGPU.\n\n"
-            f"**Server origin:** `{settings.nutonic_server_origin or '(unset)'}`"
+            f"**Server origin:** `{settings.nutonic_server_origin or '(unset)'}`  \n"
+            f"**Outbound HMAC signing:** `{hmac_state}`"
+        )
+
+        gr.Markdown("### Pick analysis center (interactive map)\nClick the map to set latitude/longitude.")
+        gr.HTML(
+            """
+<div style="height: 360px; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.14);">
+  <div id="nutonic_map" style="height: 360px; width: 100%;"></div>
+</div>
+""".strip()
         )
 
         with gr.Row():
-            center_lat = gr.Number(label="Center latitude", value=47.6062)
-            center_lon = gr.Number(label="Center longitude", value=-122.3321)
+            # These textboxes are updated by Leaflet JS via elem_id.
+            center_lat = gr.Textbox(label="Center latitude", value="47.606200", elem_id="nutonic_center_lat")
+            center_lon = gr.Textbox(label="Center longitude", value="-122.332100", elem_id="nutonic_center_lon")
             mapbox_zoom = gr.Slider(label="Zoom (maps to AOI radius)", minimum=1, maximum=18, step=1, value=12)
 
         bbox_preview = gr.Number(label="AOI radius km (derived from zoom)", value=_bbox_half_km_for_zoom(12), interactive=False)

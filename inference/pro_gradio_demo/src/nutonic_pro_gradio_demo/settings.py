@@ -40,6 +40,20 @@ class Settings(BaseSettings):
         description="Writable directory for cached model weights; empty means choose a default at runtime.",
     )
 
+    inference_hmac_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "NUTONIC_INFERENCE_HMAC_SECRET",
+            "INFERENCE_HMAC_SECRET",
+            "inference_hmac_secret",
+        ),
+        description=(
+            "Shared HMAC secret for outbound calls to NU:TONIC services. When set, the client signs "
+            "requests with X-Nutonic-Timestamp / X-Nutonic-Nonce / X-Nutonic-Content-SHA256 / "
+            "X-Nutonic-Signature (same contract as tools/nutonic_hmac.py and server/inference_client.py)."
+        ),
+    )
+
 
 def get_settings() -> Settings:
     return Settings()

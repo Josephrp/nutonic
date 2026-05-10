@@ -78,6 +78,14 @@ class Settings(BaseSettings):
         description="Optional size in bytes for download_url caching; 0 disables size checks.",
     )
 
+    vlm_max_images: int = Field(
+        default=10,
+        ge=1,
+        le=32,
+        validation_alias=AliasChoices("NUTONIC_VLM_MAX_IMAGES", "vlm_max_images"),
+        description="Max images passed to the VLM per request (vlm_image_set / materialization artifacts).",
+    )
+
     inference_hmac_secret: str = Field(
         default="",
         validation_alias=AliasChoices(

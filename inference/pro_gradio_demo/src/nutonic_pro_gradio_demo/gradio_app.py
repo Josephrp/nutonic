@@ -243,16 +243,17 @@ def _run_full_pipeline(
         if not images:
             return job.model_dump(mode="json"), None, None, {"error": "No vlm_image_set images found on job"}
 
-        # Choose the first image as the main VLM input for now.
-        main = images[0]
-        pil = decode_image(main.bytes)
+        max_n = settings.vlm_max_images
+        pils = [decode_image(fi.bytes).convert("RGB") for fi in images[:max_n]]
+        # First image is used for bbox overlay (normalized coords match primary scene in practice).
+        pil_primary = pils[0]
 
         prompt_injection = (job.on_device_payload.vlm_prompt_injection if job.on_device_payload else None) or {}
         prompt = _build_vlm_prompt(prompt_injection=prompt_injection)
 
         t0 = time.time()
         loaded = ensure_model_loaded(client=client, settings=settings)
-        raw_text = zerogpu_infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
+        raw_text = zerogpu_infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pils)
         t1 = time.time()
 
         parsed = parse_vlm_output(
@@ -261,13 +262,17 @@ def _run_full_pipeline(
             revision=loaded.manifest.revision,
             source="hf_space_vlm",
         )
-        annotated = draw_boxes(pil, parsed.boxes)
+        annotated = draw_boxes(pil_primary, parsed.boxes)
         meta = {
             "inference_seconds": round(t1 - t0, 3),
             "model_bundle_id": loaded.manifest.model_bundle_id,
             "revision": loaded.manifest.revision,
+            "vlm_image_count": len(pils),
+            "vlm_image_roles": [fi.role for fi in images[:max_n]],
+            "vlm_override_bundle_id": settings.vlm_override_bundle_id.strip() or None,
+            "vlm_override_revision": settings.vlm_override_revision.strip() or None,
         }
-        return job.model_dump(mode="json"), pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
+        return job.model_dump(mode="json"), pil_primary, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
     except httpx.HTTPStatusError as e:
         resp = e.response
         # The upstream game server can be degraded in two ways:
@@ -367,21 +372,30 @@ def _run_via_direct_workers(
         err = {"error": "no_vlm_artifacts", "materialization_result": mat}
         return {"materialization": mat}, None, None, err
 
-    # Pick first artifact with inline_base64.
     import base64
 
-    first = next((a for a in artifacts if isinstance(a, dict) and a.get("inline_base64")), None)
-    if not first:
+    max_n = settings.vlm_max_images
+    decoded_rows: list[bytes] = []
+    roles: list[str | None] = []
+    for a in artifacts:
+        if not isinstance(a, dict) or not a.get("inline_base64"):
+            continue
+        decoded_rows.append(base64.b64decode(str(a["inline_base64"])))
+        roles.append(a.get("role") if isinstance(a.get("role"), str) else None)
+        if len(decoded_rows) >= max_n:
+            break
+
+    if not decoded_rows:
         err = {"error": "no_inline_base64", "materialization_result": mat}
         return {"materialization": mat}, None, None, err
 
-    img_bytes = base64.b64decode(str(first["inline_base64"]))
-    pil = decode_image(img_bytes)
+    pils = [decode_image(b).convert("RGB") for b in decoded_rows]
+    pil_primary = pils[0]
 
     prompt = _build_vlm_prompt(prompt_injection=None)
     t0 = time.time()
     loaded = ensure_model_loaded(client=client, settings=settings)
-    raw_text = zerogpu_infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pil)
+    raw_text = zerogpu_infer_caption_and_boxes(loaded=loaded, prompt=prompt, image_rgb=pils)
     t1 = time.time()
     parsed = parse_vlm_output(
         raw_text=raw_text,
@@ -389,16 +403,20 @@ def _run_via_direct_workers(
         revision=loaded.manifest.revision,
         source="hf_space_vlm",
     )
-    annotated = draw_boxes(pil, parsed.boxes)
+    annotated = draw_boxes(pil_primary, parsed.boxes)
     meta = {
         "path": "direct_workers",
         "inference_seconds": round(t1 - t0, 3),
         "model_bundle_id": loaded.manifest.model_bundle_id,
         "revision": loaded.manifest.revision,
+        "vlm_image_count": len(pils),
+        "vlm_image_roles": roles[: len(pils)],
+        "vlm_override_bundle_id": settings.vlm_override_bundle_id.strip() or None,
+        "vlm_override_revision": settings.vlm_override_revision.strip() or None,
         "materialization_id": mat.get("materialization_id") if isinstance(mat, dict) else None,
         "cache_key": mat.get("cache_key") if isinstance(mat, dict) else None,
     }
-    return {"materialization": mat}, pil, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
+    return {"materialization": mat}, pil_primary, annotated, {"vlm_result": parsed.model_dump(mode="json"), "meta": meta}
 
 
 def build_demo() -> gr.Blocks:

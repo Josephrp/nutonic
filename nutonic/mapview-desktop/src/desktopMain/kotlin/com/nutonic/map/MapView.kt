@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
@@ -67,6 +68,10 @@ data class MapState(
  * return false to disable zoom on click
  *
  * @param consumeScroll consume scroll events for disable parent scrolling
+ *
+ * @param foregroundDraw Extra drawing on top of tiles, in the same [Canvas] as the map (and the same
+ * pointer-handling layer). Use this instead of stacking another full-screen [Canvas] above [MapView],
+ * which would steal pointer events from the map on Desktop.
  */
 @Composable
 fun MapView(
@@ -82,6 +87,7 @@ fun MapView(
     onStateChange: (MapState) -> Unit = { (state as? MutableState<MapState>)?.value = it },
     onMapViewClick: (latitude: Double, longitude: Double) -> Boolean = { _, _ -> true },
     consumeScroll: Boolean = true,
+    foregroundDraw: DrawScope.(InternalMapState) -> Unit = {},
 ) {
     val viewScope = rememberCoroutineScope()
     val ioScope =
@@ -239,6 +245,7 @@ fun MapView(
                     style = Stroke(4f),
                 )
             }
+            foregroundDraw(internalState)
         }
         Row(Modifier.align(Alignment.BottomCenter)) {
             LinkText("OpenStreetMap license", Config.OPENSTREET_MAP_LICENSE)

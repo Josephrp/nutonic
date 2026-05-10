@@ -4,7 +4,7 @@ import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from huggingface_hub import hf_hub_download
 
@@ -191,21 +191,34 @@ def infer_caption_and_boxes(*, loaded: LoadedModel, prompt: str, image_rgb: Any,
     """
     Runs the local VLM inference and returns raw decoded text.
 
-    `image_rgb` should be a PIL Image in RGB mode.
+    `image_rgb` may be a single PIL Image (RGB) or a sequence of PIL Images. LFM2 VL processors require
+    one `<image>` placeholder per image in the prompt text.
     """
     import torch
+    from PIL import Image as PILImage
 
     processor = loaded.processor
     model = loaded.model
     if not hasattr(model, "generate"):
         raise RuntimeError("Loaded Transformers model does not implement generate(); incompatible VLM architecture")
 
-    # Lfm2VlProcessor requires the number of `<image>` tokens in the text to match the number of images.
-    # We always run single-image inference, so inject exactly one image placeholder.
-    image_token = getattr(processor, "image_token", "<image>")
-    text_with_image = f"{image_token}\n{prompt}"
+    if isinstance(image_rgb, PILImage.Image):
+        pil_list = [image_rgb]
+    elif isinstance(image_rgb, Sequence) and not isinstance(image_rgb, (str, bytes)):
+        pil_list = list(image_rgb)
+    else:
+        raise TypeError("image_rgb must be a PIL Image or a sequence of PIL Images")
 
-    inputs = processor(images=image_rgb, text=text_with_image, return_tensors="pt")
+    if not pil_list:
+        raise ValueError("At least one image is required for VLM inference")
+
+    pil_list = [im.convert("RGB") if getattr(im, "mode", None) != "RGB" else im for im in pil_list]
+
+    # Lfm2VlProcessor: count of `<image>` tokens in text must match len(images).
+    image_token = getattr(processor, "image_token", "<image>")
+    text_with_image = (image_token + "\n") * len(pil_list) + prompt
+
+    inputs = processor(images=pil_list, text=text_with_image, return_tensors="pt")
     # Move tensors to the model's device when possible.
     device = getattr(model, "device", None)
     if device is not None:

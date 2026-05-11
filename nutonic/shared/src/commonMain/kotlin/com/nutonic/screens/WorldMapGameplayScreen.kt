@@ -1106,6 +1106,7 @@ private fun GameplayHudCard(
     Card(
         modifier = modifier.width(220.dp).testTag("worldMapHudCard"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.9f),
+        contentColor = MaterialTheme.colors.onSurface,
         elevation = 4.dp,
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -1158,6 +1159,7 @@ private fun ReferenceStillCard(
     Card(
         modifier = modifier.width(230.dp).testTag("worldMapReferenceStillCard"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.92f),
+        contentColor = MaterialTheme.colors.onSurface,
         elevation = 4.dp,
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -1264,6 +1266,7 @@ private fun AssistDock(
                 .width(260.dp)
                 .testTag("worldMapAssistDock"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.9f),
+        contentColor = MaterialTheme.colors.onSurface,
         shape = RoundedCornerShape(12.dp),
         elevation = 4.dp,
     ) {
@@ -1303,12 +1306,14 @@ private fun AssistDock(
                         Text(
                             "No location assist text pack for this round.",
                             style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface,
                         )
                     } else {
                         streetviewPack.forEachIndexed { idx, item ->
                             Text(
                                 text = "${idx + 1}. ${item.text}",
                                 style = MaterialTheme.typography.caption,
+                                color = MaterialTheme.colors.onSurface,
                             )
                         }
                     }
@@ -1347,6 +1352,7 @@ private fun AssistDock(
                     Text(
                         text = usefulHintForTier(revealedHintTier, manifestHints),
                         style = MaterialTheme.typography.caption,
+                        color = MaterialTheme.colors.onSurface,
                     )
                 }
             }
@@ -1417,6 +1423,7 @@ private fun GuessModal(
     Card(
         modifier = modifier.width(320.dp).testTag("worldMapGuessModal"),
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.95f),
+        contentColor = MaterialTheme.colors.onSurface,
         shape = RoundedCornerShape(12.dp),
         elevation = 5.dp,
     ) {

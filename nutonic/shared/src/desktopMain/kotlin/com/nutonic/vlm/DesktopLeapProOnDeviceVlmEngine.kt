@@ -5,7 +5,6 @@ import ai.liquid.leap.ModelLoadingOptions
 import ai.liquid.leap.manifest.GenerationTimeParameters
 import ai.liquid.leap.manifest.LeapDownloader
 import ai.liquid.leap.manifest.LeapDownloaderConfig
-import ai.liquid.leap.manifest.ModelSource
 import ai.liquid.leap.manifest.SamplingParameters
 import ai.liquid.leap.message.ChatMessage
 import ai.liquid.leap.message.ChatMessageContent
@@ -15,8 +14,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
+import java.nio.file.FileSystemException
 import java.nio.file.Files
-import java.nio.file.Path
+import java.nio.file.Path as NioPath
+import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import kotlin.io.path.Path
 import kotlin.io.path.createDirectories
 import kotlin.io.path.exists
@@ -30,6 +32,8 @@ import kotlin.io.path.readText
 internal class DesktopLeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
     private var runner: ModelRunner? = null
     private var preparedKey: String? = null
+    /** Hardlinks/copies of `*.gguf` in the JVM process cwd; Leap resolves basenames there under Gradle `:desktopApp:run`. */
+    private val mirroredGgufInProcessCwd = mutableListOf<NioPath>()
 
     override suspend fun prepareModel(
         cacheRecord: ProVlmCacheRecord,
@@ -44,6 +48,9 @@ internal class DesktopLeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
         val key = "$modelName|$quant"
         if (runner != null && preparedKey == key) {
             return
+        }
+        if (preparedKey != null && preparedKey != key) {
+            cleanupMirroredGgufInProcessCwd()
         }
         val saveDir =
             Path(System.getProperty("user.home"), ".nutonic", "leap_models").also {
@@ -60,28 +67,18 @@ internal class DesktopLeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
                         manifestUrl = manifestUrl,
                         progress = {},
                     )
-                    val cacheFolder = findManifestCacheFolder(saveDir, manifestUrl)
-                    val modelPath = cacheFolder.resolve("$modelName-$quant.gguf")
-                    val mmprojPath = cacheFolder.resolve("mmproj-${modelName.replace("450M", "450m")}-$quant.gguf")
-                    require(modelPath.isRegularFile()) {
-                        "Liquid Leap model file is missing: $modelPath"
-                    }
-                    require(mmprojPath.isRegularFile()) {
-                        "Liquid Leap multimodal projector is missing: $mmprojPath"
-                    }
-                    downloader.loadSimpleModel(
-                        model =
-                            ModelSource(
-                                modelPath.toString(),
-                                mmprojPath.toString(),
-                                null,
-                                null,
-                                modelName,
-                                quant,
-                            ),
-                        modelLoadingOptions = ModelLoadingOptions(),
-                        generationTimeParameters =
-                            GenerationTimeParameters(
+                    // Leap resolves weight basenames against the *process* cwd (Gradle uses `…/desktopApp`), not only
+                    // `saveDir`. Mirror cached `*.gguf` there (hardlink when same volume; else copy).
+                    //
+                    // `loadModel` (catalog path, same as Android) still runs BundleProcessor: it tries to open the main
+                    // `.gguf` as a ZIP for `config.yaml`. Official HF GGUF is not that layout → ZipException log + warn
+                    // "Bundle config is not available" — expected; loading continues with defaults.
+                    val manifestCacheDir = findManifestCacheFolder(saveDir, manifestUrl).toAbsolutePath().normalize()
+                    val processCwd = Paths.get("").toAbsolutePath().normalize()
+                    val placedInCwd = mirrorGgufWeightsIntoDir(manifestCacheDir, processCwd)
+                    val genParams =
+                        GenerationTimeParameters(
+                            samplingParameters =
                                 SamplingParameters(
                                     temperature = 0.1,
                                     topP = null,
@@ -89,14 +86,28 @@ internal class DesktopLeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
                                     repetitionPenalty = 1.05,
                                     topK = null,
                                 ),
-                            ),
-                        false,
-                        progress = {},
-                    )
+                        )
+                    try {
+                        downloader.loadModel(
+                            modelName = modelName,
+                            quantizationSlug = quant,
+                            modelLoadingOptions = ModelLoadingOptions(),
+                            generationTimeParameters = genParams,
+                            false,
+                            false,
+                            progress = {},
+                        ).also {
+                            mirroredGgufInProcessCwd.clear()
+                            mirroredGgufInProcessCwd.addAll(placedInCwd)
+                        }
+                    } catch (e: Exception) {
+                        placedInCwd.forEach { p -> runCatching { Files.deleteIfExists(p) } }
+                        throw e
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     throw IllegalStateException(
-                        "Liquid Leap could not open model bundle from $manifestUrl: ${e.message ?: e::class.simpleName}",
+                        "Liquid Leap could not load model (manifest $manifestUrl): ${e.message ?: e::class.simpleName}",
                         e,
                     )
                 }
@@ -176,16 +187,50 @@ internal class DesktopLeapProOnDeviceVlmEngine : ProOnDeviceVlmEngine {
             this[1] == 0xD8.toByte() &&
             this[2] == 0xFF.toByte()
 
+    private fun cleanupMirroredGgufInProcessCwd() {
+        for (p in mirroredGgufInProcessCwd) {
+            runCatching { Files.deleteIfExists(p) }
+        }
+        mirroredGgufInProcessCwd.clear()
+    }
+
+    private fun mirrorGgufWeightsIntoDir(
+        cacheDir: NioPath,
+        targetDir: NioPath,
+    ): List<NioPath> {
+        if (!Files.isDirectory(cacheDir) || !Files.isDirectory(targetDir)) {
+            return emptyList()
+        }
+        val created = mutableListOf<NioPath>()
+        Files.newDirectoryStream(cacheDir, "*.gguf").use { stream ->
+            for (cached in stream) {
+                if (!Files.isRegularFile(cached)) continue
+                val name = cached.fileName.toString()
+                val inCwd = targetDir.resolve(name)
+                Files.deleteIfExists(inCwd)
+                try {
+                    Files.createLink(inCwd, cached)
+                } catch (_: UnsupportedOperationException) {
+                    Files.copy(cached, inCwd, StandardCopyOption.REPLACE_EXISTING)
+                } catch (_: FileSystemException) {
+                    Files.copy(cached, inCwd, StandardCopyOption.REPLACE_EXISTING)
+                }
+                created.add(inCwd)
+            }
+        }
+        return created
+    }
+
     private fun findManifestCacheFolder(
-        saveDir: Path,
+        saveDir: NioPath,
         manifestUrl: String,
-    ): Path {
+    ): NioPath {
         Files.newDirectoryStream(saveDir, "manifest-*").use { stream ->
             for (candidate in stream) {
                 if (!Files.isDirectory(candidate)) continue
                 Files.newDirectoryStream(candidate, "*.json").use { jsonFiles ->
                     for (json in jsonFiles) {
-                        if (json.exists() && json.readText().contains(manifestUrl)) {
+                        if (json.exists() && json.isRegularFile() && json.readText().contains(manifestUrl)) {
                             return candidate
                         }
                     }

@@ -21,6 +21,12 @@ data/geo/*
 .cache
 .env
 
+# GGUF weights (desktop/local inference); never commit large model files.
+*.gguf
+
+# LEAP / JNI compile outputs next to sources — never commit bytecode.
+nutonic/ai/liquid/leap/**/*.class
+
 # PRO VLM model bundles are staged by CI/deploy from external storage; never commit model bytes.
 server/pro_vlm_bundles/*
 !server/pro_vlm_bundles/.gitkeep

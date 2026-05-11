@@ -17,9 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.ln
@@ -51,7 +49,6 @@ actual fun MapViewport(
                 ),
             )
         }
-    var viewportSize by remember { mutableStateOf(IntSize(1, 1)) }
     var lastEmittedCamera by remember { mutableStateOf<MapCameraState?>(null) }
 
     LaunchedEffect(
@@ -70,9 +67,7 @@ actual fun MapViewport(
         }
     }
 
-    Box(
-        modifier = modifier.onSizeChanged { size -> if (size.width > 0 && size.height > 0) viewportSize = size },
-    ) {
+    Box(modifier = modifier) {
         val markerSpecs =
             remember(selfGuess, peerMarker, aiMarker) {
                 buildList {

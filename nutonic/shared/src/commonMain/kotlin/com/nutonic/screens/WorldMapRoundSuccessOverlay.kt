@@ -63,6 +63,7 @@ internal fun RoundSuccessOverlay(
     Card(
         modifier = modifier,
         backgroundColor = MaterialTheme.colors.surface.copy(alpha = 0.95f),
+        contentColor = MaterialTheme.colors.onSurface,
         elevation = 8.dp,
         shape = RoundedCornerShape(12.dp),
     ) {
